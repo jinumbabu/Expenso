@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/routes/app_router.dart';
 
-void main() {
-  runApp(
-    const ProviderScope(
-      child: ExpensoApp(),
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = 'https://expenso-placeholder-dsn@sentry.io/12345';
+      options.tracesSampleRate = 1.0;
+      options.enableUserInteractionTracing = true;
+    },
+    appRunner: () => runApp(
+      const ProviderScope(
+        child: ExpensoApp(),
+      ),
     ),
   );
 }
