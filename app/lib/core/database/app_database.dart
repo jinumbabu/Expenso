@@ -1,16 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:drift_flutter/drift_flutter.dart';
-import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-
-import '../security/secure_storage_service.dart';
+import 'connection/connection.dart';
 import 'tables/users.dart';
 import 'tables/accounts.dart';
 import 'tables/categories.dart';
@@ -58,7 +48,7 @@ part 'app_database.g.dart';
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase() : super(openConnection());
 
   @override
   int get schemaVersion => 3;
@@ -130,38 +120,4 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
-  static QueryExecutor _openConnection() {
-    return LazyDatabase(() async {
-      if (kIsWeb) {
-        return driftDatabase(
-          name: 'expenso_database',
-          web: DriftWebOptions(
-            sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-            driftWorker: Uri.parse('drift_worker.js'),
-          ),
-        );
-      }
-
-      final supportDir = await getApplicationSupportDirectory();
-      final file = File(p.join(supportDir.path, 'expenso_database.sqlite'));
-
-      // Resolve key from secure storage
-      final secureStorage = SecureStorageService();
-      String? key = await secureStorage.getDatabaseKey();
-      if (key == null) {
-        // Generate a random 32-character key
-        final random = Random.secure();
-        final values = List<int>.generate(32, (i) => random.nextInt(256));
-        key = base64UrlEncode(values);
-        await secureStorage.saveDatabaseKey(key);
-      }
-
-      return NativeDatabase(
-        file,
-        setup: (rawDb) {
-          rawDb.execute("PRAGMA key = '$key';");
-        },
-      );
-    });
-  }
 }
