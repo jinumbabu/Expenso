@@ -13,6 +13,7 @@ import '../../features/chat/presentation/screens/chat_screen.dart';
 import '../../features/backup/presentation/screens/backup_screen.dart';
 import '../../features/backup/presentation/screens/conflict_resolution_screen.dart';
 import '../../features/sms_parser/presentation/screens/sms_drafts_screen.dart';
+import '../../features/advisor/presentation/screens/advisor_screen.dart';
 
 class AuthRefreshListenable extends ChangeNotifier {
   AuthRefreshListenable(Ref ref) {
@@ -40,6 +41,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/conflict-resolution',
         builder: (context, state) => const ConflictResolutionScreen(),
+      ),
+      GoRoute(
+        path: '/advisor',
+        builder: (context, state) => const AdvisorScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

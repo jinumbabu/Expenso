@@ -237,3 +237,61 @@ async def chat_with_assistant(req: ChatRequest, user_id: str = Depends(get_auth_
         reply = "Expenso AI local mode: I received your message! Once my cloud server is connected with a Gemini API key, I will be able to answer full questions about your finances."
         
     return ChatResponse(reply=reply)
+
+class InsightsRequest(BaseModel):
+    context: str
+
+class InsightsResponse(BaseModel):
+    insights: List[str]
+
+@router.post("/insights", response_model=InsightsResponse)
+async def generate_insights(req: InsightsRequest, user_id: str = Depends(get_auth_user_id)):
+    if settings.GEMINI_API_KEY:
+        system_instruction = (
+            "You are Expenso AI, a personal financial advisor. "
+            "Analyze the user's spending habits, income, and budgets provided in the context. "
+            "Generate exactly 3 concise, highly actionable, and personalized financial insights or recommendations for the user. "
+            "Each insight must be under 50 words. Do not use markdown headers, bullets, or numbered prefixes in each insight text. "
+            "Return a JSON array of strings containing the 3 insights, e.g. [\"Insight 1\", \"Insight 2\", \"Insight 3\"]."
+        )
+        
+        prompt = f"Aggregated Financial Context: {req.context}"
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{"text": system_instruction}]
+            },
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(url, json=payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    import json
+                    parsed = json.loads(raw_text.strip())
+                    if isinstance(parsed, list):
+                        return InsightsResponse(insights=[str(item) for item in parsed[:3]])
+                    elif isinstance(parsed, dict) and "insights" in parsed:
+                        return InsightsResponse(insights=[str(item) for item in parsed["insights"][:3]])
+        except Exception as e:
+            print(f"Gemini Insights API call failed: {e}")
+
+    # Fallback to rule-based insights if offline / no API key / error
+    insights = [
+        "Track category budgets carefully to identify overspending in food or shopping.",
+        "Building an emergency fund covering 3-6 months of expenses will greatly improve your financial stability.",
+        "Consider allocating 20% of your net monthly income directly towards savings or investments."
+    ]
+    return InsightsResponse(insights=insights)

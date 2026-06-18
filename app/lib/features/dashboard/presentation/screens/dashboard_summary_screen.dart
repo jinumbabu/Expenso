@@ -9,6 +9,7 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
+import '../../../advisor/presentation/providers/advisor_provider.dart';
 
 class DashboardSummaryScreen extends ConsumerWidget {
   const DashboardSummaryScreen({super.key});
@@ -325,6 +326,8 @@ class DashboardSummaryScreen extends ConsumerWidget {
                     child: Center(child: Text('Error loading balances: $e', style: const TextStyle(color: Colors.red))),
                   ),
                 ),
+                const SizedBox(height: 16),
+                const _AdvisorHealthCard(),
                 const SizedBox(height: 24),
                 const _AiQuickAddWidget(),
                 const SizedBox(height: 32),
@@ -509,6 +512,142 @@ class DashboardSummaryScreen extends ConsumerWidget {
               label,
               style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold, fontSize: 14),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdvisorHealthCard extends ConsumerWidget {
+  const _AdvisorHealthCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final advisor = ref.watch(advisorProvider);
+    
+    Color scoreColor = Colors.tealAccent;
+    if (advisor.healthScore < 40) {
+      scoreColor = Colors.redAccent;
+    } else if (advisor.healthScore < 60) {
+      scoreColor = Colors.orangeAccent;
+    } else if (advisor.healthScore < 80) {
+      scoreColor = Colors.amberAccent;
+    }
+
+    return InkWell(
+      onTap: () => context.push('/advisor'),
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.teal.shade900.withOpacity(0.4),
+              const Color(0xFF0F1A1C).withOpacity(0.2),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.teal.withOpacity(0.25),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.teal.withOpacity(0.05),
+              blurRadius: 16,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              height: 48,
+              width: 48,
+              child: Stack(
+                children: [
+                  Center(
+                    child: SizedBox(
+                      height: 44,
+                      width: 44,
+                      child: CircularProgressIndicator(
+                        value: advisor.healthScore / 100.0,
+                        strokeWidth: 4,
+                        backgroundColor: Colors.white10,
+                        color: scoreColor,
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      '${advisor.healthScore}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'FINANCIAL HEALTH: ${advisor.healthStatus.toUpperCase()}',
+                        style: TextStyle(
+                          color: scoreColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Colors.purpleAccent, Colors.tealAccent],
+                        ).createShader(bounds),
+                        child: const Icon(
+                          Icons.auto_awesome,
+                          color: Colors.white,
+                          size: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'AI Financial Advisor & Health',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    advisor.spendingAlerts.isNotEmpty
+                        ? '${advisor.spendingAlerts.length} spending alert flags active.'
+                        : 'Tap for forecasts & budget recommendations.',
+                    style: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white38),
           ],
         ),
       ),
