@@ -53,6 +53,7 @@ part 'app_database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openConnection());
+  AppDatabase.connect(super.connection);
 
   @override
   int get schemaVersion => 4;

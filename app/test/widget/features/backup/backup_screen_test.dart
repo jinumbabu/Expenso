@@ -93,8 +93,9 @@ void main() {
       expect(find.text('AES-256 (Local Key)'), findsOneWidget);
 
       // Verify primary action buttons exist
-      expect(find.text('Backup Now'), findsOneWidget);
-      expect(find.text('Restore Backup'), findsOneWidget);
+      expect(find.text('Sync Database'), findsOneWidget);
+      expect(find.text('Manual Backup Now'), findsOneWidget);
+      expect(find.text('Force Restore Backup'), findsOneWidget);
     });
 
     testWidgets('Displays formatted metadata (date & size) when loaded', (tester) async {
@@ -136,7 +137,7 @@ void main() {
         ),
       );
 
-      final buttonFinder = find.text('Backup Now');
+      final buttonFinder = find.text('Manual Backup Now');
       await tester.ensureVisible(buttonFinder);
       await tester.pumpAndSettle();
 
@@ -158,10 +159,13 @@ void main() {
           ),
         ),
       );
+      await tester.pump();
 
-      final buttonFinder = find.byWidgetPredicate((widget) => widget is OutlinedButton);
-      final OutlinedButton button = tester.widget<OutlinedButton>(buttonFinder);
-      expect(button.onPressed, isNull);
+      final buttons = tester.widgetList<ButtonStyleButton>(
+        find.byWidgetPredicate((widget) => widget is ButtonStyleButton),
+      ).toList();
+      expect(buttons.length, 4);
+      expect(buttons[3].onPressed, isNull);
     });
 
     testWidgets('Tapping Restore Backup shows warning popup and triggers restore', (tester) async {
@@ -185,7 +189,7 @@ void main() {
 
       await tester.pump();
 
-      final buttonFinder = find.text('Restore Backup');
+      final buttonFinder = find.text('Force Restore Backup');
       await tester.ensureVisible(buttonFinder);
       await tester.pumpAndSettle();
 

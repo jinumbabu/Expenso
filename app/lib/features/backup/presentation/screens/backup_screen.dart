@@ -292,12 +292,72 @@ class BackupScreen extends ConsumerWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (state.conflicts.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Sync paused: ${state.conflicts.length} conflict(s) detected.',
+                                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      onPressed: () => context.push('/conflict-resolution'),
+                                      child: const Text('RESOLVE CONFLICTS NOW', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           ElevatedButton.icon(
-                            icon: const Icon(Icons.cloud_upload),
-                            label: const Text('Backup Now'),
+                            icon: const Icon(Icons.sync),
+                            label: const Text('Sync Database'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.tealAccent.shade700,
                               foregroundColor: const Color(0xFF00241F),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              textStyle: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                            ),
+                            onPressed: () => ref
+                                .read(backupNotifierProvider.notifier)
+                                .syncDatabase(),
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.cloud_upload),
+                            label: const Text('Manual Backup Now'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white24, width: 1.5),
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -314,10 +374,10 @@ class BackupScreen extends ConsumerWidget {
                           const SizedBox(height: 16),
                           OutlinedButton.icon(
                             icon: const Icon(Icons.cloud_download),
-                            label: const Text('Restore Backup'),
+                            label: const Text('Force Restore Backup'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: const BorderSide(color: Colors.white24, width: 1.5),
+                              foregroundColor: Colors.white60,
+                              side: const BorderSide(color: Colors.white12, width: 1.5),
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),

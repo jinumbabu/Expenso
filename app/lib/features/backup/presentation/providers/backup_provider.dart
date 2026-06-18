@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/sync/backup_service.dart';
+import '../../../../core/sync/sync_service.dart';
+import '../../../../core/database/app_database.dart';
 import '../../../../core/security/audit_logger.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
@@ -10,6 +12,7 @@ class BackupState {
   final int? backupSize;
   final String? errorMessage;
   final String? successMessage;
+  final List<SyncConflict> conflicts;
 
   BackupState({
     required this.isLoading,
@@ -17,9 +20,10 @@ class BackupState {
     this.backupSize,
     this.errorMessage,
     this.successMessage,
+    this.conflicts = const [],
   });
 
-  factory BackupState.initial() => BackupState(isLoading: false);
+  factory BackupState.initial() => BackupState(isLoading: false, conflicts: const []);
 
   BackupState copyWith({
     bool? isLoading,
@@ -27,6 +31,7 @@ class BackupState {
     int? backupSize,
     String? errorMessage,
     String? successMessage,
+    List<SyncConflict>? conflicts,
     bool clearMessages = false,
   }) {
     return BackupState(
@@ -35,6 +40,7 @@ class BackupState {
       backupSize: backupSize ?? this.backupSize,
       errorMessage: clearMessages ? null : (errorMessage ?? this.errorMessage),
       successMessage: clearMessages ? null : (successMessage ?? this.successMessage),
+      conflicts: conflicts ?? this.conflicts,
     );
   }
 }
@@ -182,6 +188,99 @@ class BackupNotifier extends StateNotifier<BackupState> {
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Delete failed: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> syncDatabase() async {
+    state = state.copyWith(isLoading: true, clearMessages: true);
+    try {
+      final auth = _ref.read(authProvider);
+      final userId = auth.user?.id;
+      if (userId == null) {
+        throw Exception('User not authenticated.');
+      }
+
+      final googleToken = await _getGoogleAccessToken();
+      final syncService = _ref.read(syncServiceProvider);
+      final result = await syncService.sync(userId, googleAccessToken: googleToken);
+
+      if (result.conflicts.isNotEmpty) {
+        state = state.copyWith(
+          isLoading: false,
+          conflicts: result.conflicts,
+          errorMessage: 'Sync complete with ${result.conflicts.length} conflict(s) requiring resolution.',
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          conflicts: [],
+          successMessage: 'Synchronization complete! ${result.insertedCount} remote transaction(s) synced.',
+        );
+        // Refresh local transaction list in UI
+        await _ref.read(expenseListNotifierProvider.notifier).loadTransactions();
+      }
+
+      // Refresh backup metadata status info
+      await loadBackupInfo();
+
+      await _auditLogger.logEvent(
+        userId: userId,
+        eventType: 'database_sync',
+        eventCategory: 'sync',
+        description: 'Synchronized database. Conflicts found: ${result.conflicts.length}.',
+        metadata: {'inserted': result.insertedCount, 'updated': result.updatedCount, 'conflicts': result.conflicts.length},
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Sync failed: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> resolveConflict(String transactionId, Transaction chosenTx) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final localDb = _ref.read(databaseProvider);
+      
+      // Update transaction in local database with chosen version (and mark synced)
+      await localDb.transactionDao.updateTransaction(chosenTx.copyWith(syncStatus: 'synced'));
+
+      // Remove resolved conflict from the state list
+      final newConflicts = state.conflicts.where((c) => c.local.id != transactionId).toList();
+      
+      state = state.copyWith(
+        isLoading: false,
+        conflicts: newConflicts,
+      );
+
+      // If all conflicts resolved, upload the final merged database to the cloud
+      if (newConflicts.isEmpty) {
+        final auth = _ref.read(authProvider);
+        final userId = auth.user?.id;
+        if (userId != null) {
+          final googleToken = await _getGoogleAccessToken();
+          // Update all local pending transactions to synced
+          final localTxs = await localDb.transactionDao.getTransactionsForUser(userId);
+          for (final tx in localTxs) {
+            if (tx.syncStatus == 'pending' || tx.syncStatus == 'conflict') {
+              await localDb.transactionDao.updateTransaction(tx.copyWith(syncStatus: 'synced'));
+            }
+          }
+          await _backupService.backup(userId, googleAccessToken: googleToken);
+          state = state.copyWith(
+            successMessage: 'All conflicts resolved! Database uploaded successfully.',
+          );
+        }
+      }
+
+      // Refresh UI list
+      await _ref.read(expenseListNotifierProvider.notifier).loadTransactions();
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Conflict resolution failed: ${e.toString()}',
       );
     }
   }
