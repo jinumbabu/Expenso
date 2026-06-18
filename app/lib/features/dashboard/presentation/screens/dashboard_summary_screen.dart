@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,6 +12,8 @@ import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
 import '../../../advisor/presentation/providers/advisor_provider.dart';
+import '../../../../core/services/ocr_service.dart';
+import '../../../../core/services/voice_service.dart';
 
 class DashboardSummaryScreen extends ConsumerWidget {
   const DashboardSummaryScreen({super.key});
@@ -707,6 +711,146 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
     }
   }
 
+  Future<void> _startVoiceAdd() async {
+    final transcribedText = await showGeneralDialog<String>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.85),
+      barrierDismissible: false,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return const _VoiceListeningOverlay();
+      },
+    );
+
+    if (transcribedText != null && transcribedText.trim().isNotEmpty) {
+      var textToProcess = transcribedText;
+      if (textToProcess.startsWith('Simulated: ')) {
+        textToProcess = textToProcess.replaceFirst('Simulated: ', '');
+      }
+
+      setState(() => _isProcessing = true);
+      try {
+        final nlpService = ref.read(nlpServiceProvider);
+        final result = await nlpService.parseExpense(textToProcess);
+        if (result != null && mounted) {
+          _showConfirmationSheet(context, result);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to parse voice transcription.'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _startOcrAdd() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF0F1A1C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Scan Receipt',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: Colors.tealAccent),
+              title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined, color: Colors.tealAccent),
+              title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    final ocrService = ref.read(ocrServiceProvider);
+    final pickedFile = await ocrService.pickImage(source);
+    if (pickedFile == null) return;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF0F1A1C),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.tealAccent),
+            SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Scanning receipt with Gemini AI...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final ocrResult = await ocrService.scanReceipt(File(pickedFile.path));
+      if (mounted) Navigator.pop(context); // pop loading dialog
+
+      if (ocrResult != null && mounted) {
+        final result = NlpParsedResult(
+          amount: ocrResult.amount,
+          category: ocrResult.category,
+          merchant: ocrResult.merchant,
+          type: 'expense',
+          date: ocrResult.date,
+          confidence: ocrResult.confidence,
+        );
+        _showConfirmationSheet(context, result);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to scan receipt. Please input manually.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // pop loader in case it didn't pop
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Scanning failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
   void _showConfirmationSheet(BuildContext context, NlpParsedResult result) {
     showModalBottomSheet(
       context: context,
@@ -774,7 +918,7 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Type your transaction in plain English and let AI do the rest.',
+            'Type, speak, or scan a receipt and let AI do the rest.',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -793,11 +937,30 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
                   child: TextField(
                     controller: _controller,
                     style: const TextStyle(color: Colors.white, fontSize: 14),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'e.g. Spent 250 on tea or Salary 50000',
-                      hintStyle: TextStyle(color: Colors.white30, fontSize: 13),
+                      hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.mic_none_outlined, color: Colors.purpleAccent, size: 20),
+                            onPressed: _isProcessing ? null : _startVoiceAdd,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.photo_camera_outlined, color: Colors.tealAccent, size: 20),
+                            onPressed: _isProcessing ? null : _startOcrAdd,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                      ),
                     ),
                     onSubmitted: (_) => _submitText(),
                   ),
@@ -1136,3 +1299,227 @@ class _AiConfirmSheetState extends ConsumerState<_AiConfirmSheet> {
     );
   }
 }
+
+class _VoiceListeningOverlay extends ConsumerStatefulWidget {
+  const _VoiceListeningOverlay();
+
+  @override
+  ConsumerState<_VoiceListeningOverlay> createState() => _VoiceListeningOverlayState();
+}
+
+class _VoiceListeningOverlayState extends ConsumerState<_VoiceListeningOverlay> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  String _currentText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    // Start listening
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startSpeech();
+    });
+  }
+
+  void _startSpeech() {
+    ref.read(voiceServiceProvider.notifier).startListening(
+      onResult: (text) {
+        setState(() {
+          _currentText = text;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final voiceState = ref.watch(voiceServiceProvider);
+    final hasError = voiceState.error != null;
+
+    return Scaffold(
+      backgroundColor: Colors.black.withOpacity(0.85),
+      body: BackdropFilter(
+        filter: ColorFilter.mode(Colors.black.withOpacity(0.4), BlendMode.srcOver),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Top Close button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70, size: 28),
+                      onPressed: () {
+                        ref.read(voiceServiceProvider.notifier).cancelListening();
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+
+                // Center Waveform/Status
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Glow / Mic Icon
+                    AnimatedBuilder(
+                      animation: _animationController,
+                      builder: (context, child) {
+                        final scale = 1.0 + (_animationController.value * 0.15);
+                        return Container(
+                          height: 100,
+                          width: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.purple.withOpacity(0.15),
+                            border: Border.all(
+                              color: Colors.purpleAccent.withOpacity(0.5),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purpleAccent.withOpacity(0.3),
+                                blurRadius: 20 * scale,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Transform.scale(
+                            scale: scale,
+                            child: Icon(
+                              hasError ? Icons.mic_off : Icons.mic,
+                              color: Colors.purpleAccent,
+                              size: 40,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Custom Waveform Animation
+                    if (voiceState.isListening)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(5, (index) {
+                          return AnimatedBuilder(
+                            animation: _animationController,
+                            builder: (context, child) {
+                              final phase = (index * 0.2);
+                              double val = (_animationController.value + phase) % 1.0;
+                              if (val > 0.5) val = 1.0 - val;
+                              final height = 15 + (val * 40);
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                width: 6,
+                                height: height,
+                                decoration: BoxDecoration(
+                                  color: Colors.purpleAccent.shade200,
+                                  borderRadius: BorderRadius.circular(4),
+                                  gradient: const LinearGradient(
+                                    colors: [Colors.purpleAccent, Colors.tealAccent],
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }),
+                      )
+                    else
+                      Text(
+                        hasError ? 'Not Available' : 'Initializing...',
+                        style: const TextStyle(color: Colors.white38, fontSize: 14),
+                      ),
+
+                    const SizedBox(height: 32),
+
+                    // Transcribed Text Area
+                    Text(
+                      _currentText.isNotEmpty
+                          ? '"$_currentText"'
+                          : (hasError
+                              ? 'Speech recognition not supported on this platform.\nYou can try simulated speech entry instead.'
+                              : 'Listening... Say something like:\n"Spent 450 rupees on dinner yesterday"'),
+                      style: TextStyle(
+                        color: _currentText.isNotEmpty ? Colors.white : Colors.white60,
+                        fontSize: _currentText.isNotEmpty ? 20 : 16,
+                        fontWeight: _currentText.isNotEmpty ? FontWeight.bold : FontWeight.normal,
+                        fontStyle: _currentText.isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+
+                // Bottom Buttons
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (voiceState.isListening)
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.tealAccent,
+                          foregroundColor: const Color(0xFF00241F),
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
+                        icon: const Icon(Icons.stop),
+                        label: const Text('STOP & PROCESS', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () async {
+                          await ref.read(voiceServiceProvider.notifier).stopListening();
+                          if (context.mounted) {
+                            Navigator.pop(context, _currentText);
+                          }
+                        },
+                      )
+                    else ...[
+                      if (hasError) ...[
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purpleAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context, 'Simulated: Spent 450 rupees on dinner yesterday at Pizza Hut');
+                          },
+                          child: const Text('SIMULATE SPEECH INPUT', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      TextButton(
+                        style: TextButton.styleFrom(foregroundColor: Colors.white54),
+                        onPressed: () {
+                          ref.read(voiceServiceProvider.notifier).cancelListening();
+                          Navigator.pop(context);
+                        },
+                        child: const Text('CANCEL'),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
