@@ -98,7 +98,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
           // Insert draft
           final draft = TransactionDraft(
             id: const Uuid().v4(),
-            userId: _userId!,
+            userId: _userId,
             amount: (parsed.amount * 100).toInt(), // Stored as minor units (cents/paise)
             type: parsed.type,
             currency: 'INR',
@@ -133,7 +133,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
 
     final draft = TransactionDraft(
       id: const Uuid().v4(),
-      userId: _userId!,
+      userId: _userId,
       amount: (parsed.amount * 100).toInt(),
       type: parsed.type,
       currency: 'INR',
