@@ -11,6 +11,7 @@ import '../../features/expenses/presentation/screens/expense_form_screen.dart';
 import '../../features/budgets/presentation/screens/budgets_screen.dart';
 import '../../features/chat/presentation/screens/chat_screen.dart';
 import '../../features/backup/presentation/screens/backup_screen.dart';
+import '../../features/sms_parser/presentation/screens/sms_drafts_screen.dart';
 
 class AuthRefreshListenable extends ChangeNotifier {
   AuthRefreshListenable(Ref ref) {
@@ -30,6 +31,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/backup',
         builder: (context, state) => const BackupScreen(),
+      ),
+      GoRoute(
+        path: '/sms-drafts',
+        builder: (context, state) => const SmsDraftsScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -52,7 +57,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'add',
-                    builder: (context, state) => const ExpenseFormScreen(),
+                    builder: (context, state) => ExpenseFormScreen(
+                      draftId: state.uri.queryParameters['draftId'],
+                    ),
                   ),
                   GoRoute(
                     path: 'edit/:id',

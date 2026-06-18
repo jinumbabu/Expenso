@@ -8,6 +8,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
 
 class DashboardSummaryScreen extends ConsumerWidget {
   const DashboardSummaryScreen({super.key});
@@ -146,6 +147,47 @@ class DashboardSummaryScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // Pending SMS drafts banner
+                ref.watch(transactionDraftsStreamProvider).maybeWhen(
+                  data: (drafts) {
+                    if (drafts.isEmpty) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.teal.shade900.withOpacity(0.4), Colors.teal.shade800.withOpacity(0.2)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.tealAccent.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.textsms_outlined, color: Colors.tealAccent, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'You have ${drafts.length} pending SMS transaction draft${drafts.length > 1 ? "s" : ""}.',
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => context.push('/sms-drafts'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.tealAccent,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('Review', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
 
                 // Balance summary widget
                 txsAsync.when(

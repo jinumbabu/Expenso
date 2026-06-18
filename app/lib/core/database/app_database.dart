@@ -10,6 +10,7 @@ import 'tables/budgets.dart';
 import 'tables/chat_history.dart';
 import 'tables/ai_memories.dart';
 import 'tables/audit_logs.dart';
+import 'tables/transaction_drafts.dart';
 
 import 'dao/user_dao.dart';
 import 'dao/account_dao.dart';
@@ -20,6 +21,7 @@ import 'dao/budget_dao.dart';
 import 'dao/chat_history_dao.dart';
 import 'dao/ai_memory_dao.dart';
 import 'dao/audit_log_dao.dart';
+import 'dao/transaction_draft_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -34,6 +36,7 @@ part 'app_database.g.dart';
     ChatHistory,
     AiMemories,
     AuditLogs,
+    TransactionDrafts,
   ],
   daos: [
     UserDao,
@@ -45,13 +48,14 @@ part 'app_database.g.dart';
     ChatHistoryDao,
     AiMemoryDao,
     AuditLogDao,
+    TransactionDraftDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -116,6 +120,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await migrator.createTable(auditLogs);
+      }
+      if (from < 4) {
+        await migrator.createTable(transactionDrafts);
       }
     },
   );

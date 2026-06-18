@@ -9,13 +9,16 @@ import '../providers/expense_provider.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/payment_method_picker.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
+  final String? draftId;
 
   const ExpenseFormScreen({
     super.key,
     this.transactionId,
+    this.draftId,
   });
 
   @override
@@ -43,9 +46,37 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     _isEditMode = widget.transactionId != null;
     if (_isEditMode) {
       _loadExistingTransaction();
+    } else if (widget.draftId != null) {
+      _loadDraftTransaction();
     } else {
       // Set default payment method if available
       _setDefaultPaymentMethod();
+    }
+  }
+
+  Future<void> _loadDraftTransaction() async {
+    setState(() => _isLoading = true);
+    try {
+      final dao = ref.read(transactionDraftDaoProvider);
+      final draft = await dao.getDraftById(widget.draftId!);
+      if (draft != null && mounted) {
+        setState(() {
+          _amountController.text = (draft.amount / 100.0).toStringAsFixed(2);
+          _descriptionController.text = draft.description ?? '';
+          _merchantController.text = draft.merchant ?? '';
+          _transactionType = draft.type;
+          _selectedDate = draft.date;
+        });
+      }
+      await _setDefaultPaymentMethod();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load draft: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -152,6 +183,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         await notifier.editTransaction(transaction);
       } else {
         await notifier.addTransaction(transaction);
+      }
+
+      if (widget.draftId != null) {
+        await ref.read(smsScannerProvider.notifier).dismissDraft(widget.draftId!);
       }
 
       if (mounted) {

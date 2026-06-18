@@ -4329,6 +4329,655 @@ class AuditLogsCompanion extends UpdateCompanion<AuditLog> {
   }
 }
 
+class $TransactionDraftsTable extends TransactionDrafts
+    with TableInfo<$TransactionDraftsTable, TransactionDraft> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TransactionDraftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES users (id)'));
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+      'amount', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+      'type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _currencyMeta =
+      const VerificationMeta('currency');
+  @override
+  late final GeneratedColumn<String> currency = GeneratedColumn<String>(
+      'currency', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('INR'));
+  static const VerificationMeta _merchantMeta =
+      const VerificationMeta('merchant');
+  @override
+  late final GeneratedColumn<String> merchant = GeneratedColumn<String>(
+      'merchant', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _descriptionMeta =
+      const VerificationMeta('description');
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+      'description', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _smsSenderMeta =
+      const VerificationMeta('smsSender');
+  @override
+  late final GeneratedColumn<String> smsSender = GeneratedColumn<String>(
+      'sms_sender', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _cardOrAccountMeta =
+      const VerificationMeta('cardOrAccount');
+  @override
+  late final GeneratedColumn<String> cardOrAccount = GeneratedColumn<String>(
+      'card_or_account', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _smsBodyMeta =
+      const VerificationMeta('smsBody');
+  @override
+  late final GeneratedColumn<String> smsBody = GeneratedColumn<String>(
+      'sms_body', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _originalSmsIdMeta =
+      const VerificationMeta('originalSmsId');
+  @override
+  late final GeneratedColumn<String> originalSmsId = GeneratedColumn<String>(
+      'original_sms_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        userId,
+        amount,
+        type,
+        currency,
+        merchant,
+        description,
+        date,
+        smsSender,
+        cardOrAccount,
+        smsBody,
+        originalSmsId,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'transaction_drafts';
+  @override
+  VerificationContext validateIntegrity(Insertable<TransactionDraft> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(_amountMeta,
+          amount.isAcceptableOrUnknown(data['amount']!, _amountMeta));
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+          _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('currency')) {
+      context.handle(_currencyMeta,
+          currency.isAcceptableOrUnknown(data['currency']!, _currencyMeta));
+    }
+    if (data.containsKey('merchant')) {
+      context.handle(_merchantMeta,
+          merchant.isAcceptableOrUnknown(data['merchant']!, _merchantMeta));
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+          _descriptionMeta,
+          description.isAcceptableOrUnknown(
+              data['description']!, _descriptionMeta));
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('sms_sender')) {
+      context.handle(_smsSenderMeta,
+          smsSender.isAcceptableOrUnknown(data['sms_sender']!, _smsSenderMeta));
+    }
+    if (data.containsKey('card_or_account')) {
+      context.handle(
+          _cardOrAccountMeta,
+          cardOrAccount.isAcceptableOrUnknown(
+              data['card_or_account']!, _cardOrAccountMeta));
+    }
+    if (data.containsKey('sms_body')) {
+      context.handle(_smsBodyMeta,
+          smsBody.isAcceptableOrUnknown(data['sms_body']!, _smsBodyMeta));
+    }
+    if (data.containsKey('original_sms_id')) {
+      context.handle(
+          _originalSmsIdMeta,
+          originalSmsId.isAcceptableOrUnknown(
+              data['original_sms_id']!, _originalSmsIdMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TransactionDraft map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TransactionDraft(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id'])!,
+      amount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}amount'])!,
+      type: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
+      currency: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}currency'])!,
+      merchant: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}merchant']),
+      description: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}description']),
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      smsSender: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sms_sender']),
+      cardOrAccount: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}card_or_account']),
+      smsBody: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sms_body']),
+      originalSmsId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}original_sms_id']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $TransactionDraftsTable createAlias(String alias) {
+    return $TransactionDraftsTable(attachedDatabase, alias);
+  }
+}
+
+class TransactionDraft extends DataClass
+    implements Insertable<TransactionDraft> {
+  final String id;
+  final String userId;
+  final int amount;
+  final String type;
+  final String currency;
+  final String? merchant;
+  final String? description;
+  final DateTime date;
+  final String? smsSender;
+  final String? cardOrAccount;
+  final String? smsBody;
+  final String? originalSmsId;
+  final DateTime createdAt;
+  const TransactionDraft(
+      {required this.id,
+      required this.userId,
+      required this.amount,
+      required this.type,
+      required this.currency,
+      this.merchant,
+      this.description,
+      required this.date,
+      this.smsSender,
+      this.cardOrAccount,
+      this.smsBody,
+      this.originalSmsId,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['user_id'] = Variable<String>(userId);
+    map['amount'] = Variable<int>(amount);
+    map['type'] = Variable<String>(type);
+    map['currency'] = Variable<String>(currency);
+    if (!nullToAbsent || merchant != null) {
+      map['merchant'] = Variable<String>(merchant);
+    }
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['date'] = Variable<DateTime>(date);
+    if (!nullToAbsent || smsSender != null) {
+      map['sms_sender'] = Variable<String>(smsSender);
+    }
+    if (!nullToAbsent || cardOrAccount != null) {
+      map['card_or_account'] = Variable<String>(cardOrAccount);
+    }
+    if (!nullToAbsent || smsBody != null) {
+      map['sms_body'] = Variable<String>(smsBody);
+    }
+    if (!nullToAbsent || originalSmsId != null) {
+      map['original_sms_id'] = Variable<String>(originalSmsId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TransactionDraftsCompanion toCompanion(bool nullToAbsent) {
+    return TransactionDraftsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      amount: Value(amount),
+      type: Value(type),
+      currency: Value(currency),
+      merchant: merchant == null && nullToAbsent
+          ? const Value.absent()
+          : Value(merchant),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      date: Value(date),
+      smsSender: smsSender == null && nullToAbsent
+          ? const Value.absent()
+          : Value(smsSender),
+      cardOrAccount: cardOrAccount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cardOrAccount),
+      smsBody: smsBody == null && nullToAbsent
+          ? const Value.absent()
+          : Value(smsBody),
+      originalSmsId: originalSmsId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalSmsId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TransactionDraft.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TransactionDraft(
+      id: serializer.fromJson<String>(json['id']),
+      userId: serializer.fromJson<String>(json['userId']),
+      amount: serializer.fromJson<int>(json['amount']),
+      type: serializer.fromJson<String>(json['type']),
+      currency: serializer.fromJson<String>(json['currency']),
+      merchant: serializer.fromJson<String?>(json['merchant']),
+      description: serializer.fromJson<String?>(json['description']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      smsSender: serializer.fromJson<String?>(json['smsSender']),
+      cardOrAccount: serializer.fromJson<String?>(json['cardOrAccount']),
+      smsBody: serializer.fromJson<String?>(json['smsBody']),
+      originalSmsId: serializer.fromJson<String?>(json['originalSmsId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'userId': serializer.toJson<String>(userId),
+      'amount': serializer.toJson<int>(amount),
+      'type': serializer.toJson<String>(type),
+      'currency': serializer.toJson<String>(currency),
+      'merchant': serializer.toJson<String?>(merchant),
+      'description': serializer.toJson<String?>(description),
+      'date': serializer.toJson<DateTime>(date),
+      'smsSender': serializer.toJson<String?>(smsSender),
+      'cardOrAccount': serializer.toJson<String?>(cardOrAccount),
+      'smsBody': serializer.toJson<String?>(smsBody),
+      'originalSmsId': serializer.toJson<String?>(originalSmsId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TransactionDraft copyWith(
+          {String? id,
+          String? userId,
+          int? amount,
+          String? type,
+          String? currency,
+          Value<String?> merchant = const Value.absent(),
+          Value<String?> description = const Value.absent(),
+          DateTime? date,
+          Value<String?> smsSender = const Value.absent(),
+          Value<String?> cardOrAccount = const Value.absent(),
+          Value<String?> smsBody = const Value.absent(),
+          Value<String?> originalSmsId = const Value.absent(),
+          DateTime? createdAt}) =>
+      TransactionDraft(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        amount: amount ?? this.amount,
+        type: type ?? this.type,
+        currency: currency ?? this.currency,
+        merchant: merchant.present ? merchant.value : this.merchant,
+        description: description.present ? description.value : this.description,
+        date: date ?? this.date,
+        smsSender: smsSender.present ? smsSender.value : this.smsSender,
+        cardOrAccount:
+            cardOrAccount.present ? cardOrAccount.value : this.cardOrAccount,
+        smsBody: smsBody.present ? smsBody.value : this.smsBody,
+        originalSmsId:
+            originalSmsId.present ? originalSmsId.value : this.originalSmsId,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  TransactionDraft copyWithCompanion(TransactionDraftsCompanion data) {
+    return TransactionDraft(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      type: data.type.present ? data.type.value : this.type,
+      currency: data.currency.present ? data.currency.value : this.currency,
+      merchant: data.merchant.present ? data.merchant.value : this.merchant,
+      description:
+          data.description.present ? data.description.value : this.description,
+      date: data.date.present ? data.date.value : this.date,
+      smsSender: data.smsSender.present ? data.smsSender.value : this.smsSender,
+      cardOrAccount: data.cardOrAccount.present
+          ? data.cardOrAccount.value
+          : this.cardOrAccount,
+      smsBody: data.smsBody.present ? data.smsBody.value : this.smsBody,
+      originalSmsId: data.originalSmsId.present
+          ? data.originalSmsId.value
+          : this.originalSmsId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionDraft(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('amount: $amount, ')
+          ..write('type: $type, ')
+          ..write('currency: $currency, ')
+          ..write('merchant: $merchant, ')
+          ..write('description: $description, ')
+          ..write('date: $date, ')
+          ..write('smsSender: $smsSender, ')
+          ..write('cardOrAccount: $cardOrAccount, ')
+          ..write('smsBody: $smsBody, ')
+          ..write('originalSmsId: $originalSmsId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      userId,
+      amount,
+      type,
+      currency,
+      merchant,
+      description,
+      date,
+      smsSender,
+      cardOrAccount,
+      smsBody,
+      originalSmsId,
+      createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TransactionDraft &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.amount == this.amount &&
+          other.type == this.type &&
+          other.currency == this.currency &&
+          other.merchant == this.merchant &&
+          other.description == this.description &&
+          other.date == this.date &&
+          other.smsSender == this.smsSender &&
+          other.cardOrAccount == this.cardOrAccount &&
+          other.smsBody == this.smsBody &&
+          other.originalSmsId == this.originalSmsId &&
+          other.createdAt == this.createdAt);
+}
+
+class TransactionDraftsCompanion extends UpdateCompanion<TransactionDraft> {
+  final Value<String> id;
+  final Value<String> userId;
+  final Value<int> amount;
+  final Value<String> type;
+  final Value<String> currency;
+  final Value<String?> merchant;
+  final Value<String?> description;
+  final Value<DateTime> date;
+  final Value<String?> smsSender;
+  final Value<String?> cardOrAccount;
+  final Value<String?> smsBody;
+  final Value<String?> originalSmsId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TransactionDraftsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.type = const Value.absent(),
+    this.currency = const Value.absent(),
+    this.merchant = const Value.absent(),
+    this.description = const Value.absent(),
+    this.date = const Value.absent(),
+    this.smsSender = const Value.absent(),
+    this.cardOrAccount = const Value.absent(),
+    this.smsBody = const Value.absent(),
+    this.originalSmsId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TransactionDraftsCompanion.insert({
+    required String id,
+    required String userId,
+    required int amount,
+    required String type,
+    this.currency = const Value.absent(),
+    this.merchant = const Value.absent(),
+    this.description = const Value.absent(),
+    required DateTime date,
+    this.smsSender = const Value.absent(),
+    this.cardOrAccount = const Value.absent(),
+    this.smsBody = const Value.absent(),
+    this.originalSmsId = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        userId = Value(userId),
+        amount = Value(amount),
+        type = Value(type),
+        date = Value(date),
+        createdAt = Value(createdAt);
+  static Insertable<TransactionDraft> custom({
+    Expression<String>? id,
+    Expression<String>? userId,
+    Expression<int>? amount,
+    Expression<String>? type,
+    Expression<String>? currency,
+    Expression<String>? merchant,
+    Expression<String>? description,
+    Expression<DateTime>? date,
+    Expression<String>? smsSender,
+    Expression<String>? cardOrAccount,
+    Expression<String>? smsBody,
+    Expression<String>? originalSmsId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (amount != null) 'amount': amount,
+      if (type != null) 'type': type,
+      if (currency != null) 'currency': currency,
+      if (merchant != null) 'merchant': merchant,
+      if (description != null) 'description': description,
+      if (date != null) 'date': date,
+      if (smsSender != null) 'sms_sender': smsSender,
+      if (cardOrAccount != null) 'card_or_account': cardOrAccount,
+      if (smsBody != null) 'sms_body': smsBody,
+      if (originalSmsId != null) 'original_sms_id': originalSmsId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TransactionDraftsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? userId,
+      Value<int>? amount,
+      Value<String>? type,
+      Value<String>? currency,
+      Value<String?>? merchant,
+      Value<String?>? description,
+      Value<DateTime>? date,
+      Value<String?>? smsSender,
+      Value<String?>? cardOrAccount,
+      Value<String?>? smsBody,
+      Value<String?>? originalSmsId,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return TransactionDraftsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      amount: amount ?? this.amount,
+      type: type ?? this.type,
+      currency: currency ?? this.currency,
+      merchant: merchant ?? this.merchant,
+      description: description ?? this.description,
+      date: date ?? this.date,
+      smsSender: smsSender ?? this.smsSender,
+      cardOrAccount: cardOrAccount ?? this.cardOrAccount,
+      smsBody: smsBody ?? this.smsBody,
+      originalSmsId: originalSmsId ?? this.originalSmsId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (currency.present) {
+      map['currency'] = Variable<String>(currency.value);
+    }
+    if (merchant.present) {
+      map['merchant'] = Variable<String>(merchant.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (smsSender.present) {
+      map['sms_sender'] = Variable<String>(smsSender.value);
+    }
+    if (cardOrAccount.present) {
+      map['card_or_account'] = Variable<String>(cardOrAccount.value);
+    }
+    if (smsBody.present) {
+      map['sms_body'] = Variable<String>(smsBody.value);
+    }
+    if (originalSmsId.present) {
+      map['original_sms_id'] = Variable<String>(originalSmsId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TransactionDraftsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('amount: $amount, ')
+          ..write('type: $type, ')
+          ..write('currency: $currency, ')
+          ..write('merchant: $merchant, ')
+          ..write('description: $description, ')
+          ..write('date: $date, ')
+          ..write('smsSender: $smsSender, ')
+          ..write('cardOrAccount: $cardOrAccount, ')
+          ..write('smsBody: $smsBody, ')
+          ..write('originalSmsId: $originalSmsId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4341,6 +4990,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ChatHistoryTable chatHistory = $ChatHistoryTable(this);
   late final $AiMemoriesTable aiMemories = $AiMemoriesTable(this);
   late final $AuditLogsTable auditLogs = $AuditLogsTable(this);
+  late final $TransactionDraftsTable transactionDrafts =
+      $TransactionDraftsTable(this);
   late final Index idxCategoriesUsage = Index('idx_categories_usage',
       'CREATE INDEX idx_categories_usage ON categories (user_id, usage_count)');
   late final Index idxTransactionsUserDate = Index('idx_transactions_user_date',
@@ -4361,6 +5012,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       ChatHistoryDao(this as AppDatabase);
   late final AiMemoryDao aiMemoryDao = AiMemoryDao(this as AppDatabase);
   late final AuditLogDao auditLogDao = AuditLogDao(this as AppDatabase);
+  late final TransactionDraftDao transactionDraftDao =
+      TransactionDraftDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4375,6 +5028,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         chatHistory,
         aiMemories,
         auditLogs,
+        transactionDrafts,
         idxCategoriesUsage,
         idxTransactionsUserDate,
         idxTransactionsCategory,
@@ -4518,6 +5172,23 @@ final class $$UsersTableReferences
         .filter((f) => f.userId.id($_item.id));
 
     final cache = $_typedResult.readTableOrNull(_auditLogsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$TransactionDraftsTable, List<TransactionDraft>>
+      _transactionDraftsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.transactionDrafts,
+              aliasName: $_aliasNameGenerator(
+                  db.users.id, db.transactionDrafts.userId));
+
+  $$TransactionDraftsTableProcessedTableManager get transactionDraftsRefs {
+    final manager =
+        $$TransactionDraftsTableTableManager($_db, $_db.transactionDrafts)
+            .filter((f) => f.userId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_transactionDraftsRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -4715,6 +5386,27 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
             $$AuditLogsTableFilterComposer(
               $db: $db,
               $table: $db.auditLogs,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> transactionDraftsRefs(
+      Expression<bool> Function($$TransactionDraftsTableFilterComposer f) f) {
+    final $$TransactionDraftsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.transactionDrafts,
+        getReferencedColumn: (t) => t.userId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TransactionDraftsTableFilterComposer(
+              $db: $db,
+              $table: $db.transactionDrafts,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -4958,6 +5650,28 @@ class $$UsersTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> transactionDraftsRefs<T extends Object>(
+      Expression<T> Function($$TransactionDraftsTableAnnotationComposer a) f) {
+    final $$TransactionDraftsTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.transactionDrafts,
+            getReferencedColumn: (t) => t.userId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$TransactionDraftsTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.transactionDrafts,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$UsersTableTableManager extends RootTableManager<
@@ -4979,7 +5693,8 @@ class $$UsersTableTableManager extends RootTableManager<
         bool budgetsRefs,
         bool chatHistoryRefs,
         bool aiMemoriesRefs,
-        bool auditLogsRefs})> {
+        bool auditLogsRefs,
+        bool transactionDraftsRefs})> {
   $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
       : super(TableManagerState(
           db: db,
@@ -5046,7 +5761,8 @@ class $$UsersTableTableManager extends RootTableManager<
               budgetsRefs = false,
               chatHistoryRefs = false,
               aiMemoriesRefs = false,
-              auditLogsRefs = false}) {
+              auditLogsRefs = false,
+              transactionDraftsRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
@@ -5057,7 +5773,8 @@ class $$UsersTableTableManager extends RootTableManager<
                 if (budgetsRefs) db.budgets,
                 if (chatHistoryRefs) db.chatHistory,
                 if (aiMemoriesRefs) db.aiMemories,
-                if (auditLogsRefs) db.auditLogs
+                if (auditLogsRefs) db.auditLogs,
+                if (transactionDraftsRefs) db.transactionDrafts
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -5154,6 +5871,18 @@ class $$UsersTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem: (item,
                                 referencedItems) =>
                             referencedItems.where((e) => e.userId == item.id),
+                        typedResults: items),
+                  if (transactionDraftsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$UsersTableReferences
+                            ._transactionDraftsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$UsersTableReferences(db, table, p0)
+                                .transactionDraftsRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.userId == item.id),
                         typedResults: items)
                 ];
               },
@@ -5181,7 +5910,8 @@ typedef $$UsersTableProcessedTableManager = ProcessedTableManager<
         bool budgetsRefs,
         bool chatHistoryRefs,
         bool aiMemoriesRefs,
-        bool auditLogsRefs})>;
+        bool auditLogsRefs,
+        bool transactionDraftsRefs})>;
 typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   required String id,
   required String userId,
@@ -8616,6 +9346,404 @@ typedef $$AuditLogsTableProcessedTableManager = ProcessedTableManager<
     (AuditLog, $$AuditLogsTableReferences),
     AuditLog,
     PrefetchHooks Function({bool userId})>;
+typedef $$TransactionDraftsTableCreateCompanionBuilder
+    = TransactionDraftsCompanion Function({
+  required String id,
+  required String userId,
+  required int amount,
+  required String type,
+  Value<String> currency,
+  Value<String?> merchant,
+  Value<String?> description,
+  required DateTime date,
+  Value<String?> smsSender,
+  Value<String?> cardOrAccount,
+  Value<String?> smsBody,
+  Value<String?> originalSmsId,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$TransactionDraftsTableUpdateCompanionBuilder
+    = TransactionDraftsCompanion Function({
+  Value<String> id,
+  Value<String> userId,
+  Value<int> amount,
+  Value<String> type,
+  Value<String> currency,
+  Value<String?> merchant,
+  Value<String?> description,
+  Value<DateTime> date,
+  Value<String?> smsSender,
+  Value<String?> cardOrAccount,
+  Value<String?> smsBody,
+  Value<String?> originalSmsId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$TransactionDraftsTableReferences extends BaseReferences<
+    _$AppDatabase, $TransactionDraftsTable, TransactionDraft> {
+  $$TransactionDraftsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+      $_aliasNameGenerator(db.transactionDrafts.userId, db.users.id));
+
+  $$UsersTableProcessedTableManager? get userId {
+    if ($_item.userId == null) return null;
+    final manager = $$UsersTableTableManager($_db, $_db.users)
+        .filter((f) => f.id($_item.userId!));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$TransactionDraftsTableFilterComposer
+    extends Composer<_$AppDatabase, $TransactionDraftsTable> {
+  $$TransactionDraftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get amount => $composableBuilder(
+      column: $table.amount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get currency => $composableBuilder(
+      column: $table.currency, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get merchant => $composableBuilder(
+      column: $table.merchant, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get smsSender => $composableBuilder(
+      column: $table.smsSender, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get cardOrAccount => $composableBuilder(
+      column: $table.cardOrAccount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get smsBody => $composableBuilder(
+      column: $table.smsBody, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get originalSmsId => $composableBuilder(
+      column: $table.originalSmsId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableFilterComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TransactionDraftsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TransactionDraftsTable> {
+  $$TransactionDraftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+      column: $table.amount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get currency => $composableBuilder(
+      column: $table.currency, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get merchant => $composableBuilder(
+      column: $table.merchant, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get smsSender => $composableBuilder(
+      column: $table.smsSender, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get cardOrAccount => $composableBuilder(
+      column: $table.cardOrAccount,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get smsBody => $composableBuilder(
+      column: $table.smsBody, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get originalSmsId => $composableBuilder(
+      column: $table.originalSmsId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableOrderingComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TransactionDraftsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TransactionDraftsTable> {
+  $$TransactionDraftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get currency =>
+      $composableBuilder(column: $table.currency, builder: (column) => column);
+
+  GeneratedColumn<String> get merchant =>
+      $composableBuilder(column: $table.merchant, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get smsSender =>
+      $composableBuilder(column: $table.smsSender, builder: (column) => column);
+
+  GeneratedColumn<String> get cardOrAccount => $composableBuilder(
+      column: $table.cardOrAccount, builder: (column) => column);
+
+  GeneratedColumn<String> get smsBody =>
+      $composableBuilder(column: $table.smsBody, builder: (column) => column);
+
+  GeneratedColumn<String> get originalSmsId => $composableBuilder(
+      column: $table.originalSmsId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TransactionDraftsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $TransactionDraftsTable,
+    TransactionDraft,
+    $$TransactionDraftsTableFilterComposer,
+    $$TransactionDraftsTableOrderingComposer,
+    $$TransactionDraftsTableAnnotationComposer,
+    $$TransactionDraftsTableCreateCompanionBuilder,
+    $$TransactionDraftsTableUpdateCompanionBuilder,
+    (TransactionDraft, $$TransactionDraftsTableReferences),
+    TransactionDraft,
+    PrefetchHooks Function({bool userId})> {
+  $$TransactionDraftsTableTableManager(
+      _$AppDatabase db, $TransactionDraftsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TransactionDraftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TransactionDraftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TransactionDraftsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> userId = const Value.absent(),
+            Value<int> amount = const Value.absent(),
+            Value<String> type = const Value.absent(),
+            Value<String> currency = const Value.absent(),
+            Value<String?> merchant = const Value.absent(),
+            Value<String?> description = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<String?> smsSender = const Value.absent(),
+            Value<String?> cardOrAccount = const Value.absent(),
+            Value<String?> smsBody = const Value.absent(),
+            Value<String?> originalSmsId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TransactionDraftsCompanion(
+            id: id,
+            userId: userId,
+            amount: amount,
+            type: type,
+            currency: currency,
+            merchant: merchant,
+            description: description,
+            date: date,
+            smsSender: smsSender,
+            cardOrAccount: cardOrAccount,
+            smsBody: smsBody,
+            originalSmsId: originalSmsId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String userId,
+            required int amount,
+            required String type,
+            Value<String> currency = const Value.absent(),
+            Value<String?> merchant = const Value.absent(),
+            Value<String?> description = const Value.absent(),
+            required DateTime date,
+            Value<String?> smsSender = const Value.absent(),
+            Value<String?> cardOrAccount = const Value.absent(),
+            Value<String?> smsBody = const Value.absent(),
+            Value<String?> originalSmsId = const Value.absent(),
+            required DateTime createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TransactionDraftsCompanion.insert(
+            id: id,
+            userId: userId,
+            amount: amount,
+            type: type,
+            currency: currency,
+            merchant: merchant,
+            description: description,
+            date: date,
+            smsSender: smsSender,
+            cardOrAccount: cardOrAccount,
+            smsBody: smsBody,
+            originalSmsId: originalSmsId,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$TransactionDraftsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (userId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.userId,
+                    referencedTable:
+                        $$TransactionDraftsTableReferences._userIdTable(db),
+                    referencedColumn:
+                        $$TransactionDraftsTableReferences._userIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$TransactionDraftsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $TransactionDraftsTable,
+    TransactionDraft,
+    $$TransactionDraftsTableFilterComposer,
+    $$TransactionDraftsTableOrderingComposer,
+    $$TransactionDraftsTableAnnotationComposer,
+    $$TransactionDraftsTableCreateCompanionBuilder,
+    $$TransactionDraftsTableUpdateCompanionBuilder,
+    (TransactionDraft, $$TransactionDraftsTableReferences),
+    TransactionDraft,
+    PrefetchHooks Function({bool userId})>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8638,4 +9766,6 @@ class $AppDatabaseManager {
       $$AiMemoriesTableTableManager(_db, _db.aiMemories);
   $$AuditLogsTableTableManager get auditLogs =>
       $$AuditLogsTableTableManager(_db, _db.auditLogs);
+  $$TransactionDraftsTableTableManager get transactionDrafts =>
+      $$TransactionDraftsTableTableManager(_db, _db.transactionDrafts);
 }
