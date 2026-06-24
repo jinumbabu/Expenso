@@ -1,10 +1,31 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:sqlite3/open.dart';
+import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'core/routes/app_router.dart';
+import 'core/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isAndroid) {
+    open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
+  }
+
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
+
+  try {
+    await NotificationService().init();
+  } catch (e) {
+    debugPrint('NotificationService initialization failed: $e');
+  }
 
   await SentryFlutter.init(
     (options) {
@@ -32,11 +53,22 @@ class ExpensoApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        primaryColor: Colors.teal,
+        scaffoldBackgroundColor: const Color(0xFF050505),
+        primaryColor: const Color(0xFF0066FF),
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
+          seedColor: const Color(0xFF0066FF),
+          primary: const Color(0xFF0066FF),
           brightness: Brightness.dark,
+        ).copyWith(
+          background: const Color(0xFF050505),
+        ),
+        cardTheme: CardTheme(
+          color: const Color(0xFF050505),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
         ),
       ),
       routerConfig: router,
