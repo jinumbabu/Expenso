@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/sync/backup_service.dart';
 import '../../../../core/sync/sync_service.dart';
+import '../../../../core/sync/firestore_sync_service.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/security/audit_logger.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -89,6 +91,14 @@ class BackupNotifier extends StateNotifier<BackupState> {
 
       final googleToken = await _getGoogleAccessToken();
       final size = await _backupService.backup(userId, googleAccessToken: googleToken);
+      
+      // Trigger document-level sync to Firestore
+      try {
+        final firestoreSync = _ref.read(firestoreSyncServiceProvider);
+        await firestoreSync.syncLocalToCloud(userId);
+      } catch (e) {
+        debugPrint('BackupNotifier: Firestore Sync failed during backup: $e');
+      }
       
       state = state.copyWith(
         isLoading: false,
@@ -204,6 +214,15 @@ class BackupNotifier extends StateNotifier<BackupState> {
       final googleToken = await _getGoogleAccessToken();
       final syncService = _ref.read(syncServiceProvider);
       final result = await syncService.sync(userId, googleAccessToken: googleToken);
+
+      // Trigger document-level sync to Firestore
+      try {
+        final firestoreSync = _ref.read(firestoreSyncServiceProvider);
+        await firestoreSync.syncLocalToCloud(userId);
+        await firestoreSync.syncCloudToLocal(userId);
+      } catch (e) {
+        debugPrint('BackupNotifier: Firestore Sync failed during database sync: $e');
+      }
 
       if (result.conflicts.isNotEmpty) {
         state = state.copyWith(

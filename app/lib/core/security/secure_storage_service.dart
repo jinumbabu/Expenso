@@ -11,6 +11,15 @@ class SecureStorageService {
   static const String _userIdKey = 'user_id';
   static const String _backupEncryptionKey = 'backup_encryption_key';
   static const String _dbEncryptionKey = 'db_encryption_key';
+  static const String _privacyModeKey = 'privacy_mode';
+
+  Future<void> savePrivacyMode(String mode) async {
+    await _storage.write(key: _privacyModeKey, value: mode);
+  }
+
+  Future<String?> getPrivacyMode() async {
+    return await _storage.read(key: _privacyModeKey);
+  }
 
   Future<void> saveBackupEncryptionKey(String key) async {
     await _storage.write(key: _backupEncryptionKey, value: key);

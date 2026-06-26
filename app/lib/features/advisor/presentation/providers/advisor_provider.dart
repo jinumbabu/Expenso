@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/services/notification_service.dart';
 
 class AdvisorState {
   final int healthScore;
@@ -99,6 +100,7 @@ class AdvisorNotifier extends StateNotifier<AdvisorState> {
       final budgets = await db.budgetDao.getBudgetsForUser(userId);
       final categories = await db.categoryDao.getCategoriesForUser(userId);
       final categoriesMap = {for (var c in categories) c.id: c.name};
+      final existingNotifications = await db.notificationDao.getNotificationsForUser(userId);
 
       // 1. Split transactions
       final currentMonthTxs = transactions.where((tx) =>
@@ -161,11 +163,39 @@ class AdvisorNotifier extends StateNotifier<AdvisorState> {
             compliantCount++;
             if (budget.amount > 0 && spent > budget.amount * 0.85) {
               final percent = ((spent / budget.amount) * 100).toStringAsFixed(0);
-              alerts.add('Budget for $catName is at $percent% of limit.');
+              final alertText = 'Budget for $catName is at $percent% of limit.';
+              alerts.add(alertText);
+
+              // Send proactive alert if not already sent in the last 24 hours
+              final alreadySent = existingNotifications.any((n) =>
+                  n.body == alertText &&
+                  n.createdAt.isAfter(DateTime.now().subtract(const Duration(hours: 24))));
+              if (!alreadySent) {
+                _ref.read(notificationServiceProvider).sendProactiveAlert(
+                  userId,
+                  title: 'Budget Warning',
+                  body: alertText,
+                  priority: 'medium',
+                );
+              }
             }
           } else {
             final over = ((spent - budget.amount) / 100.0).toStringAsFixed(2);
-            alerts.add('Budget for $catName exceeded by ₹$over!');
+            final alertText = 'Budget for $catName exceeded by ₹$over!';
+            alerts.add(alertText);
+
+            // Send proactive alert if not already sent in the last 24 hours
+            final alreadySent = existingNotifications.any((n) =>
+                n.body == alertText &&
+                n.createdAt.isAfter(DateTime.now().subtract(const Duration(hours: 24))));
+            if (!alreadySent) {
+              _ref.read(notificationServiceProvider).sendProactiveAlert(
+                userId,
+                title: 'Budget Exceeded',
+                body: alertText,
+                priority: 'high',
+              );
+            }
           }
         }
         budgetCompliancePoints = (compliantCount / budgets.length) * 25.0;

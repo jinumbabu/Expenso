@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/dao/user_dao.dart';
@@ -8,6 +10,9 @@ import '../../../../core/security/audit_logger.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
+
+import '../../../../core/sync/firestore_sync_service.dart';
+import '../../../../core/services/notification_service.dart';
 
 // Database Provider
 final Provider<AppDatabase> databaseProvider = Provider<AppDatabase>((ref) {
@@ -28,7 +33,22 @@ final Provider<SecureStorageService> secureStorageProvider = Provider<SecureStor
 });
 
 // Base URL configuration for development backend
-const String baseUrl = 'http://localhost:8000/api/v1';
+final String baseUrl = _getBaseUrl();
+
+String _getBaseUrl() {
+  if (kReleaseMode) {
+    return 'https://api.expenso.app/api/v1';
+  }
+  if (kIsWeb) {
+    return 'http://localhost:8000/api/v1';
+  }
+  try {
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:8000/api/v1';
+    }
+  } catch (_) {}
+  return 'http://localhost:8000/api/v1';
+}
 
 // Auth Interceptor Provider
 final Provider<AuthInterceptor> authInterceptorProvider = Provider<AuthInterceptor>((ref) {
@@ -66,7 +86,20 @@ final Provider<AuthRepository> authRepositoryProvider = Provider<AuthRepository>
 final StateNotifierProvider<AuthNotifier, AuthState> authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   final auditLogger = ref.watch(auditLoggerProvider);
-  return AuthNotifier(repo, auditLogger);
+  final notifier = AuthNotifier(repo, auditLogger);
+  
+  // ignore: deprecated_member_use
+  ref.listenSelf((previous, next) {
+    if (next.status == AuthStatus.authenticated && next.user != null) {
+      ref.read(firestoreSyncServiceProvider).startRealTimeSync(next.user!.id);
+      ref.read(notificationServiceProvider).checkUpcomingBillsAndSubscriptions(next.user!.id);
+      ref.read(notificationServiceProvider).checkGoalProgressReminders(next.user!.id);
+    } else if (next.status == AuthStatus.unauthenticated) {
+      ref.read(firestoreSyncServiceProvider).stopRealTimeSync();
+    }
+  });
+
+  return notifier;
 });
 
 enum AuthStatus { authenticated, unauthenticated, loading }
@@ -142,6 +175,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> loginOffline({
+    String? email,
+    String? displayName,
+    String? googleId,
+  }) async {
+    state = AuthState.loading();
+    try {
+      final user = await _authRepository.loginOffline(
+        email: email,
+        displayName: displayName,
+        googleId: googleId,
+      );
+      if (user != null) {
+        state = AuthState.authenticated(user);
+        await _auditLogger.logEvent(
+          userId: user.id,
+          eventType: 'auth_login_offline',
+          eventCategory: 'authentication',
+          description: 'User logged in via Offline Mode.',
+          metadata: {'email': user.email},
+        );
+      } else {
+        state = AuthState.unauthenticated(error: 'Offline login failed');
+      }
+    } catch (e) {
+      state = AuthState.unauthenticated(error: e.toString());
+    }
+  }
+
   Future<void> logout() async {
     final userId = state.user?.id;
     state = AuthState.loading();
@@ -165,3 +227,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState.unauthenticated();
   }
 }
+
+final isUnlockedProvider = StateProvider<bool>((ref) => false);

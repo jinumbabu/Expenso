@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../providers/expense_provider.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../shared/widgets/glass_card.dart';
 
 class ExpensesScreen extends ConsumerWidget {
   const ExpensesScreen({super.key});
@@ -55,7 +56,7 @@ class ExpensesScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF002D27), Colors.black],
+            colors: [Color(0xFF050E1A), Color(0xFF050505)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -75,7 +76,7 @@ class ExpensesScreen extends ConsumerWidget {
                       style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.filter_list, color: Colors.tealAccent),
+                      icon: const Icon(Icons.filter_list_rounded, color: Color(0xFF00E5FF)),
                       onPressed: () => _showFiltersBottomSheet(context, ref),
                     ),
                   ],
@@ -88,9 +89,9 @@ class ExpensesScreen extends ConsumerWidget {
                 child: Container(
                   height: 52,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withOpacity(0.02),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.12)),
                   ),
                   child: TextField(
                     onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
@@ -99,10 +100,10 @@ class ExpensesScreen extends ConsumerWidget {
                     decoration: InputDecoration(
                       hintText: 'Search description, merchant...',
                       hintStyle: const TextStyle(color: Colors.white30),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white60),
+                      prefixIcon: const Icon(Icons.search, color: Colors.white54),
                       suffixIcon: searchQuery.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.white60),
+                              icon: const Icon(Icons.clear, color: Colors.white54),
                               onPressed: () {
                                 ref.read(searchQueryProvider.notifier).state = '';
                               },
@@ -160,26 +161,22 @@ class ExpensesScreen extends ConsumerWidget {
                   ),
                 ),
 
-              // Summary Info Card
+              // Summary Info Card (Glass style)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20.0, 8.0, 20.0, 16.0),
-                child: Container(
+                child: GlassCard(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00241F).withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.teal.withOpacity(0.15)),
-                  ),
+                  borderRadius: 16,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         'Total In: ${_formatMoney(totalIncomeShown)}',
-                        style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       Text(
                         'Total Out: ${_formatMoney(totalExpenseShown)}',
-                        style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Color(0xFFFF3B30), fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -198,7 +195,7 @@ class ExpensesScreen extends ConsumerWidget {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.receipt_long, size: 64, color: Colors.teal.withOpacity(0.3)),
+                                Icon(Icons.receipt_long_outlined, size: 64, color: const Color(0xFF0066FF).withOpacity(0.3)),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'No transactions found',
@@ -240,7 +237,7 @@ class ExpensesScreen extends ConsumerWidget {
                                   padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
                                   child: Text(
                                     formattedDate,
-                                    style: TextStyle(color: Colors.teal.shade200, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                                    style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0),
                                   ),
                                 ),
                                 ...dayTxs.map((tx) {
@@ -262,7 +259,7 @@ class ExpensesScreen extends ConsumerWidget {
                                       leading: Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: catColor.withOpacity(0.15),
+                                          color: catColor.withOpacity(0.12),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(catIcon, color: catColor, size: 20),
@@ -280,7 +277,7 @@ class ExpensesScreen extends ConsumerWidget {
                                       trailing: Text(
                                         (isIncome ? '+' : '-') + _formatMoney(tx.amount),
                                         style: TextStyle(
-                                          color: isIncome ? Colors.greenAccent : Colors.redAccent,
+                                          color: isIncome ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30),
                                           fontWeight: FontWeight.bold,
                                           fontSize: 15,
                                         ),
@@ -296,7 +293,7 @@ class ExpensesScreen extends ConsumerWidget {
                       },
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator(color: Colors.teal)),
+                  loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
                   error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.red))),
                 ),
               ),
@@ -306,8 +303,8 @@ class ExpensesScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/expenses/add'),
-        backgroundColor: Colors.tealAccent.shade400,
-        foregroundColor: const Color(0xFF00241F),
+        backgroundColor: const Color(0xFF0066FF),
+        foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add, size: 28),
       ),
@@ -318,10 +315,10 @@ class ExpensesScreen extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.only(right: 8.0),
       child: InputChip(
-        label: Text(label, style: const TextStyle(color: Colors.tealAccent, fontSize: 12)),
-        backgroundColor: const Color(0xFF00241F).withOpacity(0.4),
-        side: const BorderSide(color: Colors.tealAccent, width: 0.8),
-        deleteIcon: const Icon(Icons.close, size: 14, color: Colors.tealAccent),
+        label: Text(label, style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12)),
+        backgroundColor: const Color(0xFF0066FF).withOpacity(0.12),
+        side: const BorderSide(color: Color(0xFF0066FF), width: 0.8),
+        deleteIcon: const Icon(Icons.close, size: 14, color: Color(0xFF00E5FF)),
         onDeleted: onClear,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -341,7 +338,7 @@ class ExpensesScreen extends ConsumerWidget {
   void _showTransactionActions(BuildContext context, WidgetRef ref, Transaction tx) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF050505),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -354,7 +351,7 @@ class ExpensesScreen extends ConsumerWidget {
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white70),
+                leading: const Icon(Icons.edit_outlined, color: Colors.white70),
                 title: const Text('Edit Transaction', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
@@ -362,8 +359,8 @@ class ExpensesScreen extends ConsumerWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('Delete Transaction', style: TextStyle(color: Colors.redAccent)),
+                leading: const Icon(Icons.delete_outline, color: Color(0xFFFF3B30)),
+                title: const Text('Delete Transaction', style: TextStyle(color: Color(0xFFFF3B30))),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete(context, ref, tx.id);
@@ -381,16 +378,17 @@ class ExpensesScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
+        backgroundColor: const Color(0xFF050505),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF0066FF), width: 1)),
         title: const Text('Delete Transaction', style: TextStyle(color: Colors.white)),
         content: const Text('Are you sure you want to delete this transaction? This action is reversible under soft-delete.', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.teal)),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF0066FF))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3B30)),
             onPressed: () {
               Navigator.pop(context);
               ref.read(expenseListNotifierProvider.notifier).removeTransaction(id);
@@ -405,7 +403,7 @@ class ExpensesScreen extends ConsumerWidget {
   void _showFiltersBottomSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF050505),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -422,7 +420,7 @@ class ExpensesScreen extends ConsumerWidget {
 
             return DraggableScrollableSheet(
               expand: false,
-              initialChildSize: 0.6,
+              initialChildSize: 0.65,
               maxChildSize: 0.85,
               minChildSize: 0.4,
               builder: (context, scrollController) {
@@ -442,7 +440,7 @@ class ExpensesScreen extends ConsumerWidget {
                             ref.read(filterDateRangeProvider.notifier).state = null;
                             Navigator.pop(context);
                           },
-                          child: const Text('Clear All', style: TextStyle(color: Colors.redAccent)),
+                          child: const Text('Clear All', style: TextStyle(color: Color(0xFFFF3B30))),
                         ),
                       ],
                     ),
@@ -478,13 +476,13 @@ class ExpensesScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.calendar_today, color: Colors.tealAccent),
+                      leading: const Icon(Icons.calendar_today_outlined, color: Color(0xFF00E5FF)),
                       title: const Text('Select custom date range', style: TextStyle(color: Colors.white70)),
                       subtitle: Consumer(
                         builder: (context, ref, child) {
                           final range = ref.watch(filterDateRangeProvider);
                           if (range == null) return const Text('All Time', style: TextStyle(color: Colors.white30));
-                          return Text('${DateFormat('MM/dd/yyyy').format(range.start)} - ${DateFormat('MM/dd/yyyy').format(range.end)}', style: const TextStyle(color: Colors.tealAccent));
+                          return Text('${DateFormat('MM/dd/yyyy').format(range.start)} - ${DateFormat('MM/dd/yyyy').format(range.end)}', style: const TextStyle(color: Color(0xFF00E5FF)));
                         },
                       ),
                       onTap: () async {
@@ -495,10 +493,10 @@ class ExpensesScreen extends ConsumerWidget {
                           builder: (context, child) {
                             return Theme(
                               data: ThemeData.dark().copyWith(
-                                colorScheme: ColorScheme.dark(
-                                  primary: Colors.teal,
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Color(0xFF0066FF),
                                   onPrimary: Colors.white,
-                                  surface: Colors.grey.shade900,
+                                  surface: Color(0xFF050505),
                                   onSurface: Colors.white,
                                 ),
                               ),
@@ -529,8 +527,8 @@ class ExpensesScreen extends ConsumerWidget {
                               onSelected: (selected) {
                                 ref.read(filterCategoryProvider.notifier).state = selected ? cat.id : null;
                               },
-                              selectedColor: Colors.teal.shade800,
-                              backgroundColor: Colors.white.withOpacity(0.05),
+                              selectedColor: const Color(0xFF0066FF).withOpacity(0.35),
+                              backgroundColor: Colors.white.withOpacity(0.04),
                               labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70),
                             );
                           }).toList(),
@@ -557,8 +555,8 @@ class ExpensesScreen extends ConsumerWidget {
                               onSelected: (selected) {
                                 ref.read(filterPaymentMethodProvider.notifier).state = selected ? pm.id : null;
                               },
-                              selectedColor: Colors.teal.shade800,
-                              backgroundColor: Colors.white.withOpacity(0.05),
+                              selectedColor: const Color(0xFF0066FF).withOpacity(0.35),
+                              backgroundColor: Colors.white.withOpacity(0.04),
                               labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70),
                             );
                           }).toList(),
@@ -570,7 +568,7 @@ class ExpensesScreen extends ConsumerWidget {
                     const SizedBox(height: 32),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
+                        backgroundColor: const Color(0xFF0066FF),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -598,8 +596,8 @@ class ExpensesScreen extends ConsumerWidget {
       label: Text(label),
       selected: selected,
       onSelected: onSelected,
-      selectedColor: Colors.teal.shade800,
-      backgroundColor: Colors.white.withOpacity(0.05),
+      selectedColor: const Color(0xFF0066FF).withOpacity(0.35),
+      backgroundColor: Colors.white.withOpacity(0.04),
       labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );

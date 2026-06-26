@@ -11,6 +11,12 @@ import 'tables/chat_history.dart';
 import 'tables/ai_memories.dart';
 import 'tables/audit_logs.dart';
 import 'tables/transaction_drafts.dart';
+import 'tables/goals.dart';
+import 'tables/subscriptions.dart';
+import 'tables/reports.dart';
+import 'tables/agent_logs.dart';
+import 'tables/predictions.dart';
+import 'tables/notifications.dart';
 
 import 'dao/user_dao.dart';
 import 'dao/account_dao.dart';
@@ -22,6 +28,12 @@ import 'dao/chat_history_dao.dart';
 import 'dao/ai_memory_dao.dart';
 import 'dao/audit_log_dao.dart';
 import 'dao/transaction_draft_dao.dart';
+import 'dao/goal_dao.dart';
+import 'dao/subscription_dao.dart';
+import 'dao/report_dao.dart';
+import 'dao/agent_log_dao.dart';
+import 'dao/prediction_dao.dart';
+import 'dao/notification_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -37,6 +49,12 @@ part 'app_database.g.dart';
     AiMemories,
     AuditLogs,
     TransactionDrafts,
+    Goals,
+    Subscriptions,
+    FinancialReports,
+    AgentLogs,
+    FinancialPredictions,
+    AppNotifications,
   ],
   daos: [
     UserDao,
@@ -49,6 +67,12 @@ part 'app_database.g.dart';
     AiMemoryDao,
     AuditLogDao,
     TransactionDraftDao,
+    GoalDao,
+    SubscriptionDao,
+    ReportDao,
+    AgentLogDao,
+    PredictionDao,
+    NotificationDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -56,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.connect(super.connection);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -124,6 +148,16 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await migrator.createTable(transactionDrafts);
+      }
+      if (from < 5) {
+        await migrator.createTable(goals);
+      }
+      if (from < 6) {
+        await migrator.createTable(subscriptions);
+        await migrator.createTable(financialReports);
+        await migrator.createTable(agentLogs);
+        await migrator.createTable(financialPredictions);
+        await migrator.createTable(appNotifications);
       }
     },
   );

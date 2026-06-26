@@ -7,6 +7,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../providers/budget_provider.dart';
+import '../../../../shared/widgets/glass_card.dart';
 
 class BudgetsScreen extends ConsumerWidget {
   const BudgetsScreen({super.key});
@@ -18,11 +19,11 @@ class BudgetsScreen extends ConsumerWidget {
 
   Color _getProgressColor(double percent) {
     if (percent < 0.70) {
-      return Colors.tealAccent.shade400;
+      return const Color(0xFF0066FF); // Electric Blue
     } else if (percent <= 1.0) {
       return Colors.amberAccent.shade400;
     } else {
-      return Colors.redAccent.shade400;
+      return const Color(0xFFFF3B30); // Premium Red
     }
   }
 
@@ -34,7 +35,7 @@ class BudgetsScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF002D27), Colors.black],
+            colors: [Color(0xFF050E1A), Color(0xFF050505)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -54,7 +55,7 @@ class BudgetsScreen extends ConsumerWidget {
                       style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add, color: Colors.tealAccent),
+                      icon: const Icon(Icons.add_rounded, color: Color(0xFF00E5FF)),
                       onPressed: () => _showBudgetForm(context, ref),
                     ),
                   ],
@@ -69,7 +70,6 @@ class BudgetsScreen extends ConsumerWidget {
                       return _buildEmptyState(context, ref);
                     }
 
-                    // Separate Overall Budget from Category Budgets
                     final overallBudgets = budgetStatuses.where((b) => b.budget.categoryId == null).toList();
                     final categoryBudgets = budgetStatuses.where((b) => b.budget.categoryId != null).toList();
 
@@ -83,7 +83,7 @@ class BudgetsScreen extends ConsumerWidget {
                             padding: EdgeInsets.only(top: 8.0, bottom: 12.0),
                             child: Text(
                               'OVERALL LIMIT',
-                              style: TextStyle(color: Colors.tealAccent, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                              style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                             ),
                           ),
                           ...overallBudgets.map((b) => _buildOverallBudgetCard(context, ref, b)),
@@ -104,7 +104,7 @@ class BudgetsScreen extends ConsumerWidget {
                       ],
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator(color: Colors.teal)),
+                  loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
                   error: (err, _) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.red))),
                 ),
               ),
@@ -114,8 +114,8 @@ class BudgetsScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showBudgetForm(context, ref),
-        backgroundColor: Colors.tealAccent.shade400,
-        foregroundColor: const Color(0xFF00241F),
+        backgroundColor: const Color(0xFF0066FF),
+        foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add, size: 28),
       ),
@@ -129,17 +129,12 @@ class BudgetsScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
+            GlassCard(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.05),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.teal.withOpacity(0.15)),
-              ),
               child: Icon(
-                Icons.pie_chart,
+                Icons.pie_chart_outline_outlined,
                 size: 64,
-                color: Colors.teal.withOpacity(0.3),
+                color: const Color(0xFF0066FF).withOpacity(0.5),
               ),
             ),
             const SizedBox(height: 24),
@@ -156,8 +151,8 @@ class BudgetsScreen extends ConsumerWidget {
             const SizedBox(height: 32),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.tealAccent.shade400,
-                foregroundColor: const Color(0xFF00241F),
+                backgroundColor: const Color(0xFF0066FF),
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
@@ -176,20 +171,7 @@ class BudgetsScreen extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () => _showBudgetActions(context, ref, status),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.teal.shade900.withOpacity(0.6), const Color(0xFF00241F).withOpacity(0.4)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.teal.withOpacity(0.25)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
-          ],
-        ),
+      child: GlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -200,8 +182,8 @@ class BudgetsScreen extends ConsumerWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.tealAccent.withOpacity(0.15), shape: BoxShape.circle),
-                      child: const Icon(Icons.wallet, color: Colors.tealAccent, size: 20),
+                      decoration: BoxDecoration(color: const Color(0xFF0066FF).withOpacity(0.12), shape: BoxShape.circle),
+                      child: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF0066FF), size: 20),
                     ),
                     const SizedBox(width: 12),
                     const Text('Total Monthly Limit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
@@ -236,7 +218,7 @@ class BudgetsScreen extends ConsumerWidget {
                       ? 'Over limit: ${_formatMoney(-status.remainingAmount)}'
                       : 'Remaining: ${_formatMoney(status.remainingAmount)}',
                   style: TextStyle(
-                    color: status.isOverBudget ? Colors.redAccent : Colors.tealAccent.shade200,
+                    color: status.isOverBudget ? const Color(0xFFFF3B30) : const Color(0xFF00E5FF),
                     fontSize: 13,
                     fontWeight: status.isOverBudget ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -271,7 +253,7 @@ class BudgetsScreen extends ConsumerWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: catColor.withOpacity(0.15), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: catColor.withOpacity(0.12), shape: BoxShape.circle),
                   child: Icon(catIcon, color: catColor, size: 18),
                 ),
                 const SizedBox(width: 12),
@@ -305,7 +287,7 @@ class BudgetsScreen extends ConsumerWidget {
                                 ? 'Over: ${_formatMoney(-status.remainingAmount)}'
                                 : 'Left: ${_formatMoney(status.remainingAmount)}',
                             style: TextStyle(
-                              color: status.isOverBudget ? Colors.redAccent.shade100 : Colors.white60,
+                              color: status.isOverBudget ? const Color(0xFFFF3B30) : Colors.white60,
                               fontSize: 12,
                               fontWeight: status.isOverBudget ? FontWeight.bold : FontWeight.normal,
                             ),
@@ -336,7 +318,7 @@ class BudgetsScreen extends ConsumerWidget {
   void _showBudgetActions(BuildContext context, WidgetRef ref, BudgetStatus status) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF050505),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return SafeArea(
@@ -347,7 +329,7 @@ class BudgetsScreen extends ConsumerWidget {
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white70),
+                leading: const Icon(Icons.edit_outlined, color: Colors.white70),
                 title: const Text('Edit Budget Limit', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
@@ -355,8 +337,8 @@ class BudgetsScreen extends ConsumerWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('Delete Budget Limit', style: TextStyle(color: Colors.redAccent)),
+                leading: const Icon(Icons.delete_outline, color: Color(0xFFFF3B30)),
+                title: const Text('Delete Budget Limit', style: TextStyle(color: Color(0xFFFF3B30))),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete(context, ref, status.budget.id);
@@ -374,17 +356,17 @@ class BudgetsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF050505),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF0066FF), width: 1)),
         title: const Text('Delete Budget', style: TextStyle(color: Colors.white)),
         content: const Text('Are you sure you want to delete this budget limit? This action is local and irreversible.', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.teal)),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF0066FF))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3B30)),
             onPressed: () {
               Navigator.pop(context);
               ref.read(budgetListNotifierProvider.notifier).removeBudget(budgetId);
@@ -399,7 +381,7 @@ class BudgetsScreen extends ConsumerWidget {
   void _showBudgetForm(BuildContext context, WidgetRef ref, [BudgetStatus? existing]) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0F0F0F),
+      backgroundColor: const Color(0xFF050505),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -411,7 +393,6 @@ class BudgetsScreen extends ConsumerWidget {
   }
 }
 
-// Combined categories loading and status calculation
 final budgetStatusProviderList = Provider<AsyncValue<List<BudgetStatus>>>((ref) {
   return ref.watch(budgetStatusListProvider);
 });
@@ -472,19 +453,19 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.greenAccent),
+                const Icon(Icons.check_circle, color: Color(0xFF00E5FF)),
                 const SizedBox(width: 8),
                 Text(widget.existing != null ? 'Budget updated successfully!' : 'Budget created successfully!'),
               ],
             ),
-            backgroundColor: Colors.teal,
+            backgroundColor: const Color(0xFF0066FF),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFFF3B30)),
         );
       }
     } finally {
@@ -529,7 +510,6 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
             const Divider(color: Colors.white10),
             const SizedBox(height: 16),
 
-            // Amount Input
             const Text('MONTHLY LIMIT AMOUNT', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 8),
             TextFormField(
@@ -539,14 +519,14 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
               decoration: InputDecoration(
                 hintText: '0.00',
                 hintStyle: const TextStyle(color: Colors.white24),
-                prefixIcon: const Icon(Icons.payments, color: Colors.tealAccent),
+                prefixIcon: const Icon(Icons.payments, color: Color(0xFF00E5FF)),
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.03),
                 contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white12)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.tealAccent)),
-                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.redAccent)),
-                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.redAccent)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF0066FF))),
+                errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF3B30))),
+                focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFFF3B30))),
               ),
               validator: (val) {
                 if (val == null || val.trim().isEmpty) return 'Please enter an amount';
@@ -557,26 +537,25 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Category Selection (Optional, null is overall)
             const Text('BUDGET SCOPE', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
               value: _selectedCategoryId,
-              dropdownColor: const Color(0xFF0F0F0F),
+              dropdownColor: const Color(0xFF050505),
               style: const TextStyle(color: Colors.white, fontSize: 15),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.03),
                 contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white12)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.tealAccent)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF0066FF))),
               ),
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
                   child: Row(
                     children: [
-                      Icon(Icons.wallet, color: Colors.tealAccent, size: 18),
+                      Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF00E5FF), size: 18),
                       SizedBox(width: 10),
                       Text('Overall Monthly Budget (All Expenses)'),
                     ],
@@ -598,23 +577,22 @@ class _BudgetFormSheetState extends ConsumerState<_BudgetFormSheet> {
                 }),
               ],
               onChanged: widget.existing != null
-                  ? null // Disable editing category on existing budget to keep it clean (delete and recreate if needed)
+                  ? null
                   : (val) => setState(() => _selectedCategoryId = val),
             ),
             const SizedBox(height: 32),
 
-            // Submit Button
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.tealAccent.shade400,
-                foregroundColor: const Color(0xFF00241F),
+                backgroundColor: const Color(0xFF0066FF),
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 4,
               ),
               onPressed: _isSaving ? null : _submit,
               child: _isSaving
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.teal, strokeWidth: 2))
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : Text(
                       widget.existing != null ? 'UPDATE BUDGET LIMIT' : 'CREATE BUDGET LIMIT',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),

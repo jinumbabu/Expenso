@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile, Header
 from pydantic import BaseModel
 import re
 import httpx
@@ -8,6 +8,22 @@ from app.config import settings
 from app.routers.users import get_auth_user_id
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+def is_potential_prompt_injection(text: str) -> bool:
+    patterns = [
+        r"ignore previous instructions",
+        r"system prompt",
+        r"you are now a",
+        r"disregard all",
+        r"forget your",
+        r"new instruction",
+        r"override",
+    ]
+    normalized = text.lower()
+    for pattern in patterns:
+        if re.search(pattern, normalized):
+            return True
+    return False
 
 class ParseExpenseRequest(BaseModel):
     text: str
@@ -155,25 +171,50 @@ async def parse_expense_with_gemini(text: str) -> Optional[ParseExpenseResponse]
     return None
 
 @router.post("/parse-expense", response_model=ParseExpenseResponse)
-async def parse_expense(req: ParseExpenseRequest, user_id: str = Depends(get_auth_user_id)):
-    # 1. Try Rule-Based Parser first
+async def parse_expense(
+    req: ParseExpenseRequest,
+    user_id: str = Depends(get_auth_user_id),
+    x_privacy_mode: Optional[str] = Header(None)
+):
+    if is_potential_prompt_injection(req.text):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Potential prompt injection detected. Request rejected."
+        )
+    print(f"PARSE EXPENSE RECEIVED: text='{req.text}', x_privacy_mode='{x_privacy_mode}'")
+    privacy_mode = (x_privacy_mode or "hybrid").lower()
+
+    # If Local, use rule-based only
+    if privacy_mode == "local":
+        rule_result = parse_expense_with_rules(req.text)
+        return rule_result or ParseExpenseResponse(
+            amount=0.0,
+            category="Food",
+            merchant="Unknown",
+            type="expense",
+            date="today",
+            confidence=0.10
+        )
+
+    # If Cloud, go straight to Gemini
+    if privacy_mode == "cloud" and settings.GEMINI_API_KEY:
+        gemini_result = await parse_expense_with_gemini(req.text)
+        if gemini_result:
+            return gemini_result
+
+    # Hybrid (Default): rule-based first if high confidence, then Gemini
     rule_result = parse_expense_with_rules(req.text)
-    
-    # If rule result has high confidence, return it immediately (saves API cost & is instant)
     if rule_result and rule_result.confidence >= 0.85:
         return rule_result
         
-    # 2. Fallback to Gemini if key available and rule confidence is low
     if settings.GEMINI_API_KEY:
         gemini_result = await parse_expense_with_gemini(req.text)
         if gemini_result:
             return gemini_result
             
-    # 3. If Gemini fails or isn't configured, return the rule-based result (even if low confidence)
     if rule_result:
         return rule_result
         
-    # 4. Absolute fallback
     return ParseExpenseResponse(
         amount=0.0,
         category="Food",
@@ -184,11 +225,21 @@ async def parse_expense(req: ParseExpenseRequest, user_id: str = Depends(get_aut
     )
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_assistant(req: ChatRequest, user_id: str = Depends(get_auth_user_id)):
+async def chat_with_assistant(
+    req: ChatRequest,
+    user_id: str = Depends(get_auth_user_id),
+    x_privacy_mode: Optional[str] = Header(None)
+):
+    if is_potential_prompt_injection(req.message):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Potential prompt injection detected. Request rejected."
+        )
     user_message = req.message
     data_context = req.context or "No transaction data available yet."
+    privacy_mode = (x_privacy_mode or "hybrid").lower()
     
-    if settings.GEMINI_API_KEY:
+    if privacy_mode != "local" and settings.GEMINI_API_KEY:
         system_instruction = (
             "You are Expenso AI, a privacy-first personal financial assistant. "
             "You help the user track expenses, set budgets, analyze spending, and give financial advice. "
@@ -223,18 +274,22 @@ async def chat_with_assistant(req: ChatRequest, user_id: str = Depends(get_auth_
         except Exception as e:
             print(f"Gemini Chat API call failed: {e}")
             
-    # Rule-Based / Mock Fallback responses
-    reply = "I'm sorry, I'm currently unable to access my cloud reasoning model. "
+    # Rule-Based / Mock Fallback responses (Local mode or Gemini failed)
+    if privacy_mode == "local":
+        reply = "Expenso AI (Local Mode): "
+    else:
+        reply = "I'm sorry, I'm currently unable to access my cloud reasoning model. "
+
     normalized_msg = user_message.lower()
     
     if "food" in normalized_msg:
-        reply = "Based on your local transaction logs, you've been spending regularly on Food. Try setting a category budget to save more!"
+        reply += "Based on your local transaction logs, you've been spending regularly on Food. Try setting a category budget to save more!"
     elif "budget" in normalized_msg:
-        reply = "You can view your category budgets in the Budgets tab. Keep tracking your expenses to stay within your limits!"
+        reply += "You can view your category budgets in the Budgets tab. Keep tracking your expenses to stay within your limits!"
     elif "save" in normalized_msg or "savings" in normalized_msg:
-        reply = "To boost savings, check where your money goes. Cutting down on entertainment or shopping is a great first step."
+        reply += "To boost savings, check where your money goes. Cutting down on entertainment or shopping is a great first step."
     else:
-        reply = "Expenso AI local mode: I received your message! Once my cloud server is connected with a Gemini API key, I will be able to answer full questions about your finances."
+        reply += "I received your message! In Local mode, cloud reasoning is disabled to preserve your privacy."
         
     return ChatResponse(reply=reply)
 
@@ -245,8 +300,14 @@ class InsightsResponse(BaseModel):
     insights: List[str]
 
 @router.post("/insights", response_model=InsightsResponse)
-async def generate_insights(req: InsightsRequest, user_id: str = Depends(get_auth_user_id)):
-    if settings.GEMINI_API_KEY:
+async def generate_insights(
+    req: InsightsRequest,
+    user_id: str = Depends(get_auth_user_id),
+    x_privacy_mode: Optional[str] = Header(None)
+):
+    privacy_mode = (x_privacy_mode or "hybrid").lower()
+    
+    if privacy_mode != "local" and settings.GEMINI_API_KEY:
         system_instruction = (
             "You are Expenso AI, a personal financial advisor. "
             "Analyze the user's spending habits, income, and budgets provided in the context. "
@@ -288,7 +349,7 @@ async def generate_insights(req: InsightsRequest, user_id: str = Depends(get_aut
         except Exception as e:
             print(f"Gemini Insights API call failed: {e}")
 
-    # Fallback to rule-based insights if offline / no API key / error
+    # Fallback to rule-based insights if offline / no API key / local mode
     insights = [
         "Track category budgets carefully to identify overspending in food or shopping.",
         "Building an emergency fund covering 3-6 months of expenses will greatly improve your financial stability.",
@@ -304,12 +365,18 @@ class OcrResponse(BaseModel):
     confidence: float
 
 @router.post("/ocr", response_model=OcrResponse)
-async def scan_receipt(file: UploadFile = File(...), user_id: str = Depends(get_auth_user_id)):
-    import base64
-    image_bytes = await file.read()
-    base64_data = base64.b64encode(image_bytes).decode('utf-8')
+async def scan_receipt(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_auth_user_id),
+    x_privacy_mode: Optional[str] = Header(None)
+):
+    privacy_mode = (x_privacy_mode or "hybrid").lower()
+    
+    if privacy_mode != "local" and settings.GEMINI_API_KEY:
+        import base64
+        image_bytes = await file.read()
+        base64_data = base64.b64encode(image_bytes).decode('utf-8')
 
-    if settings.GEMINI_API_KEY:
         prompt = """
         Analyze this receipt image and extract the following details in JSON format conforming exactly to this structure:
         {
@@ -359,7 +426,7 @@ async def scan_receipt(file: UploadFile = File(...), user_id: str = Depends(get_
         except Exception as e:
             print(f"Gemini OCR API call failed: {e}")
 
-    # Fallback/Mock response
+    # Fallback/Mock response (Local mode or Gemini failed)
     return OcrResponse(
         merchant="Walmart (Simulated)",
         amount=1250.00,

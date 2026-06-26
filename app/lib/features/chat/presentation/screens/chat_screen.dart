@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../providers/chat_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/ocr_service.dart';
+import '../../../../core/services/voice_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -49,19 +53,131 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (text.trim().isEmpty) return;
     _messageController.clear();
     
-    // Send message via provider
     final notifier = ref.read(chatNotifierProvider.notifier);
     await notifier.sendMessage(userId, text);
     
     _scrollToBottom();
   }
 
+  Future<void> _startVoiceEntry(String userId) async {
+    setState(() {});
+    final voiceNotifier = ref.read(voiceServiceProvider.notifier);
+    
+    voiceNotifier.startListening(
+      onResult: (text) {
+        if (text.isNotEmpty) {
+          setState(() {
+            _messageController.text = text;
+          });
+        }
+      },
+    );
+
+    // Show recording indicator dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF050505),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFF0066FF), width: 1.2),
+        ),
+        title: const Text('Listening...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        content: const Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            SizedBox(width: 20),
+            Expanded(child: Text('Say something like:\n"How much left in my budget?"', style: TextStyle(color: Colors.white70, fontSize: 13))),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3B30)),
+            onPressed: () {
+              voiceNotifier.stopListening();
+              setState(() {});
+              Navigator.pop(context);
+            },
+            child: const Text('Stop & Process', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _scanReceiptAttachment(String userId) async {
+    final ocrService = ref.read(ocrServiceProvider);
+    
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF050505),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text('Upload Receipt for AI Chat', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined, color: Color(0xFF0066FF)),
+              title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.image_outlined, color: Color(0xFF0066FF)),
+              title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+    
+    final pickedFile = await ocrService.pickImage(source);
+    if (pickedFile == null) return;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        backgroundColor: Color(0xFF050505),
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Color(0xFF0066FF)),
+            SizedBox(width: 20),
+            Expanded(child: Text('Scanning receipt details...', style: TextStyle(color: Colors.white))),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final ocrResult = await ocrService.scanReceipt(File(pickedFile.path));
+      if (mounted) Navigator.pop(context); // pop loading
+
+      if (ocrResult != null && mounted) {
+        final scannedMessage = 'Scanned Receipt: Spent ₹${ocrResult.amount.toStringAsFixed(0)} at ${ocrResult.merchant} for ${ocrResult.category}.';
+        _messageController.text = scannedMessage;
+        _sendMessage(userId, scannedMessage);
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
   void _confirmClearHistory(String userId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF050505),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF0066FF), width: 1.2)),
         title: const Text('Clear Chat History', style: TextStyle(color: Colors.white)),
         content: const Text(
           'Are you sure you want to delete all messages? This action is local and irreversible.',
@@ -70,10 +186,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.teal)),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF0066FF))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF3B30)),
             onPressed: () {
               Navigator.pop(context);
               ref.read(chatNotifierProvider.notifier).clearChat(userId);
@@ -92,7 +208,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (userId == null) {
       return const Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF050505),
         body: Center(child: Text('Please log in first.', style: TextStyle(color: Colors.white))),
       );
     }
@@ -101,14 +217,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final chatHistoryAsync = ref.watch(chatHistoryProvider(userId));
     final isProcessing = chatState.isLoading;
 
-    // Trigger auto-scroll on new data / build
     ref.listen(chatHistoryProvider(userId), (_, __) => _scrollToBottom());
 
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF002D27), Colors.black],
+            colors: [Color(0xFF050E1A), Color(0xFF050505)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -116,7 +231,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Chat Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Row(
@@ -127,10 +241,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.15),
+                            color: const Color(0xFF0066FF).withOpacity(0.12),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 20),
+                          child: const Icon(Icons.auto_awesome_outlined, color: Color(0xFF00E5FF), size: 20),
                         ),
                         const SizedBox(width: 12),
                         const Column(
@@ -142,14 +256,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ),
                             Text(
                               'Online • Secure Memory Active',
-                              style: TextStyle(color: Colors.tealAccent, fontSize: 11),
+                              style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11),
                             ),
                           ],
                         ),
                       ],
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_sweep, color: Colors.white70),
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.white70),
                       tooltip: 'Clear Chat History',
                       onPressed: () => _confirmClearHistory(userId),
                     ),
@@ -158,7 +272,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
               const Divider(color: Colors.white10, height: 1),
 
-              // Chat Messages List
               Expanded(
                 child: chatHistoryAsync.when(
                   data: (messages) {
@@ -181,17 +294,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       },
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator(color: Colors.teal)),
+                  loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
                   error: (err, _) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.red))),
                 ),
               ),
 
-              // Input Bar & Suggestion Chips
               Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Suggestions horizontal list (hide when typing or messages exist)
                   if (!isProcessing)
                     chatHistoryAsync.maybeWhen(
                       data: (messages) {
@@ -210,10 +321,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 child: ActionChip(
                                   label: Text(
                                     suggestion,
-                                    style: const TextStyle(color: Colors.tealAccent, fontSize: 12),
+                                    style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12),
                                   ),
-                                  backgroundColor: const Color(0xFF00241F).withOpacity(0.5),
-                                  side: BorderSide(color: Colors.tealAccent.withOpacity(0.2)),
+                                  backgroundColor: const Color(0xFF0066FF).withOpacity(0.08),
+                                  side: BorderSide(color: const Color(0xFF0066FF).withOpacity(0.2)),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                   onPressed: () => _sendMessage(userId, suggestion),
                                 ),
@@ -225,17 +336,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       orElse: () => const SizedBox.shrink(),
                     ),
                   
-                  // Text input container
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: Row(
                       children: [
+                        // Attachment/Camera Scan Icon
+                        IconButton(
+                          icon: const Icon(Icons.attachment_outlined, color: Color(0xFF00E5FF)),
+                          onPressed: () => _scanReceiptAttachment(userId),
+                        ),
+                        // Voice mic icon
+                        IconButton(
+                          icon: const Icon(Icons.mic_none_outlined, color: Color(0xFF00E5FF)),
+                          onPressed: () => _startVoiceEntry(userId),
+                        ),
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
+                              color: Colors.white.withOpacity(0.02),
                               borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.12)),
                             ),
                             child: TextField(
                               controller: _messageController,
@@ -254,11 +374,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         const SizedBox(width: 8),
                         Container(
                           decoration: BoxDecoration(
-                            color: isProcessing ? Colors.grey.shade800 : Colors.tealAccent.shade700,
+                            color: isProcessing ? Colors.grey.shade900 : const Color(0xFF0066FF),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
-                            icon: const Icon(Icons.arrow_upward, color: Color(0xFF001A16)),
+                            icon: const Icon(Icons.arrow_upward_rounded, color: Colors.white),
                             onPressed: isProcessing
                                 ? null
                                 : () => _sendMessage(userId, _messageController.text),
@@ -286,18 +406,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.teal.withOpacity(0.08),
-              border: Border.all(color: Colors.teal.withOpacity(0.2)),
+              color: const Color(0xFF0066FF).withOpacity(0.08),
+              border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.18)),
             ),
-            child: ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Colors.purpleAccent, Colors.tealAccent],
-              ).createShader(bounds),
-              child: const Icon(
-                Icons.auto_awesome,
-                size: 48,
-                color: Colors.white,
-              ),
+            child: const Icon(
+              Icons.auto_awesome_outlined,
+              size: 48,
+              color: Color(0xFF00E5FF),
             ),
           ),
           const SizedBox(height: 24),
@@ -336,7 +451,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.help_outline, color: Colors.tealAccent, size: 18),
+                      const Icon(Icons.help_outline, color: Color(0xFF00E5FF), size: 18),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -371,7 +486,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isMe 
-                    ? const Color(0xFF004D40) 
+                    ? const Color(0xFF0066FF).withOpacity(0.2) 
                     : const Color(0xFF1E1E1E).withOpacity(0.85),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(20),
@@ -381,7 +496,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
                 border: Border.all(
                   color: isMe 
-                      ? Colors.tealAccent.withOpacity(0.15) 
+                      ? const Color(0xFF0066FF).withOpacity(0.3) 
                       : Colors.white.withOpacity(0.04),
                 ),
               ),
@@ -416,21 +531,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           border: Border.all(color: Colors.white.withOpacity(0.04)),
         ),
-        child: Row(
+        child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 14),
-            const SizedBox(width: 10),
+            Icon(Icons.auto_awesome, color: Color(0xFF00E5FF), size: 14),
+            SizedBox(width: 10),
             SizedBox(
               width: 12,
               height: 12,
               child: CircularProgressIndicator(
                 strokeWidth: 1.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.purpleAccent.shade100),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
               ),
             ),
-            const SizedBox(width: 8),
-            const Text(
+            SizedBox(width: 8),
+            Text(
               'Thinking...',
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),

@@ -10,6 +10,11 @@ abstract class AuthRepository {
 
   // Auth Operations
   Future<User?> loginWithGoogle(String googleToken);
+  Future<User?> loginOffline({
+    String? email,
+    String? displayName,
+    String? googleId,
+  });
   Future<void> logout();
   Future<User?> getCurrentSessionUser();
   Future<bool> isSessionValid();

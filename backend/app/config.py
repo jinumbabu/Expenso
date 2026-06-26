@@ -1,5 +1,6 @@
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
     # Dev & Testing Settings
     DEV_MODE: bool = True
     DATABASE_URL: str = "sqlite:///./data/backend.db"
+
+    @model_validator(mode="after")
+    def validate_security(self) -> 'Settings':
+        if not self.DEV_MODE and self.JWT_SECRET == "expenso-super-secret-key-change-in-production":
+            raise ValueError("JWT_SECRET must be customized in production mode")
+        return self
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env")
 

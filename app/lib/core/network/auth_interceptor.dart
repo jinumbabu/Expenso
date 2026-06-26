@@ -19,6 +19,9 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    final privacyMode = await _secureStorage.getPrivacyMode() ?? 'hybrid';
+    options.headers['X-Privacy-Mode'] = privacyMode;
+
     if (!options.path.contains('/auth/google') &&
         !options.path.contains('/auth/refresh')) {
       final token = await _secureStorage.getAccessToken();

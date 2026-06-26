@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+// ignore: depend_on_referenced_packages
 import 'package:sqlite3/open.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
+import 'firebase_options.dart';
 import 'core/routes/app_router.dart';
 import 'core/services/notification_service.dart';
 
@@ -16,7 +18,9 @@ Future<void> main() async {
   }
 
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
   }
@@ -61,7 +65,7 @@ class ExpensoApp extends ConsumerWidget {
           primary: const Color(0xFF0066FF),
           brightness: Brightness.dark,
         ).copyWith(
-          background: const Color(0xFF050505),
+          surface: const Color(0xFF050505),
         ),
         cardTheme: CardTheme(
           color: const Color(0xFF050505),

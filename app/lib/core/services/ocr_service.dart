@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:intl/intl.dart';
 
 import '../../features/auth/presentation/providers/auth_provider.dart';
 
@@ -47,6 +50,21 @@ class OcrService {
 
   Future<OcrResult?> scanReceipt(File file) async {
     try {
+      // 1. Perform On-Device Text Recognition using Google ML Kit
+      final inputImage = InputImage.fromFile(file);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+      await textRecognizer.close();
+
+      final fullText = recognizedText.text;
+      
+      // Parse local text
+      final localResult = _parseRecognizedText(fullText);
+      if (localResult != null && localResult.amount > 0) {
+        return localResult;
+      }
+      
+      // 2. Fallback to API scanning
       final client = _ref.read(dioClientProvider);
       final fileName = file.path.split(Platform.pathSeparator).last;
       
@@ -71,16 +89,59 @@ class OcrService {
         return OcrResult.fromJson(response.data);
       }
     } catch (e) {
-      // Return local fallback on offline/error
-      return OcrResult(
-        merchant: 'Walmart (Offline Fallback)',
-        amount: 12.50,
-        category: 'Grocery',
-        date: 'today',
-        confidence: 0.70,
-      );
+      debugPrint('OcrService: Receipt scanning failed: $e');
+      rethrow;
     }
     return null;
+  }
+
+  OcrResult? _parseRecognizedText(String text) {
+    if (text.trim().isEmpty) return null;
+
+    final lines = text.split('\n');
+    double amount = 0.0;
+    String merchant = 'Walmart Store';
+    String date = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // 1. First non-numerical line is likely the merchant
+    for (var line in lines) {
+      final cleanLine = line.trim();
+      if (cleanLine.length > 3 && !cleanLine.contains(RegExp(r'\d'))) {
+        merchant = cleanLine;
+        break;
+      }
+    }
+
+    // 2. Match amounts using regex (e.g. Total: ₹540.00 or Total: 450)
+    final totalRegex = RegExp(r'(total|amt|due|net|paid|sum)[\s:]*([\$₹€]*\s*\d+[\.,]\d{2})', caseSensitive: false);
+    for (var line in lines) {
+      final match = totalRegex.firstMatch(line);
+      if (match != null) {
+        final amountString = match.group(2)?.replaceAll(RegExp(r'[^\d\.]'), '') ?? '';
+        final parsedAmount = double.tryParse(amountString);
+        if (parsedAmount != null && parsedAmount > amount) {
+          amount = parsedAmount;
+        }
+      }
+    }
+
+    // 3. Match dates
+    final dateRegex = RegExp(r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})');
+    for (var line in lines) {
+      final match = dateRegex.firstMatch(line);
+      if (match != null) {
+        date = match.group(0) ?? date;
+        break;
+      }
+    }
+
+    return OcrResult(
+      merchant: merchant,
+      amount: amount,
+      category: 'Grocery',
+      date: date,
+      confidence: 0.85,
+    );
   }
 }
 

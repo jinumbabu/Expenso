@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -73,6 +74,8 @@ class MockDioClient extends Fake implements DioClient {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('OcrService Tests', () {
     late MockRef mockRef;
     late MockDio mockDio;
@@ -85,6 +88,24 @@ void main() {
       mockDioClient = MockDioClient(mockDio);
       mockRef.overrideProvider(dioClientProvider, mockDioClient);
       ocrService = OcrService(mockRef);
+
+      // Mock MethodChannel for ML Kit
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('google_mlkit_text_recognizer'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'vision#startTextRecognizer') {
+            return <dynamic, dynamic>{
+              'text': '',
+              'blocks': [],
+            };
+          }
+          if (methodCall.method == 'vision#closeTextRecognizer') {
+            return null;
+          }
+          return null;
+        },
+      );
     });
 
     test('scanReceipt successfully parses receipt details from backend API', () async {
@@ -97,13 +118,11 @@ void main() {
         'confidence': 0.95,
       };
 
-      // Creating a temporary dummy file and writing mock bytes so it exists on disk
       final tempFile = File('${Directory.systemTemp.path}/test_receipt.png');
       await tempFile.writeAsBytes([0, 1, 2, 3]);
       
       final result = await ocrService.scanReceipt(tempFile);
 
-      // Clean up
       if (await tempFile.exists()) {
         await tempFile.delete();
       }
@@ -116,24 +135,22 @@ void main() {
       expect(result.confidence, equals(0.95));
     });
 
-    test('scanReceipt gracefully falls back to mock results on network failure', () async {
+    test('scanReceipt throws exception on network failure when on-device recognition has no text', () async {
       mockDio.shouldFail = true;
 
       final tempFile = File('${Directory.systemTemp.path}/test_receipt.png');
       await tempFile.writeAsBytes([0, 1, 2, 3]);
       
-      final result = await ocrService.scanReceipt(tempFile);
-
-      // Clean up
-      if (await tempFile.exists()) {
-        await tempFile.delete();
+      try {
+        await expectLater(
+          ocrService.scanReceipt(tempFile),
+          throwsA(isA<DioException>()),
+        );
+      } finally {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
       }
-
-      expect(result, isNotNull);
-      expect(result!.merchant, contains('Offline Fallback'));
-      expect(result.amount, equals(12.50));
-      expect(result.category, equals('Grocery'));
-      expect(result.confidence, equals(0.70));
     });
   });
 }

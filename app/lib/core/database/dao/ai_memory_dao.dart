@@ -18,6 +18,9 @@ class AiMemoryDao extends DatabaseAccessor<AppDatabase> with _$AiMemoryDaoMixin 
 
   Future<void> insertMemory(AiMemoryItem item) => into(aiMemories).insert(item);
 
+  Future<AiMemoryItem?> getMemoryById(String id) =>
+      (select(aiMemories)..where((t) => t.id.equals(id))).getSingleOrNull();
+
   Future<bool> updateMemory(AiMemoryItem item) => update(aiMemories).replace(item);
 
   Future<int> deleteMemory(String id) =>

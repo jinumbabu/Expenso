@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/dao/user_dao.dart';
@@ -32,6 +33,31 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User?> loginWithGoogle(String googleToken) async {
+    if (!kReleaseMode && (googleToken == 'mock-google-id-token' || googleToken.startsWith('mock-'))) {
+      const mockUserId = 'mock_user_123';
+      final localUser = User(
+        id: mockUserId,
+        googleId: googleToken,
+        email: 'testuser@expenso.app',
+        displayName: 'Test User (Mock)',
+        currency: 'INR',
+        country: 'IN',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await _secureStorage.saveUserId(mockUserId);
+      await _secureStorage.saveAccessToken('mock_access_token');
+      await _secureStorage.saveRefreshToken('mock_refresh_token');
+
+      final existingUser = await _userDao.getUserById(mockUserId);
+      if (existingUser != null) {
+        await _userDao.updateUser(localUser);
+      } else {
+        await _userDao.insertUser(localUser);
+      }
+      return localUser;
+    }
+
     final authData = await _remoteDataSource.loginWithGoogle(googleToken);
     if (authData['success'] == true) {
       final tokens = authData['data'];
@@ -71,6 +97,36 @@ class AuthRepositoryImpl implements AuthRepository {
       return localUser;
     }
     return null;
+  }
+
+  @override
+  Future<User?> loginOffline({
+    String? email,
+    String? displayName,
+    String? googleId,
+  }) async {
+    final String offlineUserId = googleId ?? 'offline_user_999';
+    final localUser = User(
+      id: offlineUserId,
+      googleId: googleId ?? 'offline_google_id',
+      email: email ?? 'offline@expenso.app',
+      displayName: displayName ?? 'Offline User',
+      currency: 'INR',
+      country: 'IN',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await _secureStorage.saveUserId(offlineUserId);
+    await _secureStorage.saveAccessToken('offline_access_token');
+    await _secureStorage.saveRefreshToken('offline_refresh_token');
+
+    final existingUser = await _userDao.getUserById(offlineUserId);
+    if (existingUser != null) {
+      await _userDao.updateUser(localUser);
+    } else {
+      await _userDao.insertUser(localUser);
+    }
+    return localUser;
   }
 
   @override

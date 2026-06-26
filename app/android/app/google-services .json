@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "115928479310",
+    "project_id": "ai-expenso",
+    "storage_bucket": "ai-expenso.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:115928479310:android:ba4eaca8283d2d903df51f",
+        "android_client_info": {
+          "package_name": "com.expenso.ai.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "115928479310-2mi0fbrr9mqs4v3snvih2jtk5ch5tf7b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.expenso.ai.app",
+            "certificate_hash": "2af56885059189ed889844605c9bbc7ebfc96fdc"
+          }
+        },
+        {
+          "client_id": "115928479310-7rn9sc6ba9j27e40aohbpoovdd43mlbq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqo_k31M44eG8jpe4nUQ9WJzf1N4RWrEA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "115928479310-7rn9sc6ba9j27e40aohbpoovdd43mlbq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -11,6 +11,8 @@ import '../../domain/usecases/get_categories_usecase.dart';
 import '../../domain/usecases/get_payment_methods_usecase.dart';
 import '../../domain/usecases/get_transactions_usecase.dart';
 import '../../domain/usecases/update_transaction_usecase.dart';
+import '../../../budgets/presentation/providers/budget_provider.dart';
+import '../../../../core/services/notification_service.dart';
 
 // Repository Provider
 final Provider<ExpenseRepository> expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
@@ -115,6 +117,9 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       // Refresh categories list to update usage ranking
       _ref.invalidate(categoriesProvider);
       await loadTransactions();
+      if (_userId != null) {
+        _checkBudgetAlerts(_userId);
+      }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
@@ -125,6 +130,9 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       state = const AsyncValue.loading();
       await _updateTransaction.execute(tx);
       await loadTransactions();
+      if (_userId != null) {
+        _checkBudgetAlerts(_userId);
+      }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
@@ -137,6 +145,64 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       await loadTransactions();
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
+    }
+  }
+
+  Future<void> _checkBudgetAlerts(String userId) async {
+    try {
+      final budgetRepo = _ref.read(budgetRepositoryProvider);
+      final budgets = await budgetRepo.getBudgetsForUser(userId);
+      if (budgets.isEmpty) return;
+
+      final db = _ref.read(databaseProvider);
+      final txs = await db.transactionDao.getTransactionsForUser(userId);
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+
+      final currentMonthExpenses = txs.where((tx) =>
+        tx.type == 'expense' &&
+        (tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth))
+      ).toList();
+
+      for (var budget in budgets) {
+        int spent = 0;
+        if (budget.categoryId == null) {
+          spent = currentMonthExpenses.fold(0, (sum, tx) => sum + tx.amount);
+        } else {
+          spent = currentMonthExpenses
+              .where((tx) => tx.categoryId == budget.categoryId)
+              .fold(0, (sum, tx) => sum + tx.amount);
+        }
+
+        final double percent = budget.amount == 0 ? 0.0 : spent / budget.amount;
+        final notificationService = _ref.read(notificationServiceProvider);
+
+        if (spent > budget.amount) {
+          final categoryName = budget.categoryId != null 
+              ? (await db.categoryDao.getCategoryById(budget.categoryId!))?.name ?? 'Category'
+              : 'Overall';
+          
+          await notificationService.sendProactiveAlert(
+            userId,
+            title: 'Budget Exceeded! ⚠️',
+            body: 'You have spent ₹${(spent / 100.0).toStringAsFixed(2)} exceeding your $categoryName budget of ₹${(budget.amount / 100.0).toStringAsFixed(2)}.',
+            priority: 'critical',
+          );
+        } else if (percent >= 0.80) {
+          final categoryName = budget.categoryId != null 
+              ? (await db.categoryDao.getCategoryById(budget.categoryId!))?.name ?? 'Category'
+              : 'Overall';
+
+          await notificationService.sendProactiveAlert(
+            userId,
+            title: 'Budget Alert ⚠️',
+            body: 'You have used ${(percent * 100).toStringAsFixed(0)}% of your $categoryName budget (₹${(spent / 100.0).toStringAsFixed(2)} / ₹${(budget.amount / 100.0).toStringAsFixed(2)}).',
+            priority: 'high',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking budget alerts: $e');
     }
   }
 }
@@ -263,9 +329,97 @@ class NlpService {
         return NlpParsedResult.fromJson(response.data);
       }
     } catch (e) {
-      debugPrint('NLP parsing error: $e');
+      debugPrint('NLP parsing error: $e. Using local rule-based parser.');
+    }
+    
+    // Local fallback parsing
+    try {
+      return _parseExpenseLocally(text);
+    } catch (e) {
+      debugPrint('Local NLP parsing fallback failed: $e');
     }
     return null;
+  }
+
+  NlpParsedResult _parseExpenseLocally(String text) {
+    final normalized = text.toLowerCase().trim();
+    
+    // 1. Extract amount using regex
+    final amountRegex = RegExp(r'(?:rs\.?|₹|inr|\$)?\s*(\d+(?:\.\d{1,2})?)', caseSensitive: false);
+    final match = amountRegex.firstMatch(normalized);
+    double amount = 0.0;
+    if (match != null) {
+      amount = double.tryParse(match.group(1) ?? '') ?? 0.0;
+    }
+
+    // 2. Determine type
+    String type = 'expense';
+    final incomeKeywords = ["salary", "freelance", "received", "earned", "refund", "deposit", "bonus", "income", "stipend", "interest"];
+    for (var kw in incomeKeywords) {
+      if (normalized.contains(kw)) {
+        type = 'income';
+        break;
+      }
+    }
+
+    // 3. Determine Category
+    String category = 'Food'; // default
+    final categoryKeywords = {
+      "Food": ["tea", "coffee", "restaurant", "food", "snacks", "lunch", "dinner", "grocery", "groceries", "starbucks", "mcdonald", "cafe", "hotel", "swiggy", "zomato", "burger", "pizza", "eat", "bakery"],
+      "Fuel": ["fuel", "petrol", "diesel", "gas", "cng", "shell", "refuel"],
+      "Grocery": ["grocery", "groceries", "mart", "supermarket", "bigbasket", "blinkit", "milk", "vegetables", "fruits", "provision"],
+      "Utilities": ["electricity", "water", "internet", "wifi", "bill", "mobile", "recharge", "power", "dth", "broadband", "postpaid"],
+      "Shopping": ["amazon", "flipkart", "shopping", "order", "myntra", "clothing", "clothes", "shoes", "fashion", "mall"],
+      "Entertainment": ["movie", "cinema", "netflix", "spotify", "game", "gaming", "ticket", "show", "pub", "club", "concert"],
+      "Salary": ["salary", "paycheck", "allowance", "stipend"],
+      "Freelance": ["freelance", "gig", "contract", "upwork", "fiverr", "invoice"],
+      "Investment": ["investment", "stock", "stocks", "mutual fund", "crypto", "gold", "share", "shares"],
+      "Transfer": ["transfer", "sent", "send", "received from"]
+    };
+
+    int maxMatches = 0;
+    double confidence = 0.50;
+    categoryKeywords.forEach((cat, keywords) {
+      int matches = 0;
+      for (var kw in keywords) {
+        if (normalized.contains(kw)) {
+          matches++;
+        }
+      }
+      if (matches > maxMatches) {
+        maxMatches = matches;
+        category = cat;
+        confidence = matches > 1 ? 0.90 : 0.80;
+      }
+    });
+
+    if (type == 'income' && category != 'Salary' && category != 'Freelance' && category != 'Transfer') {
+      category = 'Salary';
+      confidence = 0.75;
+    }
+
+    // 4. Determine Merchant
+    String cleanText = normalized;
+    cleanText = cleanText.replaceAll(RegExp(r'(?:rs\.?|₹|inr|\$)?\s*\d+(?:\.\d{1,2})?', caseSensitive: false), '');
+    final wordsToRemove = ["spent", "paid", "received", "earned", "on", "for", "from", "to", "my", "a"];
+    for (var word in wordsToRemove) {
+      cleanText = cleanText.replaceAll(RegExp('\\b$word\\b', caseSensitive: false), '');
+    }
+    
+    cleanText = cleanText.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    String merchant = cleanText.isNotEmpty
+        ? cleanText.split(' ').map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '').join(' ')
+        : category;
+
+    return NlpParsedResult(
+      amount: amount,
+      category: category,
+      merchant: merchant,
+      type: type,
+      date: 'today',
+      confidence: confidence,
+    );
   }
 }
 

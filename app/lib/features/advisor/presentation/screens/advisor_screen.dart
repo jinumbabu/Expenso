@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../providers/advisor_provider.dart';
+import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/ecg_pulse_ring.dart';
 
 class AdvisorScreen extends ConsumerWidget {
   const AdvisorScreen({super.key});
@@ -21,7 +23,7 @@ class AdvisorScreen extends ConsumerWidget {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF002B24), Color(0xFF050F0E), Colors.black],
+            colors: [Color(0xFF050E1A), Color(0xFF050505)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -35,7 +37,7 @@ class AdvisorScreen extends ConsumerWidget {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70),
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
                       onPressed: () => context.pop(),
                     ),
                     const SizedBox(width: 8),
@@ -51,7 +53,7 @@ class AdvisorScreen extends ConsumerWidget {
                     IconButton(
                       icon: Icon(
                         Icons.refresh,
-                        color: state.isLoadingInsights ? Colors.tealAccent.withOpacity(0.5) : Colors.tealAccent,
+                        color: state.isLoadingInsights ? const Color(0xFF0066FF).withOpacity(0.5) : const Color(0xFF00E5FF),
                       ),
                       onPressed: state.isLoadingInsights
                           ? null
@@ -89,7 +91,7 @@ class AdvisorScreen extends ConsumerWidget {
 
                     // AI Insights
                     _buildInsightsSection(context, state),
-                    const SizedBox(height: 100),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
@@ -101,77 +103,33 @@ class AdvisorScreen extends ConsumerWidget {
   }
 
   Widget _buildScoreGauge(BuildContext context, AdvisorState state) {
-    Color scoreColor = Colors.tealAccent;
-    if (state.healthScore < 40) {
-      scoreColor = Colors.redAccent;
-    } else if (state.healthScore < 60) {
+    final clampedScore = state.healthScore.clamp(0, 100);
+    Color scoreColor = const Color(0xFF00E5FF);
+    if (clampedScore < 40) {
+      scoreColor = const Color(0xFFFF3B30);
+    } else if (clampedScore < 60) {
       scoreColor = Colors.orangeAccent;
-    } else if (state.healthScore < 80) {
-      scoreColor = Colors.amberAccent;
+    } else if (clampedScore < 80) {
+      scoreColor = const Color(0xFF0066FF);
     }
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
-      ),
+    return GlassCard(
       child: Column(
         children: [
           const Text(
             'FINANCIAL HEALTH INDEX',
             style: TextStyle(
-              color: Colors.white38,
+              color: Color(0xFF00E5FF),
               fontSize: 11,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            height: 160,
-            width: 160,
-            child: Stack(
-              children: [
-                Center(
-                  child: SizedBox(
-                    height: 150,
-                    width: 150,
-                    child: CircularProgressIndicator(
-                      value: state.healthScore / 100.0,
-                      strokeWidth: 12,
-                      backgroundColor: Colors.white10,
-                      color: scoreColor,
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${state.healthScore}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        state.healthStatus.toUpperCase(),
-                        style: TextStyle(
-                          color: scoreColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          EcgPulseRing(
+            healthScore: clampedScore,
+            size: 140,
+            ringColor: scoreColor,
           ),
           const SizedBox(height: 24),
           const Divider(color: Colors.white10),
@@ -204,7 +162,7 @@ class AdvisorScreen extends ConsumerWidget {
             child: LinearProgressIndicator(
               value: percent,
               backgroundColor: Colors.white10,
-              color: Colors.tealAccent.shade700,
+              color: const Color(0xFF0066FF),
               minHeight: 6,
             ),
           ),
@@ -222,16 +180,16 @@ class AdvisorScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.redAccent.withOpacity(0.04),
+        color: const Color(0xFFFF3B30).withOpacity(0.04),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.redAccent.withOpacity(0.2)),
+        border: Border.all(color: const Color(0xFFFF3B30).withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.redAccent.shade100, size: 20),
+              Icon(Icons.warning_amber_rounded, color: const Color(0xFFFF3B30).withOpacity(0.8), size: 20),
               const SizedBox(width: 8),
               const Text(
                 'SPENDING ALERT FLAGS',
@@ -255,9 +213,9 @@ class AdvisorScreen extends ConsumerWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       '• ',
-                      style: TextStyle(color: Colors.redAccent.shade100, fontSize: 14),
+                      style: TextStyle(color: Color(0xFFFF3B30), fontSize: 14),
                     ),
                     Expanded(
                       child: Text(
@@ -277,15 +235,9 @@ class AdvisorScreen extends ConsumerWidget {
 
   Widget _buildForecastCard(BuildContext context, AdvisorState state) {
     final isOverspent = state.projectedMonthEndSpend > state.totalIncome;
-    final color = isOverspent ? Colors.redAccent : Colors.tealAccent;
+    final color = isOverspent ? const Color(0xFFFF3B30) : const Color(0xFF00E5FF);
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
-      ),
+    return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -336,7 +288,7 @@ class AdvisorScreen extends ConsumerWidget {
                     ? (state.projectedMonthEndSpend / state.totalIncome).clamp(0.0, 1.0)
                     : 1.0,
                 backgroundColor: Colors.white10,
-                color: color,
+                color: isOverspent ? const Color(0xFFFF3B30) : const Color(0xFF0066FF),
               ),
             ),
           ),
@@ -353,25 +305,18 @@ class AdvisorScreen extends ConsumerWidget {
   }
 
   Widget _buildBudgetRuleCard(BuildContext context, AdvisorState state) {
-    // Calculates the recommended targets based on total monthly income
-    final income = state.totalIncome > 0 ? state.totalIncome : 4500000; // Fallback to 45k INR if income not set
+    final income = state.totalIncome > 0 ? state.totalIncome : 4500000;
     final needs = (income * 0.50).round();
     final wants = (income * 0.30).round();
     final savings = (income * 0.20).round();
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white10),
-      ),
+    return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.pie_chart_outline, color: Colors.tealAccent, size: 20),
+              Icon(Icons.pie_chart_outline, color: Color(0xFF00E5FF), size: 20),
               SizedBox(width: 8),
               Text(
                 'BUDGET RULE TARGETS (50/30/20)',
@@ -390,11 +335,11 @@ class AdvisorScreen extends ConsumerWidget {
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 20),
-          _buildBudgetRecommendationRow('Needs (50%)', needs, 'Rent, groceries, utilities, loan repayments', Colors.tealAccent),
+          _buildBudgetRecommendationRow('Needs (50%)', needs, 'Rent, groceries, utilities, loan repayments', const Color(0xFF0066FF)),
           const SizedBox(height: 12),
-          _buildBudgetRecommendationRow('Wants (30%)', wants, 'Dining out, hobbies, subscriptions, shopping', Colors.amberAccent),
+          _buildBudgetRecommendationRow('Wants (30%)', wants, 'Dining out, hobbies, subscriptions, shopping', const Color(0xFF00E5FF).withOpacity(0.6)),
           const SizedBox(height: 12),
-          _buildBudgetRecommendationRow('Savings (20%)', savings, 'Investments, emergency reserves, debt reduction', Colors.purpleAccent),
+          _buildBudgetRecommendationRow('Savings (20%)', savings, 'Investments, emergency reserves, debt reduction', const Color(0xFF00E5FF).withOpacity(0.3)),
         ],
       ),
     );
@@ -432,16 +377,11 @@ class AdvisorScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Colors.purpleAccent, Colors.tealAccent],
-              ).createShader(bounds),
-              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 8),
-            const Text(
+            Icon(Icons.auto_awesome_outlined, color: Color(0xFF00E5FF), size: 20),
+            SizedBox(width: 8),
+            Text(
               'AI FINANCIAL ADVISOR INSIGHTS',
               style: TextStyle(
                 color: Colors.white70,
@@ -457,7 +397,7 @@ class AdvisorScreen extends ConsumerWidget {
           const Center(
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 40.0),
-              child: CircularProgressIndicator(color: Colors.teal),
+              child: CircularProgressIndicator(color: Color(0xFF0066FF)),
             ),
           )
         else
@@ -466,29 +406,23 @@ class AdvisorScreen extends ConsumerWidget {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: state.aiInsights.length,
             itemBuilder: (context, index) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
+              return GlassCard(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.purple.shade900.withOpacity(0.08),
-                      Colors.teal.shade900.withOpacity(0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.purpleAccent.withOpacity(0.15)),
-                ),
+                borderColor: const Color(0xFF0066FF).withOpacity(0.12),
+                gradientColors: [
+                  const Color(0xFF0066FF).withOpacity(0.04),
+                  const Color(0xFF050505).withOpacity(0.2),
+                ],
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.2),
+                        color: const Color(0xFF0066FF).withOpacity(0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.lightbulb_outline, color: Colors.purpleAccent, size: 14),
+                      child: const Icon(Icons.lightbulb_outline, color: Color(0xFF00E5FF), size: 14),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
