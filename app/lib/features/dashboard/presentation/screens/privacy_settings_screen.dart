@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/security/audit_logger.dart';
@@ -77,6 +79,7 @@ class PrivacySettingsScreen extends ConsumerStatefulWidget {
 
 class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   String _dbSize = 'Computing...';
+  int _tapCount = 0;
 
   @override
   void initState() {
@@ -236,9 +239,18 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'PRIVACY & SECURITY',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.white),
+        title: GestureDetector(
+          onTap: () {
+            _tapCount++;
+            if (_tapCount >= 5) {
+              _tapCount = 0;
+              context.push('/developer-tools');
+            }
+          },
+          child: const Text(
+            'PRIVACY & SECURITY',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.white),
+          ),
         ),
         backgroundColor: const Color(0xFF002D27),
         elevation: 0,
@@ -288,6 +300,89 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
               activeColor: Colors.amberAccent,
               selected: currentMode == 'cloud',
               onTap: () => ref.read(privacyModeProvider.notifier).setPrivacyMode('cloud'),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Section 1.5: SMS Transactions
+            _buildSectionTitle('SMS TRANSACTIONS'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Auto-Import SMS Transactions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                            SizedBox(height: 2),
+                            Text('Automatically import bank alerts from SMS messages', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: true,
+                        onChanged: (val) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Auto-import settings managed automatically.')),
+                          );
+                        },
+                        activeColor: Colors.tealAccent,
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white10, height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Manual Sync SMS Inbox', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                            SizedBox(height: 2),
+                            Text('Force scan and import of historical bank SMS alerts', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.withOpacity(0.15),
+                          foregroundColor: Colors.tealAccent,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () async {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Starting SMS scan...'), duration: Duration(seconds: 1)),
+                          );
+                          await ref.read(smsScannerProvider.notifier).scanInbox();
+                          final state = ref.read(smsScannerProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('SMS Sync Complete. Imported ${state.newTransactionsCount} new transactions.'),
+                                backgroundColor: Colors.teal,
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.sync, size: 16),
+                        label: const Text('Sync Now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 32),

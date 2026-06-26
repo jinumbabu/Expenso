@@ -78,17 +78,27 @@ class LedgerAgent {
       return;
     }
 
-    // 3. No Duplicate: Insert new Transaction
-    dev.log('LedgerAgent: No duplicate found. Inserting new transaction: ${newTx.id}');
-    await _db.transactionDao.insertTransaction(newTx);
-
-    // 4. Reconcile Account Balance
-    await _reconcileAccountBalance(newTx, confidence);
+    // 3. Reconcile Account Balance and get the account ID
+    final accountId = await _reconcileAccountBalance(newTx, confidence);
+    
+    // Insert new Transaction with account ID
+    final txWithAccount = newTx.copyWith(accountId: Value(accountId));
+    dev.log('LedgerAgent: No duplicate found. Inserting new transaction: ${newTx.id} with account: $accountId');
+    await _db.transactionDao.insertTransaction(txWithAccount);
   }
 
-  Future<void> _reconcileAccountBalance(Transaction tx, double confidence) async {
+  Future<String> _reconcileAccountBalance(Transaction tx, double confidence) async {
     try {
-      final String accountName = tx.source == 'sms' ? 'Bank Account' : 'Cash Wallet';
+      final String accountName;
+      if (tx.source == 'sms') {
+        if (tx.description != null && tx.description!.startsWith('SMS Alert: ')) {
+          accountName = tx.description!.replaceFirst('SMS Alert: ', '');
+        } else {
+          accountName = 'Bank Account';
+        }
+      } else {
+        accountName = 'Cash Wallet';
+      }
       
       // Look for an existing account matching the name, or create one
       var account = await (_db.select(_db.accounts)
@@ -136,8 +146,11 @@ class LedgerAgent {
           timestamp: DateTime.now(),
         ),
       );
+      
+      return account.id;
     } catch (e) {
       dev.log('LedgerAgent: Failed to reconcile account balance: $e');
+      return const Uuid().v4(); // Safe fallback
     }
   }
 

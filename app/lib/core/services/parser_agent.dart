@@ -39,7 +39,7 @@ class ParserAgent {
 
   ParserAgent(this._ref, this._db);
 
-  static const Map<String, String> _keywordToCategory = {
+  static const Map<String, String> keywordToCategory = {
     'starbucks': 'Food', 'mcdonald': 'Food', 'swiggy': 'Food', 'zomato': 'Food', 'hotel': 'Food', 'cafe': 'Food', 'restaurant': 'Food', 'kfc': 'Food', 'burger': 'Food',
     'uber': 'Transport', 'ola': 'Transport', 'metro': 'Transport', 'auto': 'Transport', 'cab': 'Transport', 'fuel': 'Transport', 'petrol': 'Transport', 'shell': 'Transport',
     'amazon': 'Shopping', 'flipkart': 'Shopping', 'zara': 'Shopping', 'myntra': 'Shopping', 'shopping': 'Shopping', 'store': 'Shopping', 'mart': 'Shopping', 'mall': 'Shopping',
@@ -127,7 +127,7 @@ class ParserAgent {
     double confidenceSum = 0.50;
 
     // Search keywords
-    for (final entry in _keywordToCategory.entries) {
+    for (final entry in keywordToCategory.entries) {
       if (lowerText.contains(entry.key)) {
         category = entry.value;
         merchant = entry.key[0].toUpperCase() + entry.key.substring(1);

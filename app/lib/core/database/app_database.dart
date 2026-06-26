@@ -17,6 +17,7 @@ import 'tables/reports.dart';
 import 'tables/agent_logs.dart';
 import 'tables/predictions.dart';
 import 'tables/notifications.dart';
+import 'tables/unrecognized_messages.dart';
 
 import 'dao/user_dao.dart';
 import 'dao/account_dao.dart';
@@ -34,6 +35,7 @@ import 'dao/report_dao.dart';
 import 'dao/agent_log_dao.dart';
 import 'dao/prediction_dao.dart';
 import 'dao/notification_dao.dart';
+import 'dao/unrecognized_message_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -55,6 +57,7 @@ part 'app_database.g.dart';
     AgentLogs,
     FinancialPredictions,
     AppNotifications,
+    UnrecognizedMessages,
   ],
   daos: [
     UserDao,
@@ -73,6 +76,7 @@ part 'app_database.g.dart';
     AgentLogDao,
     PredictionDao,
     NotificationDao,
+    UnrecognizedMessageDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -80,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.connect(super.connection);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -159,7 +163,20 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(financialPredictions);
         await migrator.createTable(appNotifications);
       }
+      if (from < 7) {
+        await migrator.createTable(unrecognizedMessages);
+      }
     },
   );
 
+  Future<void> clearAllData() async {
+    await transaction(() async {
+      await customStatement('PRAGMA foreign_keys = OFF;');
+      for (final table in allTables) {
+        await delete(table).go();
+      }
+      await customStatement('PRAGMA foreign_keys = ON;');
+    });
+  }
 }
+

@@ -15,6 +15,7 @@ import '../../features/chat/presentation/screens/chat_screen.dart';
 import '../../features/backup/presentation/screens/backup_screen.dart';
 import '../../features/backup/presentation/screens/conflict_resolution_screen.dart';
 import '../../features/sms_parser/presentation/screens/sms_drafts_screen.dart';
+import '../../features/sms_parser/presentation/screens/developer_test_screen.dart';
 import '../../features/advisor/presentation/screens/advisor_screen.dart';
 import '../../features/dashboard/presentation/screens/privacy_settings_screen.dart';
 import '../../features/auth/presentation/screens/biometric_lock_screen.dart';
@@ -72,6 +73,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/sms-drafts',
         builder: (context, state) => const SmsDraftsScreen(),
+      ),
+      GoRoute(
+        path: '/developer-tools',
+        builder: (context, state) => const DeveloperTestScreen(),
       ),
       GoRoute(
         path: '/conflict-resolution',

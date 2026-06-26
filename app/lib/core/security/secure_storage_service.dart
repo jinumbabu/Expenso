@@ -84,4 +84,18 @@ class SecureStorageService {
   Future<void> clearAll() async {
     await _storage.deleteAll();
   }
+
+  static const String _lastSmsSyncTimeKey = 'last_sms_sync_time';
+
+  Future<void> saveLastSmsSyncTime(DateTime time) async {
+    await _storage.write(key: _lastSmsSyncTimeKey, value: time.toIso8601String());
+  }
+
+  Future<DateTime?> getLastSmsSyncTime() async {
+    final val = await _storage.read(key: _lastSmsSyncTimeKey);
+    if (val == null) return null;
+    return DateTime.tryParse(val);
+  }
 }
+
+

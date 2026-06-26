@@ -7632,6 +7632,398 @@ class AppNotificationsCompanion extends UpdateCompanion<AppNotification> {
   }
 }
 
+class $UnrecognizedMessagesTable extends UnrecognizedMessages
+    with TableInfo<$UnrecognizedMessagesTable, UnrecognizedMessage> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UnrecognizedMessagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES users (id)'));
+  static const VerificationMeta _senderMeta = const VerificationMeta('sender');
+  @override
+  late final GeneratedColumn<String> sender = GeneratedColumn<String>(
+      'sender', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+      'body', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+      'date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _failureReasonMeta =
+      const VerificationMeta('failureReason');
+  @override
+  late final GeneratedColumn<String> failureReason = GeneratedColumn<String>(
+      'failure_reason', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, userId, sender, body, date, failureReason, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'unrecognized_messages';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<UnrecognizedMessage> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('sender')) {
+      context.handle(_senderMeta,
+          sender.isAcceptableOrUnknown(data['sender']!, _senderMeta));
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+          _bodyMeta, body.isAcceptableOrUnknown(data['body']!, _bodyMeta));
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+          _dateMeta, date.isAcceptableOrUnknown(data['date']!, _dateMeta));
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('failure_reason')) {
+      context.handle(
+          _failureReasonMeta,
+          failureReason.isAcceptableOrUnknown(
+              data['failure_reason']!, _failureReasonMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UnrecognizedMessage map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UnrecognizedMessage(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id'])!,
+      sender: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sender']),
+      body: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}body'])!,
+      date: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}date'])!,
+      failureReason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}failure_reason']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $UnrecognizedMessagesTable createAlias(String alias) {
+    return $UnrecognizedMessagesTable(attachedDatabase, alias);
+  }
+}
+
+class UnrecognizedMessage extends DataClass
+    implements Insertable<UnrecognizedMessage> {
+  final String id;
+  final String userId;
+  final String? sender;
+  final String body;
+  final DateTime date;
+  final String? failureReason;
+  final DateTime createdAt;
+  const UnrecognizedMessage(
+      {required this.id,
+      required this.userId,
+      this.sender,
+      required this.body,
+      required this.date,
+      this.failureReason,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['user_id'] = Variable<String>(userId);
+    if (!nullToAbsent || sender != null) {
+      map['sender'] = Variable<String>(sender);
+    }
+    map['body'] = Variable<String>(body);
+    map['date'] = Variable<DateTime>(date);
+    if (!nullToAbsent || failureReason != null) {
+      map['failure_reason'] = Variable<String>(failureReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  UnrecognizedMessagesCompanion toCompanion(bool nullToAbsent) {
+    return UnrecognizedMessagesCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      sender:
+          sender == null && nullToAbsent ? const Value.absent() : Value(sender),
+      body: Value(body),
+      date: Value(date),
+      failureReason: failureReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureReason),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory UnrecognizedMessage.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UnrecognizedMessage(
+      id: serializer.fromJson<String>(json['id']),
+      userId: serializer.fromJson<String>(json['userId']),
+      sender: serializer.fromJson<String?>(json['sender']),
+      body: serializer.fromJson<String>(json['body']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      failureReason: serializer.fromJson<String?>(json['failureReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'userId': serializer.toJson<String>(userId),
+      'sender': serializer.toJson<String?>(sender),
+      'body': serializer.toJson<String>(body),
+      'date': serializer.toJson<DateTime>(date),
+      'failureReason': serializer.toJson<String?>(failureReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  UnrecognizedMessage copyWith(
+          {String? id,
+          String? userId,
+          Value<String?> sender = const Value.absent(),
+          String? body,
+          DateTime? date,
+          Value<String?> failureReason = const Value.absent(),
+          DateTime? createdAt}) =>
+      UnrecognizedMessage(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        sender: sender.present ? sender.value : this.sender,
+        body: body ?? this.body,
+        date: date ?? this.date,
+        failureReason:
+            failureReason.present ? failureReason.value : this.failureReason,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  UnrecognizedMessage copyWithCompanion(UnrecognizedMessagesCompanion data) {
+    return UnrecognizedMessage(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      sender: data.sender.present ? data.sender.value : this.sender,
+      body: data.body.present ? data.body.value : this.body,
+      date: data.date.present ? data.date.value : this.date,
+      failureReason: data.failureReason.present
+          ? data.failureReason.value
+          : this.failureReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnrecognizedMessage(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('sender: $sender, ')
+          ..write('body: $body, ')
+          ..write('date: $date, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, userId, sender, body, date, failureReason, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UnrecognizedMessage &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.sender == this.sender &&
+          other.body == this.body &&
+          other.date == this.date &&
+          other.failureReason == this.failureReason &&
+          other.createdAt == this.createdAt);
+}
+
+class UnrecognizedMessagesCompanion
+    extends UpdateCompanion<UnrecognizedMessage> {
+  final Value<String> id;
+  final Value<String> userId;
+  final Value<String?> sender;
+  final Value<String> body;
+  final Value<DateTime> date;
+  final Value<String?> failureReason;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const UnrecognizedMessagesCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.sender = const Value.absent(),
+    this.body = const Value.absent(),
+    this.date = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UnrecognizedMessagesCompanion.insert({
+    required String id,
+    required String userId,
+    this.sender = const Value.absent(),
+    required String body,
+    required DateTime date,
+    this.failureReason = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        userId = Value(userId),
+        body = Value(body),
+        date = Value(date),
+        createdAt = Value(createdAt);
+  static Insertable<UnrecognizedMessage> custom({
+    Expression<String>? id,
+    Expression<String>? userId,
+    Expression<String>? sender,
+    Expression<String>? body,
+    Expression<DateTime>? date,
+    Expression<String>? failureReason,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (sender != null) 'sender': sender,
+      if (body != null) 'body': body,
+      if (date != null) 'date': date,
+      if (failureReason != null) 'failure_reason': failureReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UnrecognizedMessagesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? userId,
+      Value<String?>? sender,
+      Value<String>? body,
+      Value<DateTime>? date,
+      Value<String?>? failureReason,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return UnrecognizedMessagesCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      sender: sender ?? this.sender,
+      body: body ?? this.body,
+      date: date ?? this.date,
+      failureReason: failureReason ?? this.failureReason,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (sender.present) {
+      map['sender'] = Variable<String>(sender.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (failureReason.present) {
+      map['failure_reason'] = Variable<String>(failureReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnrecognizedMessagesCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('sender: $sender, ')
+          ..write('body: $body, ')
+          ..write('date: $date, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7655,6 +8047,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $FinancialPredictionsTable(this);
   late final $AppNotificationsTable appNotifications =
       $AppNotificationsTable(this);
+  late final $UnrecognizedMessagesTable unrecognizedMessages =
+      $UnrecognizedMessagesTable(this);
   late final Index idxCategoriesUsage = Index('idx_categories_usage',
       'CREATE INDEX idx_categories_usage ON categories (user_id, usage_count)');
   late final Index idxTransactionsUserDate = Index('idx_transactions_user_date',
@@ -7685,6 +8079,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final PredictionDao predictionDao = PredictionDao(this as AppDatabase);
   late final NotificationDao notificationDao =
       NotificationDao(this as AppDatabase);
+  late final UnrecognizedMessageDao unrecognizedMessageDao =
+      UnrecognizedMessageDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7706,6 +8102,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         agentLogs,
         financialPredictions,
         appNotifications,
+        unrecognizedMessages,
         idxCategoriesUsage,
         idxTransactionsUserDate,
         idxTransactionsCategory,
@@ -7948,6 +8345,25 @@ final class $$UsersTableReferences
 
     final cache =
         $_typedResult.readTableOrNull(_appNotificationsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$UnrecognizedMessagesTable,
+      List<UnrecognizedMessage>> _unrecognizedMessagesRefsTable(
+          _$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(db.unrecognizedMessages,
+          aliasName: $_aliasNameGenerator(
+              db.users.id, db.unrecognizedMessages.userId));
+
+  $$UnrecognizedMessagesTableProcessedTableManager
+      get unrecognizedMessagesRefs {
+    final manager =
+        $$UnrecognizedMessagesTableTableManager($_db, $_db.unrecognizedMessages)
+            .filter((f) => f.userId.id($_item.id));
+
+    final cache =
+        $_typedResult.readTableOrNull(_unrecognizedMessagesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -8272,6 +8688,28 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
             $$AppNotificationsTableFilterComposer(
               $db: $db,
               $table: $db.appNotifications,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> unrecognizedMessagesRefs(
+      Expression<bool> Function($$UnrecognizedMessagesTableFilterComposer f)
+          f) {
+    final $$UnrecognizedMessagesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.unrecognizedMessages,
+        getReferencedColumn: (t) => t.userId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UnrecognizedMessagesTableFilterComposer(
+              $db: $db,
+              $table: $db.unrecognizedMessages,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -8644,6 +9082,29 @@ class $$UsersTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> unrecognizedMessagesRefs<T extends Object>(
+      Expression<T> Function($$UnrecognizedMessagesTableAnnotationComposer a)
+          f) {
+    final $$UnrecognizedMessagesTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.unrecognizedMessages,
+            getReferencedColumn: (t) => t.userId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$UnrecognizedMessagesTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.unrecognizedMessages,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$UsersTableTableManager extends RootTableManager<
@@ -8671,7 +9132,8 @@ class $$UsersTableTableManager extends RootTableManager<
         bool subscriptionsRefs,
         bool financialReportsRefs,
         bool financialPredictionsRefs,
-        bool appNotificationsRefs})> {
+        bool appNotificationsRefs,
+        bool unrecognizedMessagesRefs})> {
   $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
       : super(TableManagerState(
           db: db,
@@ -8744,7 +9206,8 @@ class $$UsersTableTableManager extends RootTableManager<
               subscriptionsRefs = false,
               financialReportsRefs = false,
               financialPredictionsRefs = false,
-              appNotificationsRefs = false}) {
+              appNotificationsRefs = false,
+              unrecognizedMessagesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
@@ -8761,7 +9224,8 @@ class $$UsersTableTableManager extends RootTableManager<
                 if (subscriptionsRefs) db.subscriptions,
                 if (financialReportsRefs) db.financialReports,
                 if (financialPredictionsRefs) db.financialPredictions,
-                if (appNotificationsRefs) db.appNotifications
+                if (appNotificationsRefs) db.appNotifications,
+                if (unrecognizedMessagesRefs) db.unrecognizedMessages
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -8929,6 +9393,18 @@ class $$UsersTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem: (item,
                                 referencedItems) =>
                             referencedItems.where((e) => e.userId == item.id),
+                        typedResults: items),
+                  if (unrecognizedMessagesRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable: $$UsersTableReferences
+                            ._unrecognizedMessagesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$UsersTableReferences(db, table, p0)
+                                .unrecognizedMessagesRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.userId == item.id),
                         typedResults: items)
                 ];
               },
@@ -8962,7 +9438,8 @@ typedef $$UsersTableProcessedTableManager = ProcessedTableManager<
         bool subscriptionsRefs,
         bool financialReportsRefs,
         bool financialPredictionsRefs,
-        bool appNotificationsRefs})>;
+        bool appNotificationsRefs,
+        bool unrecognizedMessagesRefs})>;
 typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   required String id,
   required String userId,
@@ -14615,6 +15092,316 @@ typedef $$AppNotificationsTableProcessedTableManager = ProcessedTableManager<
     (AppNotification, $$AppNotificationsTableReferences),
     AppNotification,
     PrefetchHooks Function({bool userId})>;
+typedef $$UnrecognizedMessagesTableCreateCompanionBuilder
+    = UnrecognizedMessagesCompanion Function({
+  required String id,
+  required String userId,
+  Value<String?> sender,
+  required String body,
+  required DateTime date,
+  Value<String?> failureReason,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$UnrecognizedMessagesTableUpdateCompanionBuilder
+    = UnrecognizedMessagesCompanion Function({
+  Value<String> id,
+  Value<String> userId,
+  Value<String?> sender,
+  Value<String> body,
+  Value<DateTime> date,
+  Value<String?> failureReason,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$UnrecognizedMessagesTableReferences extends BaseReferences<
+    _$AppDatabase, $UnrecognizedMessagesTable, UnrecognizedMessage> {
+  $$UnrecognizedMessagesTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+      $_aliasNameGenerator(db.unrecognizedMessages.userId, db.users.id));
+
+  $$UsersTableProcessedTableManager? get userId {
+    if ($_item.userId == null) return null;
+    final manager = $$UsersTableTableManager($_db, $_db.users)
+        .filter((f) => f.id($_item.userId!));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$UnrecognizedMessagesTableFilterComposer
+    extends Composer<_$AppDatabase, $UnrecognizedMessagesTable> {
+  $$UnrecognizedMessagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sender => $composableBuilder(
+      column: $table.sender, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get failureReason => $composableBuilder(
+      column: $table.failureReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableFilterComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$UnrecognizedMessagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $UnrecognizedMessagesTable> {
+  $$UnrecognizedMessagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sender => $composableBuilder(
+      column: $table.sender, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+      column: $table.date, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get failureReason => $composableBuilder(
+      column: $table.failureReason,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableOrderingComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$UnrecognizedMessagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UnrecognizedMessagesTable> {
+  $$UnrecognizedMessagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sender =>
+      $composableBuilder(column: $table.sender, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get failureReason => $composableBuilder(
+      column: $table.failureReason, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.userId,
+        referencedTable: $db.users,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$UsersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.users,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$UnrecognizedMessagesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $UnrecognizedMessagesTable,
+    UnrecognizedMessage,
+    $$UnrecognizedMessagesTableFilterComposer,
+    $$UnrecognizedMessagesTableOrderingComposer,
+    $$UnrecognizedMessagesTableAnnotationComposer,
+    $$UnrecognizedMessagesTableCreateCompanionBuilder,
+    $$UnrecognizedMessagesTableUpdateCompanionBuilder,
+    (UnrecognizedMessage, $$UnrecognizedMessagesTableReferences),
+    UnrecognizedMessage,
+    PrefetchHooks Function({bool userId})> {
+  $$UnrecognizedMessagesTableTableManager(
+      _$AppDatabase db, $UnrecognizedMessagesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UnrecognizedMessagesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UnrecognizedMessagesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UnrecognizedMessagesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> userId = const Value.absent(),
+            Value<String?> sender = const Value.absent(),
+            Value<String> body = const Value.absent(),
+            Value<DateTime> date = const Value.absent(),
+            Value<String?> failureReason = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              UnrecognizedMessagesCompanion(
+            id: id,
+            userId: userId,
+            sender: sender,
+            body: body,
+            date: date,
+            failureReason: failureReason,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String userId,
+            Value<String?> sender = const Value.absent(),
+            required String body,
+            required DateTime date,
+            Value<String?> failureReason = const Value.absent(),
+            required DateTime createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              UnrecognizedMessagesCompanion.insert(
+            id: id,
+            userId: userId,
+            sender: sender,
+            body: body,
+            date: date,
+            failureReason: failureReason,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$UnrecognizedMessagesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (userId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.userId,
+                    referencedTable:
+                        $$UnrecognizedMessagesTableReferences._userIdTable(db),
+                    referencedColumn: $$UnrecognizedMessagesTableReferences
+                        ._userIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$UnrecognizedMessagesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $UnrecognizedMessagesTable,
+        UnrecognizedMessage,
+        $$UnrecognizedMessagesTableFilterComposer,
+        $$UnrecognizedMessagesTableOrderingComposer,
+        $$UnrecognizedMessagesTableAnnotationComposer,
+        $$UnrecognizedMessagesTableCreateCompanionBuilder,
+        $$UnrecognizedMessagesTableUpdateCompanionBuilder,
+        (UnrecognizedMessage, $$UnrecognizedMessagesTableReferences),
+        UnrecognizedMessage,
+        PrefetchHooks Function({bool userId})>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -14651,4 +15438,6 @@ class $AppDatabaseManager {
       $$FinancialPredictionsTableTableManager(_db, _db.financialPredictions);
   $$AppNotificationsTableTableManager get appNotifications =>
       $$AppNotificationsTableTableManager(_db, _db.appNotifications);
+  $$UnrecognizedMessagesTableTableManager get unrecognizedMessages =>
+      $$UnrecognizedMessagesTableTableManager(_db, _db.unrecognizedMessages);
 }
