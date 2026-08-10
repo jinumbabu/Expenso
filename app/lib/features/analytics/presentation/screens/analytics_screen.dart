@@ -11,7 +11,7 @@ import '../../../advisor/presentation/providers/advisor_provider.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/reusable_donut_chart.dart';
-import '../../dashboard/presentation/providers/privacy_provider.dart';
+import '../../../dashboard/presentation/providers/privacy_provider.dart';
 import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../core/database/app_database.dart';
 import '../models/analytics_chart_data.dart';
