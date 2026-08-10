@@ -10,6 +10,8 @@ import '../../../goals/presentation/providers/goals_provider.dart';
 import '../../../advisor/presentation/providers/advisor_provider.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/reusable_donut_chart.dart';
+import '../../dashboard/presentation/providers/privacy_provider.dart';
 import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../core/database/app_database.dart';
 import '../models/analytics_chart_data.dart';
@@ -233,6 +235,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     final accountsAsync = ref.watch(recalculatedAccountsProvider);
     final goals = ref.watch(goalsListNotifierProvider);
     final advisorState = ref.watch(advisorProvider);
+    final isPrivate = ref.watch(privacyModeProvider);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -931,23 +934,26 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
     Widget chartWidget;
 
-    if (chartType == 'Donut' || chartType == 'Pie') {
-      final isDonut = chartType == 'Donut';
+    if (chartType == 'Donut') {
+      final isPrivate = ref.read(privacyModeProvider);
+      chartWidget = ReusableDonutChart(
+        data: data,
+        selectedId: selectedId,
+        onSelected: onSelected,
+        centerTitle: centerTitle,
+        centerValue: centerValue,
+        isPrivate: isPrivate,
+      );
+    } else if (chartType == 'Pie') {
       final List<PieChartSectionData> sections = [];
-      
       for (int i = 0; i < data.length; i++) {
         final datum = data[i];
         final isSelected = selectedId == datum.id;
         final baseColor = datum.color;
-        
-        Color sectionColor;
-        if (selectedId != null) {
-          sectionColor = isSelected ? baseColor : baseColor.withOpacity(0.3);
-        } else {
-          sectionColor = baseColor;
-        }
-
-        final double radius = isSelected ? (isDonut ? 48.0 : 38.0) : (isDonut ? 38.0 : 28.0);
+        final Color sectionColor = (selectedId != null && selectedId!.isNotEmpty)
+            ? (isSelected ? baseColor : baseColor.withOpacity(0.3))
+            : baseColor;
+        final double radius = isSelected ? 38.0 : 28.0;
 
         sections.add(PieChartSectionData(
           color: sectionColor,
@@ -957,16 +963,10 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           titleStyle: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
         ));
       }
-
-      final centerDatum = selectedId != null ? data.firstWhere((d) => d.id == selectedId, orElse: () => data.first) : null;
-      final String label = centerDatum != null ? centerDatum.label.toUpperCase() : centerTitle.toUpperCase();
-      final String amount = centerDatum != null ? _formatMoneyDouble(centerDatum.value) : _formatMoneyDouble(centerValue);
-      final String? pctText = centerDatum != null ? '${centerDatum.percentage.toStringAsFixed(0)}%' : null;
-
-      final pieChartWidget = PieChart(
+      chartWidget = PieChart(
         PieChartData(
           sections: sections,
-          centerSpaceRadius: isDonut ? 46 : 0,
+          centerSpaceRadius: 0,
           sectionsSpace: 2,
           pieTouchData: PieTouchData(
             touchCallback: (event, response) {
@@ -986,43 +986,6 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           ),
         ),
       );
-
-      if (isDonut) {
-        chartWidget = Stack(
-          alignment: Alignment.center,
-          children: [
-            pieChartWidget,
-            IgnorePointer(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    amount,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (pctText != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      pctText,
-                      style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 10, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        );
-      } else {
-        chartWidget = pieChartWidget;
-      }
     } else if (chartType == 'Bar') {
       double maxVal = 0.0;
       for (var datum in data) {
