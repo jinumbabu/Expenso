@@ -7,6 +7,11 @@ import '../../../../core/services/analysis_agent.dart';
 import '../../../../core/services/forecasting_agent.dart';
 import '../../../../core/services/subscription_agent.dart';
 import '../../../../core/services/report_agent.dart';
+import '../../../../core/services/ai_provider_orchestrator.dart';
+import 'package:drift/drift.dart';
+import '../../../accounts/presentation/providers/accounts_provider.dart';
+import '../../../accounts/presentation/providers/account_formatters.dart';
+import '../../../expenses/presentation/providers/expense_provider.dart';
 
 final Provider<ChatRepository> chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final db = ref.watch(databaseProvider);
@@ -36,22 +41,132 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       state = const AsyncValue.loading();
 
+      final currentConfig = _ref.read(aiProviderOrchestratorProvider);
+      final activeModelId = currentConfig.aiProvider == 'offline'
+          ? 'Offline AI'
+          : (currentConfig.selectedModels[currentConfig.aiProvider] ?? 'Online AI');
+
       // 1. Save user's message locally first
       await _repository.saveMessage(
         userId: userId,
         role: 'user',
         message: messageText,
-        aiMode: 'cloud',
+        aiMode: activeModelId,
       );
       
       // Force refreshing the chat list provider so UI shows the user's message immediately
       _ref.invalidate(chatHistoryProvider(userId));
-
       String? reply;
       final lowerText = messageText.toLowerCase();
 
       // Financial Copilot Query Handling
-      if (lowerText.contains('spend on food') || lowerText.contains('food spending') || lowerText.contains('spent on food')) {
+      if (lowerText.startsWith('confirm payment')) {
+        final accounts = _ref.read(accountsProvider).value ?? [];
+        final pms = _ref.read(paymentMethodsProvider).value ?? [];
+
+        // Extract account name if provided (e.g. "Confirm Payment using SBI Credit Card")
+        String? targetAccountName;
+        final usingMatch = RegExp(r'using\s+(.+)$', caseSensitive: false).firstMatch(messageText);
+        if (usingMatch != null) {
+          targetAccountName = usingMatch.group(1)!.trim();
+        }
+
+        Account? account;
+        if (targetAccountName != null) {
+          account = accounts.firstWhere(
+            (a) => a.name.toLowerCase() == targetAccountName!.toLowerCase() ||
+                   a.name.toLowerCase().contains(targetAccountName.toLowerCase()),
+            orElse: () => accounts.firstWhere((a) => a.isDefault, orElse: () => accounts.first),
+          );
+        } else {
+          account = accounts.firstWhere((a) => a.isDefault, orElse: () => accounts.first);
+        }
+
+        final history = await _repository.getChatHistory(userId);
+        final lastConfirmMsg = history.lastWhere(
+          (m) => m.role == 'model' && m.message.startsWith('[PAY_CONFIRM:'),
+          orElse: () => ChatHistoryItem(id: '', userId: userId, role: 'model', message: '', aiMode: '', createdAt: DateTime.now()),
+        );
+
+        if (lastConfirmMsg.message.isNotEmpty) {
+          final match = RegExp(r'^\[PAY_CONFIRM:(.*?)\]').firstMatch(lastConfirmMsg.message);
+          final idsStr = match?.group(1) ?? '';
+          final billIds = idsStr.split(',').where((id) => id.isNotEmpty).toList();
+
+          final db = _ref.read(databaseProvider);
+          final notifier = _ref.read(expenseListNotifierProvider.notifier);
+
+          List<String> paidSummary = [];
+          for (var id in billIds) {
+            final bill = await db.transactionDao.getTransactionById(id);
+            if (bill != null && bill.billStatus != 'paid') {
+              // Resolve payment method based on account type
+              final pm = pms.firstWhere(
+                (p) => p.name.toLowerCase() == (account!.type == 'cash' ? 'cash' : 'debit card'),
+                orElse: () => pms.first,
+              );
+
+              await notifier.markBillAsPaid(
+                bill: bill,
+                accountId: account!.id,
+                paymentMethodId: pm.id,
+                paymentDate: DateTime.now(),
+              );
+              paidSummary.add('✓ ${bill.merchant ?? bill.description ?? "Bill"} (₹${(bill.amount / 100.0).toStringAsFixed(2)})');
+            }
+          }
+
+          if (paidSummary.isNotEmpty) {
+            reply = 'I have marked the following bills as paid using **${account!.displayTitle}**:\n\n${paidSummary.join("\n")}\n\nAll financial charts, reports, and ledger balances have been updated instantly.';
+          } else {
+            reply = 'No pending bills were found or they have already been marked as paid.';
+          }
+        } else {
+          reply = 'No pending payments to confirm.';
+        }
+      } 
+      else if (lowerText == 'cancel payment') {
+        reply = 'Payment cancelled.';
+      }
+      else if (lowerText.contains('pay') || lowerText.contains('paid') || lowerText.contains('clear')) {
+        final db = _ref.read(databaseProvider);
+        final pendingBills = await (db.select(db.transactions)
+          ..where((t) => t.userId.equals(userId) & 
+                         (t.type.equals('upcoming_bill') | t.type.equals('credit_card_bill') | t.type.equals('credit_card_bill_reminder')) & 
+                         (t.billStatus.equals('pending') | t.billStatus.isNull()))
+        ).get();
+
+        if (pendingBills.isEmpty) {
+          reply = 'You have no pending bills at the moment.';
+        } else {
+          List<Transaction> matches = [];
+          
+          if (lowerText.contains('electricity')) {
+            matches = pendingBills.where((t) => (t.merchant ?? t.description ?? '').toLowerCase().contains('electricity')).toList();
+          } else if (lowerText.contains('internet')) {
+            matches = pendingBills.where((t) => (t.merchant ?? t.description ?? '').toLowerCase().contains('internet')).toList();
+          } else if (lowerText.contains('talabat')) {
+            matches = pendingBills.where((t) => (t.merchant ?? t.description ?? '').toLowerCase().contains('talabat')).toList();
+          } else if (lowerText.contains('credit card') || lowerText.contains('creditcard')) {
+            matches = pendingBills.where((t) => t.type == 'credit_card_bill' || t.type == 'credit_card_bill_reminder' || (t.merchant ?? t.description ?? '').toLowerCase().contains('credit card')).toList();
+          } else {
+            matches = List.from(pendingBills);
+          }
+
+          if (matches.isEmpty) {
+            reply = 'I could not find any pending bills matching your description.';
+          } else {
+            final ids = matches.map((m) => m.id).join(',');
+            final buffer = StringBuffer('[PAY_CONFIRM:$ids]I found ${matches.length} unpaid bill${matches.length > 1 ? "s" : ""}:\n\n');
+            for (var m in matches) {
+              buffer.writeln('✓ ${m.merchant ?? m.description ?? "Bill"}: ₹${(m.amount / 100.0).toStringAsFixed(2)}');
+            }
+            buffer.writeln('\nProceed to mark them as paid?');
+            reply = buffer.toString();
+          }
+        }
+      }
+      else if (lowerText.contains('spend on food') || lowerText.contains('food spending') || lowerText.contains('spent on food')) {
         final analysisAgent = _ref.read(analysisAgentProvider);
         final analysis = await analysisAgent.analyzeFinances(userId);
         final categorySpending = Map<String, int>.from(analysis['categorySpendingThisMonth'] ?? {});
@@ -103,12 +218,16 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
         reply = 'I have generated your executive Monthly Report. You can view the summary below:\n\n${report.summaryText}\n\n*CSV exported to: ${report.exportedFilePath}*';
       }
 
+      String activeModelName = 'Offline AI';
       if (reply == null) {
-        // 2. Compile client-side data minimization context
-        final contextText = await _compileFinancialSummary(userId);
-
-        // 3. Send message to backend
-        reply = await _repository.sendMessageToAssistant(messageText, contextText);
+        // 2. Call the modular AI orchestrator
+        final orchestrator = _ref.read(aiProviderOrchestratorProvider.notifier);
+        final response = await orchestrator.getChatResponse(messageText, userId);
+        reply = response.reply;
+        activeModelName = response.providerName;
+      } else {
+        // Parsed by local hardcoded rules
+        activeModelName = 'Offline AI';
       }
 
       // 4. Save model's reply locally
@@ -116,7 +235,7 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
         userId: userId,
         role: 'model',
         message: reply,
-        aiMode: 'cloud',
+        aiMode: activeModelName,
       );
 
       // 5. Refresh the list so the model reply appears in the UI
@@ -136,91 +255,6 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
-  }
-
-  Future<String> _compileFinancialSummary(String userId) async {
-    final db = _ref.read(databaseProvider);
-    final now = DateTime.now();
-    final startOfMonth = DateTime(now.year, now.month, 1);
-    
-    // Fetch transactions
-    final transactions = await db.transactionDao.getTransactionsForUser(userId);
-    final currentMonthTxs = transactions.where((tx) => tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth)).toList();
-    
-    // Fetch budgets
-    final budgets = await db.budgetDao.getBudgetsForUser(userId);
-    
-    // Fetch categories
-    final categories = await db.categoryDao.getCategoriesForUser(userId);
-    final categoriesMap = {for (var c in categories) c.id: c};
-    
-    int totalIncome = 0;
-    int totalExpense = 0;
-    final categorySpending = <String, int>{};
-    
-    for (var tx in currentMonthTxs) {
-      if (tx.type == 'income') {
-        totalIncome += tx.amount;
-      } else if (tx.type == 'expense') {
-        totalExpense += tx.amount;
-        final catName = categoriesMap[tx.categoryId]?.name ?? 'Uncategorized';
-        categorySpending[catName] = (categorySpending[catName] ?? 0) + tx.amount;
-      }
-    }
-    
-    final double totalIncomeVal = totalIncome / 100.0;
-    final double totalExpenseVal = totalExpense / 100.0;
-    final double netVal = totalIncomeVal - totalExpenseVal;
-    
-    final buffer = StringBuffer();
-    buffer.writeln('User Current Month Financial Context (since ${startOfMonth.toIso8601String().substring(0, 10)}):');
-    buffer.writeln('- Total Income: INR ${totalIncomeVal.toStringAsFixed(2)}');
-    buffer.writeln('- Total Expenses: INR ${totalExpenseVal.toStringAsFixed(2)}');
-    buffer.writeln('- Net Balance: INR ${netVal.toStringAsFixed(2)}');
-    
-    buffer.writeln('\nCategory Spending (This Month):');
-    if (categorySpending.isEmpty) {
-      buffer.writeln('No expenses recorded this month.');
-    } else {
-      categorySpending.forEach((cat, amount) {
-        buffer.writeln('- $cat: INR ${(amount / 100.0).toStringAsFixed(2)}');
-      });
-    }
-    
-    buffer.writeln('\nActive Budgets:');
-    if (budgets.isEmpty) {
-      buffer.writeln('No budgets configured.');
-    } else {
-      for (var budget in budgets) {
-        final catName = categoriesMap[budget.categoryId]?.name ?? 'Total';
-        final limit = budget.amount / 100.0;
-        int spent = 0;
-        for (var tx in currentMonthTxs) {
-          if (tx.categoryId == budget.categoryId && tx.type == 'expense') {
-            spent += tx.amount;
-          }
-        }
-        final spentVal = spent / 100.0;
-        final remainingVal = limit - spentVal;
-        buffer.writeln('- $catName Category Budget: Limit INR ${limit.toStringAsFixed(2)}, Spent INR ${spentVal.toStringAsFixed(2)}, Remaining INR ${remainingVal.toStringAsFixed(2)}');
-      }
-    }
-    
-    buffer.writeln('\n5 Most Recent Transactions:');
-    final sortedTxs = List<Transaction>.from(transactions)..sort((a, b) => b.date.compareTo(a.date));
-    final recentTxs = sortedTxs.take(5).toList();
-    if (recentTxs.isEmpty) {
-      buffer.writeln('No transactions recorded yet.');
-    } else {
-      for (var tx in recentTxs) {
-        final catName = categoriesMap[tx.categoryId]?.name ?? 'Uncategorized';
-        final amountVal = tx.amount / 100.0;
-        final dateStr = tx.date.toIso8601String().substring(0, 10);
-        buffer.writeln('- $dateStr: ${tx.type == 'income' ? '+' : '-'}INR ${amountVal.toStringAsFixed(2)} | Description: ${tx.description ?? tx.merchant ?? catName}');
-      }
-    }
-    
-    return buffer.toString();
   }
 }
 

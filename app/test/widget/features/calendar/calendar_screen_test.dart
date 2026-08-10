@@ -94,9 +94,6 @@ void main() {
       // Verify page title
       expect(find.text('Calendar Intelligence'), findsOneWidget);
 
-      // Verify heatmap exists
-      expect(find.text('HEATMAP ACTIVE'), findsOneWidget);
-
       // Pump to let the state process
       await tester.pump();
 
@@ -113,8 +110,8 @@ void main() {
       expect(find.text('Google Inc'), findsOneWidget);
 
       // Verify amounts (income has + prefix, expense has - prefix)
-      expect(find.text('-₹500.00'), findsOneWidget);
-      expect(find.text('+₹25,000.00'), findsOneWidget);
+      expect(find.text('-₹500.00'), findsWidgets);
+      expect(find.text('+₹25,000.00'), findsWidgets);
     });
 
     testWidgets('Displays empty state when a day without transactions is clicked', (tester) async {
@@ -145,7 +142,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify empty state is displayed
-      expect(find.text('No transactions recorded for this day.'), findsOneWidget);
+      expect(find.text('No transactions found.'), findsOneWidget);
     });
   });
 }

@@ -1,0 +1,83 @@
+INSTALLATION INSTRUCTIONS FOR EXPENSO APP:
+
+The release APK is located at:
+c:\Users\jinum\Expenso\app\build\app\outputs\flutter-apk\app-release.apk
+
+============================================================
+METHOD 1: INSTALL VIA COMMAND PROMPT (RECOMMENDED & FASTEST)
+============================================================
+
+1. Enable Developer Options & USB Debugging on your Android phone:
+   - Open Settings on your phone.
+   - Go to "About Phone" or "Software Information".
+   - Tap "Build Number" 7 times until you see the toast message "You are now a developer!".
+   - Go back to Settings > System (or search) > "Developer Options".
+   - Scroll down and toggle on "USB Debugging".
+
+2. Connect your phone to your PC via a USB cable.
+
+3. Verify connection:
+   - Open a command prompt/terminal on your PC.
+   - Run the command:
+     adb devices
+   - Watch your phone screen; if a prompt appears asking to authorize USB debugging, select "Always allow from this computer" and tap "Allow".
+
+4. Run the install command:
+   - Execute the following command in command prompt to install the APK:
+     adb install "c:\Users\jinum\Expenso\app\build\app\outputs\flutter-apk\app-release.apk"
+
+============================================================
+METHOD 2: TRANSFER & INSTALL VIA LOCAL WI-FI (PYTHON SERVER)
+============================================================
+
+If USB drivers or ADB are not working, you can download the APK directly over your home Wi-Fi:
+
+1. Open a command prompt on your PC and find your PC's local IP address:
+   - Run this command:
+     ipconfig
+   - Look for "IPv4 Address" under your active Wi-Fi or Ethernet connection (usually starts with `192.168.x.x` or `10.x.x.x`).
+
+2. Start a temporary web server on your PC:
+   - Run this command:
+     python -m http.server 8000
+     (Keep this terminal window open).
+
+3. Download on your phone:
+   - Make sure your phone is connected to the same Wi-Fi network as your PC.
+   - Open Chrome or any browser on your phone.
+   - Enter this URL (replace with your PC's actual IPv4 Address):
+     http://<YOUR_PC_IP>:8000/app/build/app/outputs/flutter-apk/
+   - Tap on "app-release.apk" to download it.
+   - Once downloaded, tap the notification/file to install it.
+
+============================================================
+METHOD 3: INSTALL VIA USB FILE COPY (AUTOMATED OR MANUAL)
+============================================================
+
+If you want to copy the file directly over USB, use one of these options:
+
+Option A: Run the Automated Script
+----------------------------------
+1. Connect your phone to your PC via a USB cable.
+2. Set the connection type on your phone to "File Transfer" or "MTP" (usually accessible via the USB notification in the drawer).
+3. Open a command prompt on your PC and run:
+   powershell -ExecutionPolicy Bypass -File "c:\Users\jinum\Expenso\copy_to_usb.ps1"
+4. The script will find your phone and copy the APK to its "Download" folder.
+5. On your phone:
+   - Open the Files/File Manager app.
+   - Go to "Downloads".
+   - Tap "app-release.apk" and select "Install".
+
+Option B: Manual File Copy
+--------------------------
+1. Connect your phone to your PC via a USB cable.
+2. Set the connection type on your phone to "File Transfer" or "MTP".
+3. Open Windows Explorer (Win+E) and navigate to "This PC".
+4. Double-click on your connected Phone name, then go to "Internal shared storage" > "Download".
+5. Copy the APK file from your PC:
+   c:\Users\jinum\Expenso\app\build\app\outputs\flutter-apk\app-release.apk
+6. Paste it into your phone's "Download" folder.
+7. On your phone:
+   - Open the Files/File Manager app.
+   - Go to "Downloads".
+   - Tap "app-release.apk" and select "Install".

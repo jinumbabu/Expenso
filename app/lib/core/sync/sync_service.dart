@@ -1,17 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:encrypt/encrypt.dart' as enc;
-import 'package:dio/dio.dart';
-
+import 'package:googleapis/drive/v3.dart' as drive;
 import '../database/app_database.dart';
 import '../sync/backup_service.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../services/balance_engine.dart';
 
 class SyncConflict {
   final Transaction local;
@@ -43,11 +42,18 @@ class SyncService {
 
   // Perform a bidirectional sync of local database with Google Drive backup.
   // Returns conflicts that need manual user resolution.
-  Future<SyncResult> sync(String userId, {String? googleAccessToken}) async {
-    final metadata = await _backupService.getBackupMetadata(googleAccessToken: googleAccessToken);
+  Future<SyncResult> sync(String userId, {drive.DriveApi? driveApi}) async {
+    final metadata = await _backupService.getBackupMetadata(userId: userId, driveApi: driveApi);
     if (metadata == null) {
-      // No cloud backup exists yet. We perform a backup now to establish the initial cloud copy.
-      final size = await _backupService.backup(userId, googleAccessToken: googleAccessToken);
+      // No cloud backup exists yet. Update local pending transactions to synced before creating backup.
+      final localDb = _ref.read(databaseProvider);
+      final localTxs = await localDb.transactionDao.getTransactionsForUser(userId);
+      for (final tx in localTxs) {
+        if (tx.syncStatus == 'pending') {
+          await localDb.transactionDao.updateTransaction(tx.copyWith(syncStatus: 'synced'));
+        }
+      }
+      final size = await _backupService.backup(userId, driveApi: driveApi);
       debugPrint('SyncService: No remote backup found. Created initial backup of size $size bytes.');
       return SyncResult(conflicts: [], insertedCount: 0, updatedCount: 0);
     }
@@ -58,52 +64,36 @@ class SyncService {
 
     // Download logic
     List<int> encryptedData;
-    final isMock = googleAccessToken == null || googleAccessToken.startsWith('mock-') || googleAccessToken == 'google-id-token';
-    
-    if (isMock) {
-      // Retrieve from simulated local backup path
-      final docDir = await getApplicationDocumentsDirectory();
-      final backupFile = File(p.join(docDir.path, 'expenso_backup_simulated', 'expenso_backup_v1.enc'));
-      if (!await backupFile.exists()) {
-        // Fallback to uploading
-        await _backupService.backup(userId, googleAccessToken: googleAccessToken);
-        return SyncResult(conflicts: [], insertedCount: 0, updatedCount: 0);
-      }
-      encryptedData = await backupFile.readAsBytes();
-    } else {
-      // Downloader method from Google Drive (accessed indirectly by invoking restore's download logic)
-      // We can invoke _backupService restore or download
-      // Since _downloadFromGoogleDrive is private in BackupService, we can read it using a custom HTTP request 
-      // or we can invoke a reflection of it. But wait, BackupService has:
-      // Future<void> restore(String userId, {String? googleAccessToken})
-      // If we don't want to overwrite local DB during download, we can expose a download function or 
-      // replicate the download logic.
-      // Replicating download from backup service is extremely simple:
-      final fileId = metadata['file_id'] as String;
-      final dio = Dio();
-      final response = await dio.get<ResponseBody>(
-        'https://www.googleapis.com/drive/v3/files/$fileId',
-        queryParameters: {'alt': 'media'},
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: {'Authorization': 'Bearer $googleAccessToken'},
-        ),
-      );
-      if (response.statusCode == 200 && response.data != null) {
-        final builder = BytesBuilder();
-        await for (final chunk in response.data!.stream) {
-          builder.add(chunk);
-        }
-        encryptedData = builder.toBytes();
-      } else {
-        throw Exception('Failed to download sync database: HTTP ${response.statusCode}');
-      }
+    try {
+      encryptedData = await _backupService.downloadLatestBackupBytes(userId, driveApi: driveApi);
+    } catch (e) {
+      debugPrint('SyncService: No remote backup found or download failed: $e. Creating initial backup...');
+      final size = await _backupService.backup(userId, driveApi: driveApi);
+      debugPrint('SyncService: Created initial backup of size $size bytes.');
+      return SyncResult(conflicts: [], insertedCount: 0, updatedCount: 0);
     }
 
-    // Decrypt the remote database bytes
-    // Since _decryptDatabase is private in BackupService, let's extract the decryption logic:
-    // It reads the key from secure storage, gets the first 16 bytes for IV, and decrypts using AES/CBC.
-    final decryptedBytes = await _decryptRemoteBytes(encryptedData);
+    // Decrypt the remote database bytes using validation pipeline
+    List<int> decryptedBytes;
+    try {
+      final checksum = metadata['checksum'] as String?;
+      decryptedBytes = await _backupService.decryptAndValidateBackup(encryptedData, checksum, userId);
+    } catch (e) {
+      debugPrint('SyncService: Remote backup validation failed: $e');
+      debugPrint('SyncService: Treating remote backup as invalid/obsolete. Deleting from Google Drive and recreating...');
+
+      try {
+        await _backupService.deleteBackup(userId: userId, driveApi: driveApi);
+        debugPrint('SyncService: Deleted invalid/obsolete remote backup.');
+      } catch (err) {
+        debugPrint('SyncService: Failed to delete invalid cloud backup: $err');
+      }
+
+      final size = await _backupService.backup(userId, driveApi: driveApi);
+      debugPrint('SyncService: Uploaded fresh backup of size $size bytes.');
+      return SyncResult(conflicts: [], insertedCount: 0, updatedCount: 0);
+    }
+
     await tempFile.writeAsBytes(decryptedBytes, flush: true);
 
     // 2. Open both local and remote databases
@@ -131,7 +121,9 @@ class SyncService {
           // Transaction exists in remote but not locally.
           // Check if it was hard-deleted locally (not soft deleted).
           // For MVP, if it doesn't exist locally at all, we assume it's new from remote and insert it.
-          await localDb.transactionDao.insertTransaction(remoteTx.copyWith(syncStatus: 'synced'));
+          final txToInsert = remoteTx.copyWith(syncStatus: 'synced');
+          await localDb.transactionDao.insertTransaction(txToInsert);
+          await BalanceEngine(localDb).reconcileOnAdd(txToInsert);
           insertedCount++;
         } else {
           // Transaction exists in both. Compare fields and timestamps.
@@ -171,12 +163,16 @@ class SyncService {
                 conflicts.add(SyncConflict(local: conflictedTx, remote: remoteTx));
               } else {
                 // Content is identical, just update timestamp and status
-                await localDb.transactionDao.updateTransaction(remoteTx.copyWith(syncStatus: 'synced'));
+                final txToUpdate = remoteTx.copyWith(syncStatus: 'synced');
+                await BalanceEngine(localDb).reconcileOnEdit(localTx, txToUpdate);
+                await localDb.transactionDao.updateTransaction(txToUpdate);
                 updatedCount++;
               }
             } else {
               // Remote is newer and local is already synced or not modified. Overwrite local.
-              await localDb.transactionDao.updateTransaction(remoteTx.copyWith(syncStatus: 'synced'));
+              final txToUpdate = remoteTx.copyWith(syncStatus: 'synced');
+              await BalanceEngine(localDb).reconcileOnEdit(localTx, txToUpdate);
+              await localDb.transactionDao.updateTransaction(txToUpdate);
               updatedCount++;
             }
           } else {
@@ -224,7 +220,7 @@ class SyncService {
       }
 
       // Perform backup upload
-      await _backupService.backup(userId, googleAccessToken: googleAccessToken);
+      await _backupService.backup(userId, driveApi: driveApi);
       debugPrint('SyncService: Sync complete. Merged database uploaded successfully.');
     } else {
       debugPrint('SyncService: Sync completed with ${conflicts.length} conflicts.');
@@ -237,36 +233,8 @@ class SyncService {
     );
   }
 
-  // Decryption helper using the master key from secure storage
-  Future<List<int>> _decryptRemoteBytes(List<int> encryptedBytes) async {
-    final secureStorage = _ref.read(secureStorageProvider);
-    final base64Key = await secureStorage.getBackupEncryptionKey();
-    if (base64Key == null) {
-      throw Exception('Backup encryption key not found.');
-    }
 
-    final key = enc.Key.fromBase64(base64Key);
-    final ivBytes = encryptedBytes.sublist(0, 16);
-    final cipherBytes = encryptedBytes.sublist(16);
-    
-    final iv = enc.IV(Uint8List.fromList(ivBytes));
-    final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
-    
-    final decryptedBytes = encrypter.decryptBytes(
-      enc.Encrypted(Uint8List.fromList(cipherBytes)),
-      iv: iv,
-    );
-
-    final payloadString = utf8.decode(decryptedBytes);
-    final payloadMap = jsonDecode(payloadString) as Map<String, dynamic>;
-    
-    final dbBase64 = payloadMap['database'] as String;
-    return base64Decode(dbBase64);
-  }
 }
-
-// Add Dio dependency import
-final Provider<Dio> dioProvider = Provider<Dio>((ref) => Dio());
 
 // Riverpod Provider
 final Provider<SyncService> syncServiceProvider = Provider<SyncService>((ref) {

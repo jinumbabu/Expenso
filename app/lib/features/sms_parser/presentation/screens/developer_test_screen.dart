@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' show Value;
 
@@ -12,6 +12,8 @@ import '../../../../core/services/sms_agent.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../../accounts/presentation/providers/accounts_provider.dart';
+import '../../../../core/services/duplicate_scanner.dart';
 
 class DeveloperTestScreen extends ConsumerStatefulWidget {
   const DeveloperTestScreen({super.key});
@@ -21,7 +23,6 @@ class DeveloperTestScreen extends ConsumerStatefulWidget {
 }
 
 class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
-  PermissionStatus _smsPermissionStatus = PermissionStatus.denied;
   int _smsTxCount = 0;
   String _testInput = '';
   SmsAgentResult? _testResult;
@@ -30,17 +31,7 @@ class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
   @override
   void initState() {
     super.initState();
-    _checkPermission();
     _loadStats();
-  }
-
-  Future<void> _checkPermission() async {
-    final status = await Permission.sms.status;
-    if (mounted) {
-      setState(() {
-        _smsPermissionStatus = status;
-      });
-    }
   }
 
   Future<void> _loadStats() async {
@@ -104,27 +95,68 @@ class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
       // Drift database creates defaults on first load or migrator, we can force trigger migrations or clear.
       // Simply closing and letting openConnection handle it is one option, but clearAllData keeps the connection alive.
       // Let's seed categories and payment methods manually to ensure they are present!
-      final defaultCategories = [
-        {'name': 'Food', 'type': 'expense', 'icon': 'fastfood'},
-        {'name': 'Fuel', 'type': 'expense', 'icon': 'local_gas_station'},
-        {'name': 'Grocery', 'type': 'expense', 'icon': 'shopping_cart'},
-        {'name': 'Utilities', 'type': 'expense', 'icon': 'receipt_long'},
-        {'name': 'Shopping', 'type': 'expense', 'icon': 'shopping_bag'},
-        {'name': 'Entertainment', 'type': 'expense', 'icon': 'movie'},
-        {'name': 'Salary', 'type': 'income', 'icon': 'payments'},
-        {'name': 'Freelance', 'type': 'income', 'icon': 'work'},
-        {'name': 'Investment', 'type': 'expense', 'icon': 'trending_up'},
-        {'name': 'Transfer', 'type': 'transfer', 'icon': 'swap_horiz'},
+      final parentCategories = [
+        {'id': const Uuid().v4(), 'name': 'Food', 'type': 'expense', 'icon': 'fastfood', 'color': '0xFFFFA500'},
+        {'id': const Uuid().v4(), 'name': 'Travel', 'type': 'expense', 'icon': 'flight', 'color': '0xFF0066FF'},
+        {'id': const Uuid().v4(), 'name': 'Shopping', 'type': 'expense', 'icon': 'shopping_bag', 'color': '0xFF8A2BE2'},
+        {'id': const Uuid().v4(), 'name': 'Utilities', 'type': 'expense', 'icon': 'receipt_long', 'color': '0xFFFFB703'},
+        {'id': const Uuid().v4(), 'name': 'Entertainment', 'type': 'expense', 'icon': 'movie', 'color': '0xFFFF3B30'},
+        {'id': const Uuid().v4(), 'name': 'Salary', 'type': 'income', 'icon': 'payments', 'color': '0xFF00FF88'},
+        {'id': const Uuid().v4(), 'name': 'Freelance', 'type': 'income', 'icon': 'work', 'color': '0xFF00FF88'},
+        {'id': const Uuid().v4(), 'name': 'Investment', 'type': 'expense', 'icon': 'trending_up', 'color': '0xFF00E5FF'},
+        {'id': const Uuid().v4(), 'name': 'Transfer', 'type': 'transfer', 'icon': 'swap_horiz', 'color': '0xFF6366F1'},
       ];
 
-      for (var cat in defaultCategories) {
+      for (var parent in parentCategories) {
+        await db.into(db.categories).insert(
+          CategoriesCompanion.insert(
+            id: parent['id']!,
+            userId: 'system',
+            name: parent['name']!,
+            type: parent['type']!,
+            icon: Value(parent['icon']),
+            color: Value(parent['color']),
+            isSystemDefault: const Value(true),
+            createdAt: now,
+          ),
+        );
+      }
+
+      String getParentId(String name) => parentCategories.firstWhere((p) => p['name'] == name)['id']!;
+
+      final subcategoriesData = [
+        {'name': 'Restaurant', 'parent': 'Food', 'type': 'expense', 'icon': 'restaurant', 'color': '0xFFFFA500'},
+        {'name': 'Cafe', 'parent': 'Food', 'type': 'expense', 'icon': 'coffee', 'color': '0xFFFFA500'},
+        {'name': 'Snacks', 'parent': 'Food', 'type': 'expense', 'icon': 'bakery', 'color': '0xFFFFA500'},
+        {'name': 'Fruits', 'parent': 'Food', 'type': 'expense', 'icon': 'spa', 'color': '0xFFFFA500'},
+        
+        {'name': 'Fuel', 'parent': 'Travel', 'type': 'expense', 'icon': 'local_gas_station', 'color': '0xFF0066FF'},
+        {'name': 'Hotel', 'parent': 'Travel', 'type': 'expense', 'icon': 'hotel', 'color': '0xFF0066FF'},
+        {'name': 'Flight', 'parent': 'Travel', 'type': 'expense', 'icon': 'flight', 'color': '0xFF0066FF'},
+        {'name': 'Taxi', 'parent': 'Travel', 'type': 'expense', 'icon': 'local_taxi', 'color': '0xFF0066FF'},
+
+        {'name': 'Grocery', 'parent': 'Shopping', 'type': 'expense', 'icon': 'shopping_cart', 'color': '0xFF8A2BE2'},
+        {'name': 'Amazon', 'parent': 'Shopping', 'type': 'expense', 'icon': 'shopping_bag', 'color': '0xFF8A2BE2'},
+        {'name': 'Flipkart', 'parent': 'Shopping', 'type': 'expense', 'icon': 'shopping_bag', 'color': '0xFF8A2BE2'},
+        {'name': 'Clothes', 'parent': 'Shopping', 'type': 'expense', 'icon': 'checkroom', 'color': '0xFF8A2BE2'},
+
+        {'name': 'Electricity Bill', 'parent': 'Utilities', 'type': 'expense', 'icon': 'electric_bolt', 'color': '0xFFFFB703'},
+        {'name': 'Water Bill', 'parent': 'Utilities', 'type': 'expense', 'icon': 'water_drop', 'color': '0xFFFFB703'},
+        {'name': 'Mobile Recharge', 'parent': 'Utilities', 'type': 'expense', 'icon': 'phone_android', 'color': '0xFFFFB703'},
+        {'name': 'Internet', 'parent': 'Utilities', 'type': 'expense', 'icon': 'wifi', 'color': '0xFFFFB703'},
+        {'name': 'Gas Bill', 'parent': 'Utilities', 'type': 'expense', 'icon': 'local_fire_department', 'color': '0xFFFFB703'},
+      ];
+
+      for (var sub in subcategoriesData) {
         await db.into(db.categories).insert(
           CategoriesCompanion.insert(
             id: const Uuid().v4(),
             userId: 'system',
-            name: cat['name']!,
-            type: cat['type']!,
-            icon: Value(cat['icon']),
+            name: sub['name']!,
+            type: sub['type']!,
+            parentId: Value(getParentId(sub['parent']!)),
+            icon: Value(sub['icon']),
+            color: Value(sub['color']),
             isSystemDefault: const Value(true),
             createdAt: now,
           ),
@@ -152,6 +184,7 @@ class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
       }
 
       ref.invalidate(expenseListNotifierProvider);
+      ref.invalidate(accountsProvider);
       ref.invalidate(unrecognizedMessagesStreamProvider);
       await _loadStats();
 
@@ -221,7 +254,15 @@ class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _buildStatRow('Permission Status', _smsPermissionStatus.toString().replaceAll('PermissionStatus.', '').toUpperCase()),
+                  _buildStatRow('SMS Permission Status', scannerState.smsPermissionStatus.toString().replaceAll('PermissionStatus.', '').toUpperCase()),
+                  const Divider(color: Colors.white10, height: 16),
+                  _buildStatRow('Notification Status', scannerState.notificationPermissionStatus.toString().replaceAll('PermissionStatus.', '').toUpperCase()),
+                  const Divider(color: Colors.white10, height: 16),
+                  _buildStatRow('Auto-Import Status', scannerState.autoImportEnabled ? 'ENABLED' : 'DISABLED'),
+                  const Divider(color: Colors.white10, height: 16),
+                  _buildStatRow('Last Request Timestamp', scannerState.lastPermissionRequestTime != null ? DateFormat('yyyy-MM-dd HH:mm:ss').format(scannerState.lastPermissionRequestTime!) : 'NEVER'),
+                  const Divider(color: Colors.white10, height: 16),
+                  _buildStatRow('Inbox Accessibility', scannerState.isInboxAccessible ? 'ACCESSIBLE' : 'BLOCKED / NO ACCESS'),
                   const Divider(color: Colors.white10, height: 16),
                   _buildStatRow('Total SMS Transactions', '$_smsTxCount'),
                   const Divider(color: Colors.white10, height: 16),
@@ -261,6 +302,56 @@ class _DeveloperTestScreenState extends ConsumerState<DeveloperTestScreen> {
               onPressed: _clearAllDatabase,
               icon: const Icon(Icons.refresh),
               label: const Text('Rebuild Database (Reset)', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.withOpacity(0.2),
+                foregroundColor: Colors.amberAccent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () async {
+                final auth = ref.read(authProvider);
+                final userId = auth.user?.id;
+                if (userId == null) return;
+                
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: Colors.amberAccent),
+                  ),
+                );
+
+                final scanner = ref.read(duplicateScannerProvider);
+                final mergedCount = await scanner.scanAndCleanupDuplicates(userId);
+                
+                if (context.mounted) {
+                  Navigator.pop(context); // Dismiss loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Duplicate Scan Completed! Merged $mergedCount duplicate transaction(s).'),
+                      backgroundColor: Colors.amber.shade800,
+                    ),
+                  );
+                  await _loadStats();
+                }
+              },
+              icon: const Icon(Icons.cleaning_services_rounded),
+              label: const Text('Run Duplicate Scanner', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple.withOpacity(0.2),
+                foregroundColor: Colors.purpleAccent,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () => context.push('/diagnostics'),
+              icon: const Icon(Icons.speed_outlined),
+              label: const Text('Open Cloud Diagnostics', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 24),
 

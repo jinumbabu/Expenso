@@ -8,6 +8,7 @@ import '../../../../shared/utils/icon_mapper.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../providers/budget_provider.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/privacy_text.dart';
 
 class BudgetsScreen extends ConsumerWidget {
   const BudgetsScreen({super.key});
@@ -209,14 +210,16 @@ class BudgetsScreen extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Spent: ${_formatMoney(status.spentAmount)}',
+                PrivacyText(
+                  rawValue: 'Spent: ${_formatMoney(status.spentAmount)}',
+                  isDashboard: true,
                   style: const TextStyle(color: Colors.white60, fontSize: 13),
                 ),
-                Text(
-                  status.isOverBudget
+                PrivacyText(
+                  rawValue: status.isOverBudget
                       ? 'Over limit: ${_formatMoney(-status.remainingAmount)}'
                       : 'Remaining: ${_formatMoney(status.remainingAmount)}',
+                  isDashboard: true,
                   style: TextStyle(
                     color: status.isOverBudget ? const Color(0xFFFF3B30) : const Color(0xFF00E5FF),
                     fontSize: 13,
@@ -268,8 +271,9 @@ class BudgetsScreen extends ConsumerWidget {
                             status.category?.name ?? 'Category Limit',
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5),
                           ),
-                          Text(
-                            _formatMoney(status.budget.amount),
+                          PrivacyText(
+                            rawValue: _formatMoney(status.budget.amount),
+                            isDashboard: true,
                             style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 14.5),
                           ),
                         ],
@@ -278,14 +282,16 @@ class BudgetsScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Spent ${_formatMoney(status.spentAmount)}',
+                          PrivacyText(
+                            rawValue: 'Spent ${_formatMoney(status.spentAmount)}',
+                            isDashboard: true,
                             style: const TextStyle(color: Colors.white30, fontSize: 12),
                           ),
-                          Text(
-                            status.isOverBudget
+                          PrivacyText(
+                            rawValue: status.isOverBudget
                                 ? 'Over: ${_formatMoney(-status.remainingAmount)}'
                                 : 'Left: ${_formatMoney(status.remainingAmount)}',
+                            isDashboard: true,
                             style: TextStyle(
                               color: status.isOverBudget ? const Color(0xFFFF3B30) : Colors.white60,
                               fontSize: 12,

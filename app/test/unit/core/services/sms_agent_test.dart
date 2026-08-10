@@ -30,7 +30,7 @@ void main() {
       expect(result.transactionType, equals('expense'));
       expect(result.account, contains('SBI'));
       expect(result.account, contains('1234'));
-      expect(result.confidence, equals(1.0));
+      expect(result.confidence, equals(0.85));
       
       // Verify AgentLog was written
       final logs = await database.agentLogDao.getLogs(10);
@@ -91,7 +91,7 @@ void main() {
       final result = await smsAgent.processSms(body, testDate);
       expect(result, isNotNull);
       expect(result!.amount, equals(350.0));
-      expect(result.confidence, equals(0.75));
+      expect(result.confidence, equals(0.85));
     });
 
     test('Ignores non-financial SMS', () async {

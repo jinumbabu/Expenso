@@ -33,4 +33,7 @@ class NotificationDao extends DatabaseAccessor<AppDatabase> with _$NotificationD
 
   Future<int> deleteNotification(String id) =>
       (delete(appNotifications)..where((t) => t.id.equals(id))).go();
+
+  Future<int> deleteAllNotifications(String userId) =>
+      (delete(appNotifications)..where((t) => t.userId.equals(userId))).go();
 }

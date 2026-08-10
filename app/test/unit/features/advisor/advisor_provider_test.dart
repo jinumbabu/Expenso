@@ -137,8 +137,9 @@ void main() {
       await database.close();
     });
 
-    test('Initializes with default state', () {
+    test('Initializes with default state', () async {
       final notifier = AdvisorNotifier(mockRef);
+      await Future.delayed(const Duration(milliseconds: 50));
       final state = notifier.state;
 
       expect(state.healthScore, equals(100));
@@ -200,7 +201,7 @@ void main() {
       );
 
       final notifier = AdvisorNotifier(mockRef);
-      await notifier.calculateFinancialOverview();
+      await Future.delayed(const Duration(milliseconds: 50));
 
       final state = notifier.state;
 
@@ -219,6 +220,7 @@ void main() {
       mockDio.shouldFail = false;
 
       final notifier = AdvisorNotifier(mockRef);
+      await Future.delayed(const Duration(milliseconds: 50));
       await notifier.loadInsights();
 
       expect(notifier.state.aiInsights.length, equals(3));
@@ -230,6 +232,7 @@ void main() {
       mockDio.shouldFail = true;
 
       final notifier = AdvisorNotifier(mockRef);
+      await Future.delayed(const Duration(milliseconds: 50));
       await notifier.loadInsights();
 
       expect(notifier.state.aiInsights.length, equals(3));

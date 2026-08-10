@@ -133,8 +133,11 @@ void main() {
 
       // Verify page titles and chart sections
       expect(find.text('Analytics Dashboard'), findsOneWidget);
-      expect(find.text('INCOME VS EXPENSES'), findsOneWidget);
+      expect(find.text('CASH FLOW TREND'), findsOneWidget);
       expect(find.text('CATEGORY SHARE'), findsOneWidget);
+      expect(find.text('PAYMENT METHOD SPLIT'), findsOneWidget);
+      expect(find.text('Income'), findsAtLeastNWidgets(1));
+      expect(find.text('Expense'), findsAtLeastNWidgets(1));
 
       await tester.pump();
 
@@ -143,8 +146,8 @@ void main() {
       expect(find.text('Fuel'), findsOneWidget);
       
       // Verify formatted spends are rendered
-      expect(find.text('₹1,500'), findsOneWidget);
-      expect(find.text('₹800'), findsOneWidget);
+      expect(find.text('₹1,500 (65%)'), findsOneWidget);
+      expect(find.text('₹800 (35%)'), findsOneWidget);
 
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();

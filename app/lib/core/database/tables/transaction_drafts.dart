@@ -16,6 +16,11 @@ class TransactionDrafts extends Table {
   TextColumn get smsBody => text().nullable().named('sms_body')();
   TextColumn get originalSmsId => text().nullable().named('original_sms_id')();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
+  TextColumn get categoryId => text().nullable().named('category_id')();
+  TextColumn get category => text().nullable()();
+  RealColumn get confidenceScore => real().nullable().named('confidence_score')();
+  TextColumn get matchingTransactionId => text().nullable().named('matching_transaction_id')();
+  TextColumn get supportingSms => text().nullable().named('supporting_sms')();
 
   @override
   Set<Column> get primaryKey => {id};

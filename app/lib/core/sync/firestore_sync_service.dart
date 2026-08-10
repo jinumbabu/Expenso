@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import '../database/app_database.dart';
+import '../security/secure_storage_service.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../services/balance_engine.dart';
 
 class FirestoreSyncService {
   final Ref _ref;
@@ -44,6 +46,7 @@ class FirestoreSyncService {
                 isDefault: data['isDefault'] as bool,
                 createdAt: DateTime.parse(data['createdAt'] as String),
                 updatedAt: remoteUpdatedAt,
+                isEstimated: data['isEstimated'] as bool? ?? false,
               );
               await db.accountDao.insertAccount(account);
             } else if (remoteUpdatedAt.isAfter(local.updatedAt)) {
@@ -72,6 +75,10 @@ class FirestoreSyncService {
           final doc = change.doc;
           final data = doc.data();
           if (change.type == DocumentChangeType.removed || data == null) {
+            final local = await db.transactionDao.getTransactionById(doc.id);
+            if (local != null) {
+              await BalanceEngine(db).reconcileOnDelete(local);
+            }
             await db.transactionDao.hardDeleteTransaction(doc.id);
             continue;
           }
@@ -104,7 +111,9 @@ class FirestoreSyncService {
                 deletedAt: remoteDeletedAt,
               );
               await db.transactionDao.insertTransaction(tx);
+              await BalanceEngine(db).reconcileOnAdd(tx);
             } else if (remoteDeletedAt != null && local.deletedAt == null) {
+              await BalanceEngine(db).reconcileOnDelete(local);
               await db.transactionDao.hardDeleteTransaction(doc.id);
             } else if (remoteUpdatedAt.isAfter(local.updatedAt)) {
               // Remote is newer, check if local has pending changes (Conflict!)
@@ -136,6 +145,7 @@ class FirestoreSyncService {
                 deletedAt: Value(remoteDeletedAt),
                 syncStatus: 'synced',
               );
+              await BalanceEngine(db).reconcileOnEdit(local, tx);
               await db.transactionDao.updateTransaction(tx);
             } else if (local.updatedAt.isAfter(remoteUpdatedAt) && local.syncStatus == 'pending') {
               await uploadTransaction(local);
@@ -609,6 +619,7 @@ class FirestoreSyncService {
             isDefault: data['isDefault'] as bool,
             createdAt: DateTime.parse(data['createdAt'] as String),
             updatedAt: remoteUpdatedAt,
+            isEstimated: data['isEstimated'] as bool? ?? false,
           );
           await db.accountDao.insertAccount(account);
         } else if (remoteUpdatedAt.isAfter(local.updatedAt)) {
@@ -654,7 +665,9 @@ class FirestoreSyncService {
             deletedAt: remoteDeletedAt,
           );
           await db.transactionDao.insertTransaction(tx);
+          await BalanceEngine(db).reconcileOnAdd(tx);
         } else if (remoteDeletedAt != null && local.deletedAt == null) {
+          await BalanceEngine(db).reconcileOnDelete(local);
           await db.transactionDao.hardDeleteTransaction(doc.id);
         } else if (remoteUpdatedAt.isAfter(local.updatedAt)) {
           final tx = local.copyWith(
@@ -669,6 +682,7 @@ class FirestoreSyncService {
             deletedAt: Value(remoteDeletedAt),
             syncStatus: 'synced',
           );
+          await BalanceEngine(db).reconcileOnEdit(local, tx);
           await db.transactionDao.updateTransaction(tx);
         }
       }
@@ -794,6 +808,128 @@ class FirestoreSyncService {
       }
     } catch (e) {
       debugPrint('Error in syncCloudToLocal: $e');
+    }
+  }
+
+  Future<void> syncUserProfileToCloud(String userId) async {
+    try {
+      final secureStorage = _ref.read(secureStorageProvider);
+      
+      final customName = await secureStorage.getCustomDisplayName(userId: userId);
+      final onboardingCompleted = await secureStorage.read('onboarding_completed_$userId');
+      final biometricEnabled = await secureStorage.read('biometric_enabled_$userId');
+      final pinHash = await secureStorage.read('pin_hash_$userId');
+      final pinSalt = await secureStorage.read('pin_salt_$userId');
+      final pinLength = await secureStorage.read('pin_length_$userId');
+      final pinEnabled = pinHash != null ? 'true' : 'false';
+      
+      final backupSchedule = await secureStorage.getBackupSchedule();
+      final backupWifiOnly = await secureStorage.getBackupWifiOnly();
+      final backupChargingOnly = await secureStorage.getBackupChargingOnly();
+      final googleDriveBackupEnabled = await secureStorage.getGoogleDriveBackupEnabled();
+
+      final authState = _ref.read(authProvider);
+      final googleId = authState.user?.googleId;
+      final email = authState.user?.email;
+      final photoUrl = authState.user?.photoUrl;
+
+      await _firestore.collection('users').doc(userId).set({
+        'profile': {
+          'customDisplayName': customName,
+          'displayName': authState.user?.displayName,
+          'googleId': googleId,
+          'email': email,
+          'photoUrl': photoUrl,
+          'onboardingCompleted': onboardingCompleted,
+        },
+        'security': {
+          'pinEnabled': pinEnabled,
+          'pinHash': pinHash,
+          'pinSalt': pinSalt,
+          'pinLength': pinLength,
+          'biometricEnabled': biometricEnabled,
+        },
+        'backupPreferences': {
+          'backupSchedule': backupSchedule,
+          'backupWifiOnly': backupWifiOnly?.toString(),
+          'backupChargingOnly': backupChargingOnly?.toString(),
+          'googleDriveBackupEnabled': googleDriveBackupEnabled?.toString(),
+        },
+        'updatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+      debugPrint('FirestoreSyncService: User profile synced to cloud for $userId');
+    } catch (e) {
+      debugPrint('FirestoreSyncService: Error syncing user profile to cloud: $e');
+    }
+  }
+
+  Future<void> syncUserProfileFromCloud(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      final data = doc.data();
+      if (data == null) return;
+
+      final secureStorage = _ref.read(secureStorageProvider);
+
+      // Restore profile
+      final profile = data['profile'] as Map<String, dynamic>?;
+      if (profile != null) {
+        final customName = profile['customDisplayName'] as String?;
+        if (customName != null) {
+          await secureStorage.saveCustomDisplayName(customName, userId: userId);
+          final db = _ref.read(databaseProvider);
+          await db.customStatement('UPDATE users SET display_name = ? WHERE id = ?', [customName, userId]);
+        }
+        final onboardingCompleted = profile['onboardingCompleted'] as String?;
+        if (onboardingCompleted != null) {
+          await secureStorage.write('onboarding_completed_$userId', onboardingCompleted);
+        }
+      }
+
+      // Restore security options
+      final security = data['security'] as Map<String, dynamic>?;
+      if (security != null) {
+        final biometricEnabled = security['biometricEnabled'] as String?;
+        if (biometricEnabled != null) {
+          await secureStorage.write('biometric_enabled_$userId', biometricEnabled);
+        }
+        final pinHash = security['pinHash'] as String?;
+        final pinSalt = security['pinSalt'] as String?;
+        final pinLength = security['pinLength'] as String?;
+        if (pinHash != null) {
+          await secureStorage.write('pin_hash_$userId', pinHash);
+        }
+        if (pinSalt != null) {
+          await secureStorage.write('pin_salt_$userId', pinSalt);
+        }
+        if (pinLength != null) {
+          await secureStorage.write('pin_length_$userId', pinLength);
+        }
+      }
+
+      // Restore backup preferences
+      final backup = data['backupPreferences'] as Map<String, dynamic>?;
+      if (backup != null) {
+        final schedule = backup['backupSchedule'] as String?;
+        if (schedule != null) {
+          await secureStorage.saveBackupSchedule(schedule);
+        }
+        final wifiOnly = backup['backupWifiOnly'] as String?;
+        if (wifiOnly != null) {
+          await secureStorage.saveBackupWifiOnly(wifiOnly == 'true');
+        }
+        final chargingOnly = backup['backupChargingOnly'] as String?;
+        if (chargingOnly != null) {
+          await secureStorage.saveBackupChargingOnly(chargingOnly == 'true');
+        }
+        final gdEnabled = backup['googleDriveBackupEnabled'] as String?;
+        if (gdEnabled != null) {
+          await secureStorage.saveGoogleDriveBackupEnabled(gdEnabled == 'true');
+        }
+      }
+      debugPrint('FirestoreSyncService: User profile restored from cloud for $userId');
+    } catch (e) {
+      debugPrint('FirestoreSyncService: Error restoring user profile from cloud: $e');
     }
   }
 }

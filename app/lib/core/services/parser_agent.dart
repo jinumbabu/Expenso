@@ -58,7 +58,7 @@ class ParserAgent {
   static final RegExp _dateRegExp = RegExp(r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})');
 
   Future<ParserAgentResult?> parseText(String text, {String? defaultType}) async {
-    final privacyMode = _ref.read(privacyModeProvider);
+    final privacyMode = _ref.read(aiPrivacyModeProvider);
     dev.log('ParserAgent: Parsing using privacy mode: $privacyMode');
 
     // 1. Run Local Pre-checks or Local Rule Engine first

@@ -357,12 +357,31 @@ async def generate_insights(
     ]
     return InsightsResponse(insights=insights)
 
+class OcrItem(BaseModel):
+    name: str
+    quantity: int
+    unitPrice: float
+    discount: float
+
 class OcrResponse(BaseModel):
-    merchant: Optional[str]
-    amount: float
-    category: Optional[str]
-    date: str
-    confidence: float
+    merchant: Optional[str] = "Scanned Store"
+    merchantAddress: Optional[str] = None
+    date: str = "today"
+    time: Optional[str] = None
+    amount: float = 0.0
+    tax: float = 0.0
+    currency: str = "INR"
+    paymentMethod: str = "Cash"
+    cardType: Optional[str] = None
+    last4Digits: Optional[str] = None
+    receiptNumber: Optional[str] = None
+    invoiceNumber: Optional[str] = None
+    discount: float = 0.0
+    tips: float = 0.0
+    category: Optional[str] = "Shopping"
+    accountSuggestion: Optional[str] = None
+    confidence: float = 0.90
+    items: List[OcrItem] = []
 
 @router.post("/ocr", response_model=OcrResponse)
 async def scan_receipt(
@@ -381,10 +400,30 @@ async def scan_receipt(
         Analyze this receipt image and extract the following details in JSON format conforming exactly to this structure:
         {
           "merchant": string (the name of the store or merchant, e.g. "Walmart" or null),
-          "amount": number (the total transaction amount as a float, e.g. 42.50. If not found or failed, return 0.0),
-          "category": string (Must be one of: Food, Fuel, Grocery, Utilities, Shopping, Entertainment, Salary, Freelance, Investment, Transfer, or null),
+          "merchantAddress": string (address of the store, or null),
           "date": string (format: YYYY-MM-DD. If not found, use "today"),
-          "confidence": number (float between 0.0 and 1.0 representing extraction confidence)
+          "time": string (format: HH:MM, or null),
+          "amount": number (the total transaction amount as a float, e.g. 42.50. If not found or failed, return 0.0),
+          "tax": number (the tax amount as a float, or 0.0),
+          "currency": string (e.g. "INR", "USD", default: "INR"),
+          "paymentMethod": string (UPI, Credit Card, Debit Card, Cash, or Net Banking),
+          "cardType": string (Visa, Mastercard, Rupay, Amex, etc. or null),
+          "last4Digits": string (last 4 digits of the card used, or null),
+          "receiptNumber": string (or null),
+          "invoiceNumber": string (or null),
+          "discount": number (discount amount as a float, or 0.0),
+          "tips": number (tips amount as a float, or 0.0),
+          "category": string (Must be one of: Food, Fuel, Grocery, Utilities, Shopping, Entertainment, Salary, Freelance, Investment, Transfer, Travel, Healthcare, Education, Bills, Other),
+          "accountSuggestion": string (specific bank or credit card name if visible on the receipt, e.g. "HDFC Bank"),
+          "confidence": number (float between 0.0 and 1.0 representing extraction confidence),
+          "items": [
+            {
+              "name": string (item name),
+              "quantity": number (integer),
+              "unitPrice": number (float),
+              "discount": number (float)
+            }
+          ]
         }
         """
 
@@ -416,12 +455,33 @@ async def scan_receipt(
                     raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
                     import json
                     parsed = json.loads(raw_text.strip())
+                    parsed_items = []
+                    for item in parsed.get("items", []):
+                        parsed_items.append(OcrItem(
+                            name=item.get("name") or item.get("item_name") or "Item",
+                            quantity=int(item.get("quantity") or 1),
+                            unitPrice=float(item.get("unitPrice") or item.get("unit_price") or 0.0),
+                            discount=float(item.get("discount") or 0.0)
+                        ))
                     return OcrResponse(
                         merchant=parsed.get("merchant") or "Scanned Store",
-                        amount=float(parsed.get("amount") or 0.0),
-                        category=parsed.get("category") or "Shopping",
+                        merchantAddress=parsed.get("merchantAddress"),
                         date=parsed.get("date") or "today",
-                        confidence=float(parsed.get("confidence") or 0.90)
+                        time=parsed.get("time"),
+                        amount=float(parsed.get("amount") or 0.0),
+                        tax=float(parsed.get("tax") or 0.0),
+                        currency=parsed.get("currency") or "INR",
+                        paymentMethod=parsed.get("paymentMethod") or "Cash",
+                        cardType=parsed.get("cardType"),
+                        last4Digits=parsed.get("last4Digits") or parsed.get("last_4_digits"),
+                        receiptNumber=parsed.get("receiptNumber") or parsed.get("receipt_number"),
+                        invoiceNumber=parsed.get("invoiceNumber") or parsed.get("invoice_number"),
+                        discount=float(parsed.get("discount") or 0.0),
+                        tips=float(parsed.get("tips") or parsed.get("tip") or 0.0),
+                        category=parsed.get("category") or "Shopping",
+                        accountSuggestion=parsed.get("accountSuggestion") or parsed.get("account_suggestion"),
+                        confidence=float(parsed.get("confidence") or 0.90),
+                        items=parsed_items
                     )
         except Exception as e:
             print(f"Gemini OCR API call failed: {e}")
@@ -429,8 +489,27 @@ async def scan_receipt(
     # Fallback/Mock response (Local mode or Gemini failed)
     return OcrResponse(
         merchant="Walmart (Simulated)",
-        amount=1250.00,
-        category="Grocery",
+        merchantAddress="123 Supercenter Dr, Bentonville, AR",
         date="today",
-        confidence=0.85
+        time="14:30",
+        amount=1250.00,
+        tax=50.00,
+        currency="INR",
+        paymentMethod="Credit Card",
+        cardType="Visa",
+        last4Digits="4321",
+        receiptNumber="REC-98765",
+        invoiceNumber="INV-12345",
+        discount=100.00,
+        tips=0.0,
+        category="Grocery",
+        accountSuggestion="SBI Credit Card",
+        confidence=0.85,
+        items=[
+            OcrItem(name="Apples 1kg", quantity=1, unitPrice=150.00, discount=0.0),
+            OcrItem(name="Milk 2L", quantity=2, unitPrice=90.00, discount=10.0),
+            OcrItem(name="Rice 5kg", quantity=1, unitPrice=920.00, discount=90.0),
+        ]
     )
+
+

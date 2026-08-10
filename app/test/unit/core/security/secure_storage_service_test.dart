@@ -128,5 +128,33 @@ void main() {
       expect(await secureStorageService.getRefreshToken(), isNull);
       expect(await secureStorageService.getUserId(), isNull);
     });
+
+    test('getOrCreateDatabaseKey creates deterministic key', () async {
+      final key1 = await secureStorageService.getOrCreateDatabaseKey(userId: 'user_A');
+      final key2 = await secureStorageService.getOrCreateDatabaseKey(userId: 'user_A');
+      expect(key1, equals(key2));
+      expect(key1.isNotEmpty, isTrue);
+
+      final keyB = await secureStorageService.getOrCreateDatabaseKey(userId: 'user_B');
+      expect(key1, isNot(equals(keyB)));
+    });
+
+    test('getOrCreateBackupEncryptionKey creates deterministic key', () async {
+      final key1 = await secureStorageService.getOrCreateBackupEncryptionKey(userId: 'user_A');
+      final key2 = await secureStorageService.getOrCreateBackupEncryptionKey(userId: 'user_A');
+      expect(key1, equals(key2));
+      expect(key1.isNotEmpty, isTrue);
+
+      final keyB = await secureStorageService.getOrCreateBackupEncryptionKey(userId: 'user_B');
+      expect(key1, isNot(equals(keyB)));
+    });
+
+    test('Custom display name operations', () async {
+      expect(await secureStorageService.getCustomDisplayName(userId: 'user-123'), isNull);
+      await secureStorageService.saveCustomDisplayName('Custom Jinu', userId: 'user-123');
+      expect(await secureStorageService.getCustomDisplayName(userId: 'user-123'), equals('Custom Jinu'));
+      await secureStorageService.deleteCustomDisplayName(userId: 'user-123');
+      expect(await secureStorageService.getCustomDisplayName(userId: 'user-123'), isNull);
+    });
   });
 }

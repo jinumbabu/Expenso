@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../shared/widgets/brand_logo.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../providers/auth_provider.dart';
-
+import '../../../../core/security/secure_storage_service.dart';
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -23,38 +23,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   late Animation<double> _fadeInAnimation;
   late Animation<double> _glowAnimation;
   bool _showDevPanel = Platform.environment.containsKey('FLUTTER_TEST');
+  bool _privacyAccepted = false;
+  static const String _privacyVersion = '1.0';
+
+  Future<void> _checkPolicyStatus() async {
+    final secureStorage = ref.read(secureStorageProvider);
+    final accepted = await secureStorage.read('privacy_accepted');
+    final version = await secureStorage.read('privacy_accepted_version');
+    if (accepted == 'true' && version == _privacyVersion) {
+      setState(() {
+        _privacyAccepted = true;
+      });
+    }
+  }
+
+  Future<void> _savePolicyAcceptance(String userId) async {
+    final secureStorage = ref.read(secureStorageProvider);
+    await secureStorage.write('privacy_accepted', 'true');
+    await secureStorage.write('privacy_accepted_version', _privacyVersion);
+    await secureStorage.write('privacy_accepted_at_$userId', DateTime.now().toIso8601String());
+    await secureStorage.write('privacy_accepted_user_$userId', userId);
+  }
 
   @override
   void initState() {
     super.initState();
+    _checkPolicyStatus();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(milliseconds: 1500),
     );
 
     _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+        curve: const Interval(0.0, 0.6, curve: Curves.easeIn),
       ),
     );
 
-    _glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+    _glowAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeInOutSine),
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
       ),
     );
 
     _animationController.forward();
-    // Loop the glow animation back and forth
-    _animationController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _animationController.reverse();
-      } else if (status == AnimationStatus.dismissed) {
-        _animationController.forward();
-      }
-    });
   }
 
   @override
@@ -277,6 +291,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                               ),
                             ],
 
+                            // Legal Terms & Privacy Checkbox
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Theme(
+                                  data: Theme.of(context).copyWith(
+                                    unselectedWidgetColor: Colors.white30,
+                                  ),
+                                  child: Checkbox(
+                                    value: _privacyAccepted,
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _privacyAccepted = val ?? false;
+                                      });
+                                    },
+                                    activeColor: const Color(0xFF00E5FF),
+                                    checkColor: Colors.black,
+                                    side: BorderSide(color: Colors.white.withOpacity(0.4)),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
+                                      children: [
+                                        const TextSpan(text: 'I have read and agree to the '),
+                                        TextSpan(
+                                          text: 'Privacy Policy',
+                                          style: const TextStyle(
+                                            color: Color(0xFF00E5FF),
+                                            fontWeight: FontWeight.bold,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {
+                                              context.push('/privacy');
+                                            },
+                                        ),
+                                        const TextSpan(text: ' and '),
+                                        TextSpan(
+                                          text: 'Terms of Service',
+                                          style: const TextStyle(
+                                            color: Color(0xFF00E5FF),
+                                            fontWeight: FontWeight.bold,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {
+                                              context.push('/terms');
+                                            },
+                                        ),
+                                        const TextSpan(text: '.'),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
                             // Google Authentication Button
                             if (authState.status == AuthStatus.loading)
                               const Center(
@@ -291,23 +365,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                               _buildAuthButton(
                                 icon: _buildGoogleIcon(),
                                 label: 'Continue with Google',
-                                onPressed: _handleGoogleSignIn,
-                                glowColor: const Color(0xFF0066FF).withOpacity(0.4),
+                                onPressed: _privacyAccepted ? _handleGoogleSignIn : null,
+                                glowColor: _privacyAccepted ? const Color(0xFF0066FF).withOpacity(0.4) : Colors.transparent,
                               ),
                               const SizedBox(height: 10),
                               TextButton.icon(
                                 style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFF00E5FF),
+                                  foregroundColor: _privacyAccepted ? const Color(0xFF00E5FF) : Colors.white24,
                                   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: const Color(0xFF00E5FF).withOpacity(0.25), width: 1),
+                                    side: BorderSide(
+                                      color: _privacyAccepted 
+                                          ? const Color(0xFF00E5FF).withOpacity(0.25) 
+                                          : Colors.white12, 
+                                      width: 1,
+                                    ),
                                   ),
                                   backgroundColor: Colors.white.withOpacity(0.02),
                                 ),
-                                onPressed: () {
+                                onPressed: _privacyAccepted ? () {
                                   ref.read(authProvider.notifier).loginOffline();
-                                },
+                                } : null,
                                 icon: const Icon(Icons.wifi_off_outlined, size: 16),
                                 label: const Text(
                                   'Continue in Offline Mode',
@@ -511,7 +590,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   Widget _buildAuthButton({
     required Widget icon,
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required Color glowColor,
   }) {
     return Container(
@@ -571,17 +650,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
 
   Widget _buildGoogleIcon() {
     return Container(
-      width: 20,
-      height: 20,
+      width: 22,
+      height: 22,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.white,
       ),
+      padding: const EdgeInsets.all(3),
       alignment: Alignment.center,
       child: Image.network(
-        'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg',
-        height: 12,
-        errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, size: 14, color: Colors.black),
+        'https://developers.google.com/static/identity/images/g-logo.png',
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, size: 16, color: Colors.black),
       ),
     );
   }
@@ -596,12 +676,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
       ref.read(authProvider.notifier).loginWithGoogle(token);
     } else {
       try {
-        final GoogleSignIn googleSignIn = GoogleSignIn(
-          scopes: [
-            'email',
-            'https://www.googleapis.com/auth/drive.appdata',
-          ],
-        );
+        final googleSignIn = ref.read(googleSignInProvider);
         final GoogleSignInAccount? account = await googleSignIn.signIn();
         if (account != null) {
           final GoogleSignInAuthentication auth = await account.authentication;
@@ -615,17 +690,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
               );
               await FirebaseAuth.instance.signInWithCredential(credential);
 
+              // Cache Google Access Token for Google Drive Backup & Restore
+              if (auth.accessToken != null) {
+                await ref.read(secureStorageProvider).saveGoogleAccessToken(auth.accessToken!);
+              }
+
               await ref.read(authProvider.notifier).loginWithGoogle(idToken);
               
               final currentAuthState = ref.read(authProvider);
               if (currentAuthState.status == AuthStatus.unauthenticated) {
-                final err = currentAuthState.errorMessage;
-                if (err != null &&
-                    (err.contains('SocketException') ||
-                     err.contains('Failed host lookup') ||
-                     err.contains('connection error') ||
-                     err.toLowerCase().contains('network') ||
-                     err.toLowerCase().contains('unreachable'))) {
+                final isFirebaseLoggedIn = FirebaseAuth.instance.currentUser != null;
+                if (!isFirebaseLoggedIn) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -643,11 +718,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                 }
               }
             } catch (_) {
-              await ref.read(authProvider.notifier).loginOffline(
-                email: account.email,
-                displayName: account.displayName,
-                googleId: account.id,
-              );
+              final isFirebaseLoggedIn = FirebaseAuth.instance.currentUser != null;
+              if (isFirebaseLoggedIn) {
+                await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+              } else {
+                await ref.read(authProvider.notifier).loginOffline(
+                  email: account.email,
+                  displayName: account.displayName,
+                  googleId: account.id,
+                );
+              }
             }
           } else {
             throw Exception('Failed to obtain Google ID token.');

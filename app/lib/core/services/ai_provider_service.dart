@@ -64,7 +64,7 @@ class AiProviderManager {
   AiProviderManager(this._ref);
 
   Future<String> analyzeWithActiveProvider(String prompt, {String? systemInstruction, String provider = 'gemini'}) async {
-    final privacyMode = _ref.read(privacyModeProvider);
+    final privacyMode = _ref.read(aiPrivacyModeProvider);
     if (privacyMode == 'local') {
       return 'LOCAL_MODE';
     }

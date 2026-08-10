@@ -11,11 +11,13 @@ import 'package:app/core/security/audit_logger.dart';
 class FakeAuthRepository extends Fake implements AuthRepository {}
 class FakeAuditLogger extends Fake implements AuditLogger {}
 
+class FakeRef extends Fake implements Ref {}
+
 class MockAuthNotifier extends AuthNotifier {
   bool loginCalled = false;
   String? lastToken;
 
-  MockAuthNotifier() : super(FakeAuthRepository(), FakeAuditLogger()) {
+  MockAuthNotifier() : super(FakeAuthRepository(), FakeAuditLogger(), FakeRef()) {
     state = AuthState.unauthenticated();
   }
 
@@ -92,6 +94,10 @@ void main() {
           ),
         ),
       );
+
+      // Tap privacy acceptance checkbox
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
 
       // Tap Google sign-in button
       await tester.tap(find.text('Continue with Google'));

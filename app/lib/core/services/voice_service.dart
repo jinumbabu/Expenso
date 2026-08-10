@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class VoiceState {
   final bool isListening;
@@ -37,6 +38,25 @@ class VoiceService extends StateNotifier<VoiceState> {
         super(VoiceState());
 
   Future<bool> initialize() async {
+    // Check and request microphone permission
+    final status = await Permission.microphone.status;
+    if (status.isDenied) {
+      final newStatus = await Permission.microphone.request();
+      if (newStatus.isDenied) {
+        state = state.copyWith(
+          isAvailable: false,
+          error: 'Microphone permission denied. Please enable it in Settings.',
+        );
+        return false;
+      }
+    } else if (status.isPermanentlyDenied) {
+      state = state.copyWith(
+        isAvailable: false,
+        error: 'Microphone permission permanently denied. Please enable it in Settings.',
+      );
+      return false;
+    }
+
     try {
       final available = await _speech.initialize(
         onStatus: (status) {
@@ -53,31 +73,39 @@ class VoiceService extends StateNotifier<VoiceState> {
           );
         },
       );
-      state = state.copyWith(isAvailable: available);
+      state = state.copyWith(isAvailable: available, error: null);
       return available;
     } catch (e) {
       state = state.copyWith(
         isAvailable: false,
-        error: e.toString(),
+        error: 'STT init error: $e',
       );
       return false;
     }
   }
 
-  Future<void> startListening({required Function(String) onResult}) async {
+  Future<void> startListening({required Function(String) onResult, String? localeId}) async {
     state = state.copyWith(error: null, text: '');
 
-    // Try initializing if not already available
+    // Try initializing if not already available (with auto-retry)
     if (!state.isAvailable) {
-      final ok = await initialize();
+      var ok = await initialize();
       if (!ok) {
-        state = state.copyWith(error: 'Speech recognition is not available on this device');
-        return;
+        // Retry once after a brief delay
+        await Future.delayed(const Duration(milliseconds: 500));
+        ok = await initialize();
+        if (!ok) {
+          if (state.error == null) {
+            state = state.copyWith(error: 'Speech recognition is not available on this device');
+          }
+          return;
+        }
       }
     }
 
     try {
       await _speech.listen(
+        localeId: localeId,
         onResult: (result) {
           state = state.copyWith(text: result.recognizedWords);
           onResult(result.recognizedWords);

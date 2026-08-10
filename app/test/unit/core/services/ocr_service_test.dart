@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import 'package:app/core/services/ocr_service.dart';
 import 'package:app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:app/core/network/dio_client.dart';
+import 'package:app/core/services/ai_provider_orchestrator.dart';
+import 'package:app/core/services/ai_models.dart';
 
 // Mock Ref
 class MockRef implements Ref {
@@ -73,6 +75,29 @@ class MockDioClient extends Fake implements DioClient {
   MockDioClient(this.dio);
 }
 
+// Mock AI Provider Orchestrator StateNotifier
+class MockAiProviderOrchestrator extends StateNotifier<AiProviderConfig> implements AiProviderOrchestrator {
+  MockAiProviderOrchestrator() : super(const AiProviderConfig(
+    aiMode: 'offline',
+    aiProvider: 'offline',
+    selectedModels: {},
+    apiValid: {},
+    apiLatency: {},
+    apiError: {},
+  ));
+
+  @override
+  SavedApiKey? getActiveKeyForProvider(String provider, [List<SavedApiKey>? keys, Map<String, String>? activeIds]) {
+    return null;
+  }
+
+  @override
+  Future<void> setAiProvider(String provider) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -81,12 +106,18 @@ void main() {
     late MockDio mockDio;
     late MockDioClient mockDioClient;
     late OcrService ocrService;
+    late MockAiProviderOrchestrator mockOrchestrator;
 
     setUp(() {
       mockRef = MockRef();
       mockDio = MockDio();
       mockDioClient = MockDioClient(mockDio);
+      mockOrchestrator = MockAiProviderOrchestrator();
+      
       mockRef.overrideProvider(dioClientProvider, mockDioClient);
+      mockRef.overrideProvider(aiProviderOrchestratorProvider, mockOrchestrator.state);
+      mockRef.overrideProvider(aiProviderOrchestratorProvider.notifier, mockOrchestrator);
+      
       ocrService = OcrService(mockRef);
 
       // Mock MethodChannel for ML Kit
@@ -144,7 +175,7 @@ void main() {
       try {
         await expectLater(
           ocrService.scanReceipt(tempFile),
-          throwsA(isA<DioException>()),
+          throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('All receipt scanning methods failed'))),
         );
       } finally {
         if (await tempFile.exists()) {

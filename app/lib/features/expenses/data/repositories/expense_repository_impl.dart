@@ -1,21 +1,26 @@
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart';
 import '../../domain/repositories/expense_repository.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/dao/account_dao.dart';
 import '../../../../core/database/dao/category_dao.dart';
 import '../../../../core/database/dao/payment_method_dao.dart';
 import '../../../../core/database/dao/transaction_dao.dart';
+import '../../../../core/services/balance_engine.dart';
 
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final AccountDao _accountDao;
   final CategoryDao _categoryDao;
   final PaymentMethodDao _paymentMethodDao;
   final TransactionDao _transactionDao;
+  final AppDatabase _db;
 
   ExpenseRepositoryImpl(
     this._accountDao,
     this._categoryDao,
     this._paymentMethodDao,
     this._transactionDao,
+    this._db,
   );
 
   // Accounts
@@ -83,14 +88,82 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   Future<List<Transaction>> getPendingSyncTransactions() => _transactionDao.getPendingSyncTransactions();
 
   @override
-  Future<void> createTransaction(Transaction transaction) => _transactionDao.insertTransaction(transaction);
+  Future<void> createTransaction(Transaction transaction) async {
+    await _transactionDao.insertTransaction(transaction);
+    await BalanceEngine(_db).reconcileOnAdd(transaction);
+  }
 
   @override
-  Future<void> updateTransaction(Transaction transaction) => _transactionDao.updateTransaction(transaction);
+  Future<void> updateTransaction(Transaction transaction) async {
+    final oldTx = await _transactionDao.getTransactionById(transaction.id);
+    if (oldTx != null) {
+      // Reconcile account balance changes
+      await BalanceEngine(_db).reconcileOnEdit(oldTx, transaction);
+
+      if (transaction.merchant != null && transaction.merchant!.isNotEmpty) {
+        final categoryChanged = oldTx.categoryId != transaction.categoryId;
+        final typeChanged = oldTx.type != transaction.type;
+
+        if ((categoryChanged || typeChanged) && oldTx.source == 'sms') {
+          final cleanMerchant = transaction.merchant!.toLowerCase().trim();
+          final userId = transaction.userId;
+
+          if (categoryChanged && transaction.categoryId != null) {
+            final overrideKey = 'merchant_category_override:$cleanMerchant';
+            await (_db.delete(_db.aiMemories)
+              ..where((t) => t.userId.equals(userId) & t.memoryKey.equals(overrideKey))
+            ).go();
+
+            await _db.aiMemoryDao.insertMemory(
+              AiMemoryItem(
+                id: const Uuid().v4(),
+                userId: userId,
+                memoryType: 'preference',
+                memoryKey: overrideKey,
+                memoryValue: transaction.categoryId!,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+
+          if (typeChanged) {
+            final overrideKey = 'merchant_type_override:$cleanMerchant';
+            await (_db.delete(_db.aiMemories)
+              ..where((t) => t.userId.equals(userId) & t.memoryKey.equals(overrideKey))
+            ).go();
+
+            await _db.aiMemoryDao.insertMemory(
+              AiMemoryItem(
+                id: const Uuid().v4(),
+                userId: userId,
+                memoryType: 'preference',
+                memoryKey: overrideKey,
+                memoryValue: transaction.type,
+                createdAt: DateTime.now(),
+              ),
+            );
+          }
+        }
+      }
+    }
+    await _transactionDao.updateTransaction(transaction);
+  }
 
   @override
-  Future<void> softDeleteTransaction(String id) => _transactionDao.softDeleteTransaction(id);
+  Future<void> softDeleteTransaction(String id) async {
+    final tx = await _transactionDao.getTransactionById(id);
+    if (tx != null) {
+      await BalanceEngine(_db).reconcileOnDelete(tx);
+    }
+    await _transactionDao.softDeleteTransaction(id);
+  }
 
   @override
-  Future<void> hardDeleteTransaction(String id) => _transactionDao.hardDeleteTransaction(id);
+  Future<void> hardDeleteTransaction(String id) async {
+    final tx = await _transactionDao.getTransactionById(id);
+    if (tx != null) {
+      await BalanceEngine(_db).reconcileOnDelete(tx);
+    }
+    await _transactionDao.hardDeleteTransaction(id);
+  }
 }

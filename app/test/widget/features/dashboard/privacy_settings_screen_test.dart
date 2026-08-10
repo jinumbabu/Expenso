@@ -29,13 +29,66 @@ class MockPathProviderPlatform extends Fake
 
 class MockSecureStorageService extends Fake implements SecureStorageService {
   String privacyMode = 'hybrid';
+  bool hasRequested = false;
+  bool autoImport = true;
+  DateTime? lastReqTime;
+  DateTime? lastSync;
+  final Map<String, String> _storage = {};
+
+  @override
+  Future<void> write(String key, String value) async {
+    _storage[key] = value;
+    if (key == 'ai_privacy_mode') {
+      privacyMode = value;
+    }
+  }
+
+  @override
+  Future<String?> read(String key) async {
+    return _storage[key] ?? (key == 'ai_privacy_mode' ? privacyMode : null);
+  }
 
   @override
   Future<String?> getPrivacyMode() async => privacyMode;
 
   @override
+  Future<String?> getUserId() async => null;
+
+  @override
   Future<void> savePrivacyMode(String mode) async {
     privacyMode = mode;
+  }
+
+  @override
+  Future<bool> getHasRequestedSmsPermission() async => hasRequested;
+
+  @override
+  Future<void> saveHasRequestedSmsPermission(bool value) async {
+    hasRequested = value;
+  }
+
+  @override
+  Future<bool> getAutoImportEnabled() async => autoImport;
+
+  @override
+  Future<void> saveAutoImportEnabled(bool value) async {
+    autoImport = value;
+  }
+
+  @override
+  Future<DateTime?> getLastPermissionRequestTime() async => lastReqTime;
+
+  @override
+  Future<void> saveLastPermissionRequestTime(DateTime time) async {
+    lastReqTime = time;
+  }
+
+  @override
+  Future<DateTime?> getLastSmsSyncTime() async => lastSync;
+
+  @override
+  Future<void> saveLastSmsSyncTime(DateTime time) async {
+    lastSync = time;
   }
 }
 
@@ -57,7 +110,7 @@ class MockAuditLogger extends Fake implements AuditLogger {
 }
 
 class MockAuthNotifier extends AuthNotifier {
-  MockAuthNotifier(User user) : super(FakeAuthRepository(), FakeAuditLogger()) {
+  MockAuthNotifier(User user) : super(FakeAuthRepository(), FakeAuditLogger(), FakeRef()) {
     state = AuthState.authenticated(user);
   }
 
@@ -67,6 +120,7 @@ class MockAuthNotifier extends AuthNotifier {
 
 class FakeAuthRepository extends Fake implements AuthRepository {}
 class FakeAuditLogger extends Fake implements AuditLogger {}
+class FakeRef extends Fake implements Ref {}
 
 class MockAiMemoryDao extends Fake implements AiMemoryDao {
   List<AiMemoryItem> memories = [];
@@ -159,6 +213,13 @@ void main() {
     });
 
     testWidgets('Renders all initial widgets correctly', (tester) async {
+      tester.view.physicalSize = const Size(800, 2500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -174,23 +235,28 @@ void main() {
       );
 
       // Verify Screen Title
-      expect(find.text('PRIVACY & SECURITY'), findsOneWidget);
+      expect(find.text('Settings & Security'), findsOneWidget);
 
-      // Verify AI Privacy Modes exist
-      expect(find.text('Local (Private)'), findsOneWidget);
+      // Verify AI Privacy Mode exists
       expect(find.text('Hybrid (Recommended)'), findsOneWidget);
-      expect(find.text('Cloud (Gemini)'), findsOneWidget);
 
       // Verify section titles
-      expect(find.text('AI PRIVACY MODE'), findsOneWidget);
-      expect(find.text('AI MEMORY TRANSPARENCY'), findsOneWidget);
-      expect(find.text('DATA METRICS & AUDIT LOGS'), findsOneWidget);
+      expect(find.text('SECURITY'), findsOneWidget);
+      expect(find.text('AI PRIVACY & SETTINGS'), findsOneWidget);
+      expect(find.text('DATA & BACKUP'), findsOneWidget);
 
       // Verify database details
-      expect(find.text('Database Encryption'), findsOneWidget);
+      expect(find.text('Database Storage Footprint'), findsOneWidget);
     });
 
     testWidgets('Toggling privacy mode updates state and logs audit event', (tester) async {
+      tester.view.physicalSize = const Size(800, 2500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -207,9 +273,12 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Tap on Local (Private) mode card
-      final localModeFinder = find.text('Local (Private)');
-      await tester.tap(localModeFinder);
+      // Open dropdown
+      await tester.tap(find.text('Hybrid (Recommended)'));
+      await tester.pumpAndSettle();
+
+      // Select Local (Device)
+      await tester.tap(find.text('Local (Device)').last);
       await tester.pumpAndSettle();
 
       // Verify storage updated

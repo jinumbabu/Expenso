@@ -10,6 +10,8 @@ class Users extends Table {
   TextColumn get country => text().nullable()();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
   DateTimeColumn get updatedAt => dateTime().named('updated_at')();
+  TextColumn get photoUrl => text().nullable().named('photo_url')();
+  DateTimeColumn get lastLogin => dateTime().nullable().named('last_login')();
 
   @override
   Set<Column> get primaryKey => {id};

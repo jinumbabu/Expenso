@@ -20,7 +20,7 @@ class MockGoalsListNotifier extends GoalsListNotifier {
 }
 
 class FakeAuthNotifier extends AuthNotifier {
-  FakeAuthNotifier() : super(FakeAuthRepository(), FakeAuditLogger()) {
+  FakeAuthNotifier() : super(FakeAuthRepository(), FakeAuditLogger(), FakeRef()) {
     state = AuthState.authenticated(
       User(
         id: 'user1',

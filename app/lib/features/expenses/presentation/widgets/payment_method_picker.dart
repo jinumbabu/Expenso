@@ -7,23 +7,31 @@ import '../providers/expense_provider.dart';
 class PaymentMethodPicker extends ConsumerWidget {
   final String? selectedPaymentMethodId;
   final ValueChanged<PaymentMethod> onPaymentMethodSelected;
+  final String? accountType;
 
   const PaymentMethodPicker({
     super.key,
     required this.selectedPaymentMethodId,
     required this.onPaymentMethodSelected,
+    this.accountType,
   });
 
   IconData _getPaymentMethodIcon(String type) {
     switch (type.toLowerCase()) {
       case 'cash':
-        return Icons.money;
+        return Icons.account_balance_wallet_outlined;
       case 'upi':
         return Icons.mobile_friendly;
       case 'card':
         return Icons.credit_card;
       case 'bank':
         return Icons.account_balance;
+      case 'wallet':
+        return Icons.wallet_outlined;
+      case 'loan':
+        return Icons.monetization_on_outlined;
+      case 'investment':
+        return Icons.trending_up_rounded;
       default:
         return Icons.payment;
     }
@@ -32,13 +40,19 @@ class PaymentMethodPicker extends ConsumerWidget {
   Color _getPaymentMethodColor(String type) {
     switch (type.toLowerCase()) {
       case 'cash':
-        return Colors.green;
+        return const Color(0xFF00E5FF); // Cyan
       case 'upi':
-        return Colors.blue;
+        return const Color(0xFF0066FF); // Blue
       case 'card':
-        return Colors.purple;
+        return const Color(0xFFFF3B30); // Red
       case 'bank':
         return Colors.teal;
+      case 'wallet':
+        return const Color(0xFFFFB703); // Yellow/Orange
+      case 'loan':
+        return Colors.amber;
+      case 'investment':
+        return Colors.purpleAccent;
       default:
         return Colors.grey;
     }
@@ -50,7 +64,40 @@ class PaymentMethodPicker extends ConsumerWidget {
 
     return methodsAsync.when(
       data: (methods) {
-        if (methods.isEmpty) {
+        var filteredMethods = methods;
+        if (accountType != null) {
+          final type = accountType!.toLowerCase();
+          if (type == 'cash') {
+            filteredMethods = methods.where((pm) => pm.name.toLowerCase() == 'cash').toList();
+          } else if (type == 'savings' || type == 'current') {
+            filteredMethods = methods.where((pm) {
+              final name = pm.name.toLowerCase();
+              return name == 'upi' || name == 'debit card' || name == 'debit_card' || name == 'net banking' || name == 'net_banking';
+            }).toList();
+          } else if (type == 'credit_card') {
+            filteredMethods = methods.where((pm) {
+              final name = pm.name.toLowerCase();
+              return name == 'credit card' || name == 'credit_card' || name == 'upi' || name == 'net banking' || name == 'net_banking';
+            }).toList();
+          } else if (type == 'wallet') {
+            filteredMethods = methods.where((pm) {
+              final name = pm.name.toLowerCase();
+              return name == 'wallet balance' || name == 'wallet_balance' || name == 'upi';
+            }).toList();
+          } else if (type == 'loan' || type == 'loan_account') {
+            filteredMethods = methods.where((pm) {
+              final name = pm.name.toLowerCase();
+              return name == 'loan disbursement' || name == 'loan_disbursement' || name == 'emi payment' || name == 'emi_payment';
+            }).toList();
+          } else if (type == 'investment') {
+            filteredMethods = methods.where((pm) {
+              final name = pm.name.toLowerCase();
+              return name == 'buy' || name == 'sell' || name == 'transfer';
+            }).toList();
+          }
+        }
+
+        if (filteredMethods.isEmpty) {
           return const Center(
             child: Text(
               'No payment methods found',
@@ -62,7 +109,7 @@ class PaymentMethodPicker extends ConsumerWidget {
         return Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: methods.map((method) {
+          children: filteredMethods.map((method) {
             final isSelected = method.id == selectedPaymentMethodId;
             final color = _getPaymentMethodColor(method.type);
             final icon = _getPaymentMethodIcon(method.type);
@@ -86,8 +133,8 @@ class PaymentMethodPicker extends ConsumerWidget {
                   onPaymentMethodSelected(method);
                 }
               },
-              selectedColor: color,
-              backgroundColor: Colors.white.withOpacity(0.05),
+              selectedColor: color.withOpacity(0.4),
+              backgroundColor: Colors.white.withOpacity(0.03),
               checkmarkColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

@@ -12,6 +12,8 @@ class Categories extends Table {
   IntColumn get usageCount => integer().withDefault(const Constant(0)).named('usage_count')();
   DateTimeColumn get lastUsedAt => dateTime().nullable().named('last_used_at')();
   BoolColumn get isSystemDefault => boolean().withDefault(const Constant(false)).named('is_system_default')();
+  TextColumn get parentId => text().nullable().references(Categories, #id).named('parent_id')();
+  TextColumn get color => text().nullable()();
   DateTimeColumn get createdAt => dateTime().named('created_at')();
 
   @override

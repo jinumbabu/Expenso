@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:app/core/services/voice_service.dart';
+import 'package:flutter/services.dart';
 
 class MockSpeechToText extends Fake implements SpeechToText {
   bool availableResult = true;
@@ -47,6 +48,7 @@ class MockSpeechRecognitionResult extends Fake implements SpeechRecognitionResul
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('VoiceService Tests', () {
     late MockSpeechToText mockSpeech;
     late VoiceService voiceService;
@@ -54,6 +56,17 @@ void main() {
     setUp(() {
       mockSpeech = MockSpeechToText();
       voiceService = VoiceService(speech: mockSpeech);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('flutter.baseflow.com/permissions/methods'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'checkPermissionStatus') {
+            return 1; // PermissionStatus.granted
+          }
+          return null;
+        },
+      );
     });
 
     test('Initializes successfully when speech recognition is available', () async {

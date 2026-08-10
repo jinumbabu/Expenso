@@ -3,12 +3,56 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:app/features/auth/presentation/screens/biometric_lock_screen.dart';
+import 'package:app/core/security/app_lock_service.dart';
+
+class MockAppLockService extends Fake implements AppLockService {
+  bool pinSet = true;
+  int pinLength = 4;
+  bool lockedOut = false;
+  int failedAttempts = 0;
+
+  @override
+  Future<bool> isPinSet(String userId) async => pinSet;
+
+  @override
+  Future<int> getPinLength(String userId) async => pinLength;
+
+  @override
+  Future<bool> isLockedOut(String userId) async => lockedOut;
+
+  @override
+  Future<bool> verifyPin(String userId, String pin) async {
+    if (pin == '1234') {
+      failedAttempts = 0;
+      return true;
+    } else {
+      failedAttempts++;
+      if (failedAttempts >= 5) {
+        lockedOut = true;
+      }
+      return false;
+    }
+  }
+
+  @override
+  Future<void> resetFailedAttempts(String userId) async {
+    failedAttempts = 0;
+  }
+
+  @override
+  Future<int> getFailedAttempts(String userId) async => failedAttempts;
+
+  @override
+  Future<bool> isBiometricEnabled(String userId) async => false;
+}
 
 void main() {
   group('BiometricLockScreen Widget Tests', () {
     late GoRouter testRouter;
+    late MockAppLockService mockAppLockService;
 
     setUp(() {
+      mockAppLockService = MockAppLockService();
       testRouter = GoRouter(
         initialLocation: '/lock',
         routes: [
@@ -29,11 +73,15 @@ void main() {
     testWidgets('Renders keypad and lock header correctly', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            appLockServiceProvider.overrideWithValue(mockAppLockService),
+          ],
           child: MaterialApp.router(
             routerConfig: testRouter,
           ),
         ),
       );
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Verify header text
       expect(find.text('SECURITY LOCK'), findsOneWidget);
@@ -48,11 +96,15 @@ void main() {
     testWidgets('Entering correct PIN (1234) routes to dashboard', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            appLockServiceProvider.overrideWithValue(mockAppLockService),
+          ],
           child: MaterialApp.router(
             routerConfig: testRouter,
           ),
         ),
       );
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Tap digits 1, 2, 3, 4
       await tester.tap(find.text('1'));
@@ -71,11 +123,15 @@ void main() {
     testWidgets('Entering incorrect PIN triggers error snackbar and resets', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            appLockServiceProvider.overrideWithValue(mockAppLockService),
+          ],
           child: MaterialApp.router(
             routerConfig: testRouter,
           ),
         ),
       );
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Tap digits 1, 1, 1, 1 (incorrect PIN)
       await tester.tap(find.text('1'));
@@ -94,11 +150,15 @@ void main() {
     testWidgets('Backspace key removes last digit', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [
+            appLockServiceProvider.overrideWithValue(mockAppLockService),
+          ],
           child: MaterialApp.router(
             routerConfig: testRouter,
           ),
         ),
       );
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Tap '1', '2'
       await tester.tap(find.text('1'));
