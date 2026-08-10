@@ -8,6 +8,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/privacy_text.dart';
+import '../../../../shared/widgets/blue_donut_chart.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../accounts/presentation/providers/account_formatters.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
@@ -230,7 +231,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'CURRENT NET WORTH',
+                      'CURRENT\nNET WORTH',
                       style: TextStyle(
                         color: Color(0xFF00E5FF),
                         fontSize: 11,
@@ -260,9 +261,10 @@ class NetWorthDetailScreen extends ConsumerWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _AssetLiabilityDonutChart(
-                    assetFraction: assetFraction,
+                  BlueDonutChart(
+                    savingsPercentage: assetFraction,
                     size: 54,
+                    trackColor: const Color(0xFFFF3B30),
                   ),
                   const SizedBox(width: 8),
                   Column(
@@ -698,106 +700,4 @@ class _CategorySpend {
   _CategorySpend({required this.name, required this.amount, required this.color});
 }
 
-class _AssetLiabilityDonutChart extends StatefulWidget {
-  final double assetFraction; // e.g. 0.908, or -1.0 for neutral
-  final double size;
 
-  const _AssetLiabilityDonutChart({
-    required this.assetFraction,
-    this.size = 54.0,
-  });
-
-  @override
-  State<_AssetLiabilityDonutChart> createState() => _AssetLiabilityDonutChartState();
-}
-
-class _AssetLiabilityDonutChartState extends State<_AssetLiabilityDonutChart> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: CustomPaint(
-            painter: _AssetLiabilityDonutPainter(
-              progress: _animation.value,
-              assetFraction: widget.assetFraction,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AssetLiabilityDonutPainter extends CustomPainter {
-  final double progress;
-  final double assetFraction;
-
-  _AssetLiabilityDonutPainter({required this.progress, required this.assetFraction});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width, size.height) / 2 - 6;
-    const strokeWidth = 8.0;
-
-    // Handle empty state (both assets and liabilities are 0)
-    if (assetFraction < 0) {
-      final neutralPaint = Paint()
-        ..color = Colors.white12
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth;
-      canvas.drawCircle(center, radius, neutralPaint);
-      return;
-    }
-
-    // Track Paint for Liabilities (Red)
-    final liabilityPaint = Paint()
-      ..color = const Color(0xFFFF3B30)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    // Draw base track circle (Liabilities representation)
-    canvas.drawCircle(center, radius, liabilityPaint);
-
-    // Assets Arc Paint (Blue)
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final assetPaint = Paint()
-      ..color = const Color(0xFF0066FF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    // Draw Assets portion (start from -pi/2 which is top center)
-    final sweepAngle = 2 * pi * assetFraction * progress;
-    canvas.drawArc(rect, -pi / 2, sweepAngle, false, assetPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _AssetLiabilityDonutPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.assetFraction != assetFraction;
-  }
-}

@@ -310,148 +310,158 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                           );
                         }
 
-                        return ListView(
-                          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                          physics: const BouncingScrollPhysics(),
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // 1. Time Filters Selector
                             _buildFiltersBar(),
                             const SizedBox(height: 24),
 
-                            // 2. Parent Interactive Donut Chart
-                            ReusableDonutChart(
-                              data: chartData,
-                              selectedId: _selectedCategoryId,
-                              onSelected: (id) {
-                                setState(() {
-                                  _selectedCategoryId = id;
-                                });
-                              },
-                              centerTitle: 'Total Expense',
-                              centerValue: totalExpense.toDouble(),
-                              isPrivate: isPrivate,
+                            // 2. Parent Interactive Donut Chart (Fixed)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                              child: ReusableDonutChart(
+                                data: chartData,
+                                selectedId: _selectedCategoryId,
+                                onSelected: (id) {
+                                  setState(() {
+                                    _selectedCategoryId = id;
+                                  });
+                                },
+                                centerTitle: 'Total Expense',
+                                centerValue: totalExpense.toDouble(),
+                                isPrivate: isPrivate,
+                              ),
                             ),
                             const SizedBox(height: 24),
 
-                            // 3. Category Details Header
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'SPENDING BY CATEGORY',
-                                  style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                                ),
-                                PrivacyText(
-                                  rawValue: _formatMoney(totalExpense),
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                            // 3. Category Details Header (Fixed)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'SPENDING BY CATEGORY',
+                                    style: TextStyle(
+                                      color: Color(0xFF00E5FF),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  PrivacyText(
+                                    rawValue: _formatMoney(totalExpense),
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 12),
 
-                            // 4. Categories List
-                            if (chartData.isEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(40),
-                                alignment: Alignment.center,
-                                child: const Text('No transactions match filters.', style: TextStyle(color: Colors.white24, fontSize: 13)),
-                              )
-                            else
-                              ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: chartData.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                itemBuilder: (context, index) {
-                                  final item = chartData[index];
-                                  final cat = categoriesMap[item.id];
-                                  final iconData = _getCategoryIcon(cat?.icon);
-                                  final isSelected = _selectedCategoryId == item.id;
-                                  
-                                  return GestureDetector(
-                                    onTap: () {
-                                      if (_selectedCategoryId == item.id) {
-                                        setState(() {
-                                          _isDetailMode = true;
-                                          _selectedSubExpenseId = '';
-                                        });
-                                      } else {
-                                        setState(() {
-                                          _selectedCategoryId = item.id;
-                                        });
-                                      }
-                                    },
-                                    onDoubleTap: () {
-                                      setState(() {
-                                        _selectedCategoryId = item.id;
-                                        _isDetailMode = true;
-                                        _selectedSubExpenseId = '';
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: isSelected 
-                                            ? const Color(0xFF051833) 
-                                            : Colors.white.withOpacity(0.015),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: isSelected 
-                                              ? const Color(0xFF00E5FF) 
-                                              : Colors.white.withOpacity(0.03),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
+                            // 4. Categories List (Independently scrollable)
+                            Expanded(
+                              child: chartData.isEmpty
+                                  ? Container(
+                                      padding: const EdgeInsets.all(40),
+                                      alignment: Alignment.center,
+                                      child: const Text('No transactions match filters.', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                                    )
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.fromLTRB(20.0, 0.0, 20.0, 40.0),
+                                      physics: const BouncingScrollPhysics(),
+                                      itemCount: chartData.length,
+                                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        final item = chartData[index];
+                                        final cat = categoriesMap[item.id];
+                                        final iconData = _getCategoryIcon(cat?.icon);
+                                        final isSelected = _selectedCategoryId == item.id;
+                                        
+                                        return GestureDetector(
+                                          onTap: () {
+                                            if (_selectedCategoryId == item.id) {
+                                              setState(() {
+                                                _isDetailMode = true;
+                                                _selectedSubExpenseId = '';
+                                              });
+                                            } else {
+                                              setState(() {
+                                                _selectedCategoryId = item.id;
+                                              });
+                                            }
+                                          },
+                                          onDoubleTap: () {
+                                            setState(() {
+                                              _selectedCategoryId = item.id;
+                                              _isDetailMode = true;
+                                              _selectedSubExpenseId = '';
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                             decoration: BoxDecoration(
-                                              color: item.color.withOpacity(0.12),
-                                              shape: BoxShape.circle,
+                                              color: isSelected 
+                                                  ? const Color(0xFF051833) 
+                                                  : Colors.white.withOpacity(0.015),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: isSelected 
+                                                    ? const Color(0xFF00E5FF) 
+                                                    : Colors.white.withOpacity(0.03),
+                                              ),
                                             ),
-                                            child: Icon(iconData, color: item.color, size: 16),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                            child: Row(
                                               children: [
-                                                Text(
-                                                  item.label,
-                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                AnimatedSwitcher(
-                                                  duration: const Duration(milliseconds: 250),
-                                                  child: Text(
-                                                    isPrivate
-                                                        ? 'Percentage: **%'
-                                                        : 'Percentage: ${item.percentage.toStringAsFixed(1)}%',
-                                                    key: ValueKey(isPrivate),
-                                                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                                Container(
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: item.color.withOpacity(0.12),
+                                                    shape: BoxShape.circle,
                                                   ),
+                                                  child: Icon(iconData, color: item.color, size: 16),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        item.label,
+                                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      AnimatedSwitcher(
+                                                        duration: const Duration(milliseconds: 250),
+                                                        child: Text(
+                                                          isPrivate
+                                                              ? 'Percentage: **%'
+                                                              : 'Percentage: ${item.percentage.toStringAsFixed(1)}%',
+                                                          key: ValueKey(isPrivate),
+                                                          style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    PrivacyText(
+                                                      rawValue: _formatMoney(item.value.toInt()),
+                                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+                                                  ],
                                                 ),
                                               ],
                                             ),
                                           ),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              PrivacyText(
-                                                rawValue: _formatMoney(item.value.toInt()),
-                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
+                                        );
+                                      },
                                     ),
-                                  );
-                                },
-                              ),
-                            const SizedBox(height: 60),
+                            ),
                           ],
                         );
                       },
@@ -479,7 +489,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: periods.length,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemBuilder: (context, i) {
           final p = periods[i];
           final isSelected = _selectedPeriod == p;

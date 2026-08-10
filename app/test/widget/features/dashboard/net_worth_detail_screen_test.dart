@@ -7,6 +7,7 @@ import 'package:app/core/database/app_database.dart';
 import 'package:app/core/services/financial_calculation_service.dart' hide AccountSummary;
 import 'package:app/features/dashboard/presentation/screens/net_worth_detail_screen.dart';
 import 'package:app/features/dashboard/presentation/screens/dashboard_summary_screen.dart';
+import 'package:app/shared/widgets/blue_donut_chart.dart';
 import 'package:app/features/expenses/domain/usecases/get_transactions_usecase.dart';
 import 'package:app/features/expenses/domain/usecases/create_transaction_usecase.dart';
 import 'package:app/features/expenses/domain/usecases/update_transaction_usecase.dart';
@@ -176,12 +177,12 @@ void main() {
       expect(find.text('Net Worth Details'), findsOneWidget);
 
       // 2. Verify CURRENT NET WORTH summary card
-      expect(find.text('CURRENT NET WORTH'), findsOneWidget);
+      expect(find.text('CURRENT\nNET WORTH'), findsOneWidget);
       expect(find.text('TOTAL ASSETS'), findsOneWidget);
       expect(find.text('TOTAL LIABILITIES'), findsOneWidget);
 
-      // 3. Verify small integrated donut chart (_AssetLiabilityDonutChart) and legend labels are present
-      expect(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_AssetLiabilityDonutChart'), findsOneWidget);
+      // 3. Verify small integrated donut chart (BlueDonutChart) and legend labels are present
+      expect(find.byType(BlueDonutChart), findsOneWidget);
       expect(find.text('Total Assets'), findsOneWidget);
       expect(find.text('Total Liabilities'), findsOneWidget);
 

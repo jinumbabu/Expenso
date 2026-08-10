@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class BlueDonutChart extends StatefulWidget {
   final double savingsPercentage; // e.g. 0.66
   final double size;
+  final Color? trackColor;
 
   const BlueDonutChart({
     super.key,
     required this.savingsPercentage,
     this.size = 80.0,
+    this.trackColor,
   });
 
   @override
@@ -48,6 +50,7 @@ class _BlueDonutChartState extends State<BlueDonutChart> with SingleTickerProvid
             painter: DonutPainter(
               progress: _animation.value,
               savingsFraction: widget.savingsPercentage,
+              trackColor: widget.trackColor,
             ),
           ),
         );
@@ -59,8 +62,13 @@ class _BlueDonutChartState extends State<BlueDonutChart> with SingleTickerProvid
 class DonutPainter extends CustomPainter {
   final double progress;
   final double savingsFraction;
+  final Color? trackColor;
 
-  DonutPainter({required this.progress, required this.savingsFraction});
+  DonutPainter({
+    required this.progress,
+    required this.savingsFraction,
+    this.trackColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -68,9 +76,19 @@ class DonutPainter extends CustomPainter {
     final radius = min(size.width, size.height) / 2 - 6;
     const strokeWidth = 8.0;
 
+    // Handle empty state (both assets and liabilities are 0)
+    if (savingsFraction < 0) {
+      final neutralPaint = Paint()
+        ..color = Colors.white12
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth;
+      canvas.drawCircle(center, radius, neutralPaint);
+      return;
+    }
+
     // Track Paint for Expenses (the remainder)
     final expensePaint = Paint()
-      ..color = const Color(0xFF0A182E) // Dark navy/blue background track
+      ..color = trackColor ?? const Color(0xFF0A182E) // Dark navy/blue background track
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
 
@@ -96,6 +114,8 @@ class DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant DonutPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.savingsFraction != savingsFraction;
+    return oldDelegate.progress != progress ||
+        oldDelegate.savingsFraction != savingsFraction ||
+        oldDelegate.trackColor != trackColor;
   }
 }

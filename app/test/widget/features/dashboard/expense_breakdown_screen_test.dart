@@ -141,6 +141,13 @@ void main() {
       expect(find.text('Food'), findsOneWidget);
       expect(find.text('Bills'), findsOneWidget);
 
+      // Verify layout structure: outer column + expanded scrollable list
+      expect(find.byType(Column), findsWidgets);
+      final verticalListFinder = find.byWidgetPredicate(
+        (w) => w is ListView && w.scrollDirection == Axis.vertical,
+      );
+      expect(verticalListFinder, findsOneWidget);
+
       // 4. First tap highlights category item (updating selection, but does NOT enter detail mode)
       await tester.tap(find.text('Food'));
       await tester.pumpAndSettle();
