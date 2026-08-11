@@ -624,59 +624,111 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
                                                   child: Text('No other accounts registered.', style: TextStyle(color: Colors.white30)),
                                                 );
                                               }
-                                              return ListView.builder(
+                                              return ListView.separated(
                                                 shrinkWrap: true,
                                                 itemCount: accounts.length,
+                                                separatorBuilder: (context, index) => Divider(
+                                                  color: Colors.white.withOpacity(0.05),
+                                                  height: 24,
+                                                  thickness: 1,
+                                                ),
                                                 itemBuilder: (context, index) {
                                                   final acc = accounts[index];
                                                   final isCurrent = acc['id'] == user?.id;
-                                                  return ListTile(
-                                                    leading: CircleAvatar(
-                                                      backgroundColor: const Color(0xFF001F4D),
-                                                      child: Text(
-                                                        (acc['displayName'] ?? 'U')[0].toUpperCase(),
-                                                        style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold),
-                                                      ),
-                                                    ),
-                                                    title: Text(acc['displayName'] ?? 'User', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                                    subtitle: Text(acc['email'] ?? '', style: const TextStyle(color: Colors.white30, fontSize: 12)),
-                                                    trailing: isCurrent
-                                                        ? const Icon(Icons.check, color: Color(0xFF00E5FF))
-                                                        : Row(
-                                                            mainAxisSize: MainAxisSize.min,
-                                                            children: [
-                                                              TextButton(
-                                                                onPressed: () async {
-                                                                  Navigator.pop(context);
-                                                                  await ref.read(authProvider.notifier).switchAccount(acc['id']);
-                                                                  if (context.mounted) {
-                                                                    context.go('/lock');
-                                                                  }
-                                                                },
-                                                                child: const Text('Switch', style: TextStyle(color: Color(0xFF00E5FF))),
-                                                              ),
-                                                              IconButton(
-                                                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                                                onPressed: () async {
-                                                                  final confirm = await showDialog<bool>(
-                                                                    context: context,
-                                                                    builder: (context) => AlertDialog(
-                                                                      backgroundColor: const Color(0xFF0F1A1C),
-                                                                      title: const Text('Remove Account?', style: TextStyle(color: Colors.white)),
-                                                                      content: Text('Remove ${acc['displayName']} and delete all local database files for this account?'),
-                                                                      actions: [
-                                                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                                                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: Colors.redAccent))),
-                                                                      ],
-                                                                    ),
-                                                                  );
-                                                                  if (confirm == true) {
-                                                                    await ref.read(authProvider.notifier).removeAccount(acc['id']);
-                                                                  }
-                                                                },
-                                                              ),
-                                                            ],
+                                                  return Row(
+                                                    children: [
+                                                      CircleAvatar(
+                                                        radius: 20,
+                                                        backgroundColor: const Color(0xFF001F4D),
+                                                        child: Text(
+                                                          (acc['displayName'] ?? 'U')[0].toUpperCase(),
+                                                          style: const TextStyle(
+                                                            color: Color(0xFF00E5FF),
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 16,
                                                           ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Text(
+                                                              acc['displayName'] ?? 'User',
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                              softWrap: false,
+                                                              style: const TextStyle(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 14,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(height: 2),
+                                                            Text(
+                                                              acc['email'] ?? '',
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                              softWrap: false,
+                                                              style: const TextStyle(
+                                                                color: Colors.white30,
+                                                                fontSize: 12,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      if (isCurrent)
+                                                        const Padding(
+                                                          padding: EdgeInsets.symmetric(horizontal: 16),
+                                                          child: Icon(Icons.check, color: Color(0xFF00E5FF), size: 20),
+                                                        )
+                                                      else
+                                                        Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            TextButton(
+                                                              onPressed: () async {
+                                                                Navigator.pop(context);
+                                                                await ref.read(authProvider.notifier).switchAccount(acc['id']);
+                                                                if (context.mounted) {
+                                                                  context.go('/lock');
+                                                                }
+                                                              },
+                                                              child: const Text(
+                                                                'Switch',
+                                                                style: TextStyle(
+                                                                  color: Color(0xFF00E5FF),
+                                                                  fontWeight: FontWeight.bold,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            IconButton(
+                                                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                                                              onPressed: () async {
+                                                                final confirm = await showDialog<bool>(
+                                                                  context: context,
+                                                                  builder: (context) => AlertDialog(
+                                                                    backgroundColor: const Color(0xFF0F1A1C),
+                                                                    title: const Text('Remove Account?', style: TextStyle(color: Colors.white)),
+                                                                    content: Text('Remove ${acc['displayName']} and delete all local database files for this account?'),
+                                                                    actions: [
+                                                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                                                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: Colors.redAccent))),
+                                                                    ],
+                                                                  ),
+                                                                );
+                                                                if (confirm == true) {
+                                                                  await ref.read(authProvider.notifier).removeAccount(acc['id']);
+                                                                }
+                                                              },
+                                                            ),
+                                                          ],
+                                                        ),
+                                                    ],
                                                   );
                                                 },
                                               );

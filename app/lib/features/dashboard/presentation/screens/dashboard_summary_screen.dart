@@ -21,7 +21,7 @@ import '../../../../core/services/ocr_service.dart';
 import '../../../../core/services/voice_service.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/ecg_pulse_ring.dart';
-import '../../../../shared/widgets/blue_donut_chart.dart';
+import '../../../../shared/widgets/reusable_net_worth_ring.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../budgets/presentation/screens/budgets_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -753,14 +753,15 @@ class DashboardSummaryScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Wrapping the main info section in GestureDetector to navigate to Net Worth Detail Screen
-          GestureDetector(
-            onTap: () => context.push('/net-worth-detail'),
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left interactive group: Net Worth details
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => context.push('/net-worth-detail'),
+                  behavior: HitTestBehavior.opaque,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -804,80 +805,88 @@ class DashboardSummaryScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                // Blue Donut Chart (Interactive) + Percentages
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () => context.push('/expense-breakdown'),
-                      child: BlueDonutChart(
-                        savingsPercentage: savingsPct,
-                        size: 54,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (!hasData)
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'No financial',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            'data yet',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 250),
-                            child: Text(
-                              isPrivate ? '**%' : '${(expensesPct * 100).toStringAsFixed(0)}%',
-                              key: ValueKey('exp_$isPrivate'),
-                              style: const TextStyle(
-                                color: Color(0xFFFF3B30),
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
+              ),
+              const SizedBox(width: 12),
+              // Right interactive group: Expenses/Remaining ring and info
+              GestureDetector(
+                onTap: () => context.push('/expense-breakdown'),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  color: Colors.transparent,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasData) ...[
+                        ReusableNetWorthRing(
+                          key: ValueKey('net_worth_ring_${ref.watch(dashboardMonthProvider).toIso8601String()}'),
+                          valueFraction: savingsPct,
+                          size: 54,
+                          trackColor: const Color(0xFFFF3B30),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (!hasData)
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'No financial',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ),
-                          const Text('Expenses', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
-                          const SizedBox(height: 3),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 250),
-                            child: Text(
-                              isPrivate ? '**%' : '${(savingsPct * 100).toStringAsFixed(0)}%',
-                              key: ValueKey('sav_$isPrivate'),
-                              style: const TextStyle(
-                                color: Color(0xFF00E5FF),
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.bold,
+                            Text(
+                              'data yet',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ),
-                          const Text('Remaining', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
-                        ],
-                      ),
-                  ],
+                          ],
+                        )
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: Text(
+                                isPrivate ? '**%' : '${(expensesPct * 100).toStringAsFixed(0)}%',
+                                key: ValueKey('exp_$isPrivate'),
+                                style: const TextStyle(
+                                  color: Color(0xFFFF3B30),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Text('Expenses', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
+                            const SizedBox(height: 3),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: Text(
+                                isPrivate ? '**%' : '${(savingsPct * 100).toStringAsFixed(0)}%',
+                                key: ValueKey('sav_$isPrivate'),
+                                style: const TextStyle(
+                                  color: Color(0xFF00E5FF),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Text('Remaining', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           if (isOverspent) ...[
             const SizedBox(height: 6),

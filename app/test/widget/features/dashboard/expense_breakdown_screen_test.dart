@@ -173,5 +173,146 @@ void main() {
       expect(find.text('Food'), findsOneWidget);
       expect(find.text('Bills'), findsOneWidget);
     });
+
+    testWidgets('Tapping a donut segment highlights segment, center, scrolls to category list item and highlights card', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final fakeNotifier = MockExpenseListNotifier(mockTxs);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            expenseListNotifierProvider.overrideWith((ref) => fakeNotifier),
+            categoriesProvider.overrideWith((ref) => mockCats),
+          ],
+          child: const MaterialApp(
+            home: ExpenseBreakdownScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Find the ReusableDonutChart on the screen
+      final donutFinder = find.byType(ReusableDonutChart);
+      expect(donutFinder, findsOneWidget);
+
+      final ReusableDonutChart donut = tester.widget<ReusableDonutChart>(donutFinder);
+
+      // Simulate tapping the segment for 'Bills' (cat_bills)
+      donut.onSelected('cat_bills');
+      await tester.pumpAndSettle();
+
+      // Verify selected category is highlighted with a cyan border (Color(0xFF00E5FF))
+      final billsCardFinder = find.ancestor(
+        of: find.text('Bills'),
+        matching: find.byType(GestureDetector),
+      );
+      expect(billsCardFinder, findsOneWidget);
+
+      final containerFinder = find.descendant(
+        of: billsCardFinder,
+        matching: find.byWidgetPredicate((w) => w is Container && w.decoration is BoxDecoration),
+      );
+      final container = tester.widget<Container>(containerFinder.first);
+      final decoration = container.decoration as BoxDecoration;
+      expect(decoration.border, isNotNull);
+      expect(decoration.border!.isUniform, isTrue);
+      expect(decoration.border!.top.color, const Color(0xFF00E5FF));
+    });
+
+    testWidgets('Tapping a category card highlights donut segment and updates center', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final fakeNotifier = MockExpenseListNotifier(mockTxs);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            expenseListNotifierProvider.overrideWith((ref) => fakeNotifier),
+            categoriesProvider.overrideWith((ref) => mockCats),
+          ],
+          child: const MaterialApp(
+            home: ExpenseBreakdownScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap on the 'Bills' card
+      await tester.tap(find.text('Bills'));
+      await tester.pumpAndSettle();
+
+      // Verify donut selection is updated to 'cat_bills'
+      final donutFinder = find.byType(ReusableDonutChart);
+      final ReusableDonutChart donut = tester.widget<ReusableDonutChart>(donutFinder);
+      expect(donut.selectedId, 'cat_bills');
+    });
+
+    testWidgets('Sub-expense screen renders with fixed chart and scrolling transaction list, and supports bidirectional selection', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final fakeNotifier = MockExpenseListNotifier(mockTxs);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            expenseListNotifierProvider.overrideWith((ref) => fakeNotifier),
+            categoriesProvider.overrideWith((ref) => mockCats),
+          ],
+          child: const MaterialApp(
+            home: ExpenseBreakdownScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 1. Double tap 'Food' to enter detail mode directly
+      await tester.tap(find.text('Food'));
+      await tester.pump();
+      await tester.tap(find.text('Food'));
+      await tester.pumpAndSettle();
+
+      // 2. Verify fixed detail layout structure (Column with fixed chart + scrollable list)
+      expect(find.text('SUB-EXPENSES'), findsOneWidget);
+      expect(find.byType(ReusableDonutChart), findsOneWidget);
+      
+      final verticalListFinder = find.byWidgetPredicate(
+        (w) => w is ListView && w.scrollDirection == Axis.vertical,
+      );
+      expect(verticalListFinder, findsOneWidget);
+
+      // Verify the list scroll controller is attached
+      final ListView listWidget = tester.widget<ListView>(verticalListFinder);
+      expect(listWidget.controller, isNotNull);
+
+      // 3. Verify sub-expense item is shown (McDonalds)
+      expect(find.text('McDonalds'), findsOneWidget);
+
+      // 4. Tap the McDonalds card and check donut center updates
+      await tester.tap(find.text('McDonalds'));
+      await tester.pumpAndSettle();
+
+      final donutFinder = find.byType(ReusableDonutChart);
+      final ReusableDonutChart donut = tester.widget<ReusableDonutChart>(donutFinder);
+      expect(donut.selectedId, 'tx1'); // Selected sub-expense is tx1
+    });
   });
 }

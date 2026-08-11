@@ -288,5 +288,57 @@ void main() {
       expect(mockAuditLogger.logCalled, isTrue);
       expect(mockAuditLogger.loggedEventType, equals('privacy_mode_changed'));
     });
+
+    testWidgets('Switch / Manage Accounts bottom sheet renders custom Row layout with ellipsis and checkmark/Switch buttons', (tester) async {
+      tester.view.physicalSize = const Size(800, 2500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final mockAccounts = [
+        {'id': 'user-privacy-123', 'displayName': 'Privacy User', 'email': 'privacy@expenso.ai'},
+        {'id': 'user-other', 'displayName': 'HappinessHypothesis', 'email': 'happinesshypothesis1@gmail.com'},
+      ];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(database),
+            authProvider.overrideWith((ref) => mockAuthNotifier),
+            secureStorageProvider.overrideWithValue(mockSecureStorage),
+            auditLoggerProvider.overrideWithValue(mockAuditLogger),
+            registeredAccountsProvider.overrideWith((ref) => AsyncValue.data(mockAccounts)),
+          ],
+          child: const MaterialApp(
+            home: PrivacySettingsScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // 1. Open the bottom sheet by tapping "Switch / Manage Accounts"
+      await tester.tap(find.text('Switch / Manage Accounts'));
+      await tester.pumpAndSettle();
+
+      // 2. Verify sheet is opened and header is rendered
+      expect(find.text('REGISTERED ACCOUNTS'), findsOneWidget);
+
+      // 3. Verify display names and emails are rendered
+      expect(find.text('Privacy User'), findsOneWidget);
+      expect(find.text('privacy@expenso.ai'), findsOneWidget);
+      expect(find.text('HappinessHypothesis'), findsOneWidget);
+      expect(find.text('happinesshypothesis1@gmail.com'), findsOneWidget);
+
+      // 4. Verify that the active account has checkmark icon, and inactive has 'Switch' text
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.text('Switch'), findsOneWidget);
+
+      // 5. Verify the profile initial letter avatar is rendered
+      expect(find.text('P'), findsOneWidget);
+      expect(find.text('H'), findsOneWidget);
+    });
   });
 }

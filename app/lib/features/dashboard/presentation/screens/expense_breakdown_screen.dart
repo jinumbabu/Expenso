@@ -12,6 +12,7 @@ import '../../../../shared/widgets/reusable_donut_chart.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../analytics/presentation/models/analytics_chart_data.dart';
 import '../providers/privacy_provider.dart';
+import 'dashboard_summary_screen.dart';
 
 class ExpenseBreakdownScreen extends ConsumerStatefulWidget {
   const ExpenseBreakdownScreen({super.key});
@@ -27,12 +28,87 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
   bool _isDetailMode = false;
   String _selectedSubExpenseId = '';
 
+  late ScrollController _categoryScrollController;
+  late ScrollController _subExpenseScrollController;
+  final Map<String, GlobalKey> _categoryKeys = {};
+  final Map<String, GlobalKey> _subExpenseKeys = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryScrollController = ScrollController();
+    _subExpenseScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _categoryScrollController.dispose();
+    _subExpenseScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToCategory(String categoryId, int index) {
+    if (index < 0) return;
+    final key = _categoryKeys[categoryId];
+    if (key == null) return;
+
+    const double estimatedHeight = 66.0; // 58.0 card height + 8.0 separator
+    final double targetOffset = index * estimatedHeight;
+
+    if (_categoryScrollController.hasClients) {
+      _categoryScrollController.animateTo(
+        targetOffset.clamp(0.0, _categoryScrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ).then((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (key.currentContext != null) {
+            Scrollable.ensureVisible(
+              key.currentContext!,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              alignment: 0.0,
+            );
+          }
+        });
+      });
+    }
+  }
+
+  void _scrollToSubExpense(String transactionId, int index) {
+    if (index < 0) return;
+    final key = _subExpenseKeys[transactionId];
+    if (key == null) return;
+
+    const double estimatedHeight = 66.0; // card height + separator
+    final double targetOffset = index * estimatedHeight;
+
+    if (_subExpenseScrollController.hasClients) {
+      _subExpenseScrollController.animateTo(
+        targetOffset.clamp(0.0, _subExpenseScrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      ).then((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (key.currentContext != null) {
+            Scrollable.ensureVisible(
+              key.currentContext!,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              alignment: 0.0,
+            );
+          }
+        });
+      });
+    }
+  }
+
   String _formatMoney(int amountInCents) {
     final double amount = amountInCents / 100.0;
     return NumberFormat.simpleCurrency(name: 'INR').format(amount);
   }
 
-  DateTimeRange _getRangeForFilter(String filter, DateTimeRange? customRange) {
+  DateTimeRange _getRangeForFilter(String filter, DateTimeRange? customRange, DateTime dashboardMonth) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59, 999);
@@ -45,14 +121,13 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
         final endOfWeek = startOfWeek.add(const Duration(days: 7)).subtract(const Duration(milliseconds: 1));
         return DateTimeRange(start: startOfWeek, end: endOfWeek);
       case 'Month':
-        final startOfMonth = DateTime(now.year, now.month, 1);
-        final endOfMonth = DateTime(now.year, now.month + 1, 1).subtract(const Duration(milliseconds: 1));
+        final startOfMonth = DateTime(dashboardMonth.year, dashboardMonth.month, 1);
+        final endOfMonth = DateTime(dashboardMonth.year, dashboardMonth.month + 1, 1).subtract(const Duration(milliseconds: 1));
         return DateTimeRange(start: startOfMonth, end: endOfMonth);
       case 'Last Month':
-        final lastMonth = now.month == 1 ? 12 : now.month - 1;
-        final lastYear = now.month == 1 ? now.year - 1 : now.year;
-        final startOfLastMonth = DateTime(lastYear, lastMonth, 1);
-        final endOfLastMonth = DateTime(lastYear, lastMonth + 1, 1).subtract(const Duration(milliseconds: 1));
+        final lastMonthDate = DateTime(dashboardMonth.year, dashboardMonth.month - 1, 1);
+        final startOfLastMonth = DateTime(lastMonthDate.year, lastMonthDate.month, 1);
+        final endOfLastMonth = DateTime(lastMonthDate.year, lastMonthDate.month + 1, 1).subtract(const Duration(milliseconds: 1));
         return DateTimeRange(start: startOfLastMonth, end: endOfLastMonth);
       case '3M':
         final start = todayStart.subtract(const Duration(days: 90));
@@ -106,6 +181,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
     final transactionsAsync = ref.watch(expenseListNotifierProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
     final isPrivate = ref.watch(privacyModeProvider);
+    final dashboardMonth = ref.watch(dashboardMonthProvider);
 
     return Scaffold(
       body: Container(
@@ -131,7 +207,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                     return categoriesAsync.when(
                       data: (categories) {
                         // Filter transactions matching period
-                        final activeRange = _getRangeForFilter(_selectedPeriod, _customDateRange);
+                        final activeRange = _getRangeForFilter(_selectedPeriod, _customDateRange, dashboardMonth);
                         final filteredTxs = txs.where((tx) {
                           final isExp = FinancialCalculationService.isExpense(tx);
                           final inRange = tx.date.isAfter(activeRange.start.subtract(const Duration(seconds: 1))) &&
@@ -179,137 +255,148 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                           final subChartData = _getSubExpenseChartData(categoryTxs, categoryTotal);
                           final currentCatName = categoriesMap[_selectedCategoryId]?.name ?? 'Category';
 
-                          return ListView(
-                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                            physics: const BouncingScrollPhysics(),
+                          _subExpenseKeys.clear();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _buildDetailHeader(context, currentCatName),
-                              const SizedBox(height: 24),
-
-                              ReusableDonutChart(
-                                data: subChartData,
-                                selectedId: _selectedSubExpenseId,
-                                onSelected: (id) {
-                                  setState(() {
-                                    _selectedSubExpenseId = id;
-                                  });
-                                },
-                                centerTitle: currentCatName,
-                                centerValue: categoryTotal.toDouble(),
-                                isPrivate: isPrivate,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                                child: _buildDetailHeader(context, currentCatName),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                                child: ReusableDonutChart(
+                                  data: subChartData,
+                                  selectedId: _selectedSubExpenseId,
+                                  onSelected: (id) {
+                                    setState(() {
+                                      _selectedSubExpenseId = id;
+                                      final index = categoryTxs.indexWhere((tx) => tx.id == id);
+                                      _scrollToSubExpense(id, index);
+                                    });
+                                  },
+                                  centerTitle: currentCatName,
+                                  centerValue: categoryTotal.toDouble(),
+                                  isPrivate: isPrivate,
+                                ),
                               ),
                               const SizedBox(height: 24),
-
-                              const Row(
-                                children: [
-                                  Text(
-                                    'SUB-EXPENSES',
-                                    style: TextStyle(
-                                      color: Color(0xFF00E5FF),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.2,
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 20.0),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      'SUB-EXPENSES',
+                                      style: TextStyle(
+                                        color: Color(0xFF00E5FF),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.2,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 12),
+                              Expanded(
+                                child: categoryTxs.isEmpty
+                                    ? Container(
+                                        padding: const EdgeInsets.all(40),
+                                        alignment: Alignment.center,
+                                        child: const Text('No transactions in this category.', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                                      )
+                                    : ListView.separated(
+                                        controller: _subExpenseScrollController,
+                                        padding: const EdgeInsets.fromLTRB(20.0, 0.0, 20.0, 40.0),
+                                        physics: const BouncingScrollPhysics(),
+                                        itemCount: categoryTxs.length,
+                                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                        itemBuilder: (context, index) {
+                                          final tx = categoryTxs[index];
+                                          final isSelected = _selectedSubExpenseId == tx.id;
+                                          final txKey = _subExpenseKeys.putIfAbsent(tx.id, () => GlobalKey());
 
-                              if (categoryTxs.isEmpty)
-                                Container(
-                                  padding: const EdgeInsets.all(40),
-                                  alignment: Alignment.center,
-                                  child: const Text('No transactions in this category.', style: TextStyle(color: Colors.white24, fontSize: 13)),
-                                )
-                              else
-                                ListView.separated(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: categoryTxs.length,
-                                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                  itemBuilder: (context, index) {
-                                    final tx = categoryTxs[index];
-                                    final isSelected = _selectedSubExpenseId == tx.id;
-                                    
-                                    return GestureDetector(
-                                      onTap: () {
-                                        if (_selectedSubExpenseId == tx.id) {
-                                          context.push('/expenses/edit/${tx.id}');
-                                        } else {
-                                          setState(() {
-                                            _selectedSubExpenseId = tx.id;
-                                          });
-                                        }
-                                      },
-                                      onDoubleTap: () {
-                                        context.push('/expenses/edit/${tx.id}');
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: isSelected 
-                                              ? const Color(0xFF051833) 
-                                              : Colors.white.withOpacity(0.015),
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: isSelected 
-                                                ? const Color(0xFF00E5FF) 
-                                                : Colors.white.withOpacity(0.03),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
+                                          return GestureDetector(
+                                            key: txKey,
+                                            onTap: () {
+                                              if (_selectedSubExpenseId == tx.id) {
+                                                context.push('/expenses/edit/${tx.id}');
+                                              } else {
+                                                setState(() {
+                                                  _selectedSubExpenseId = tx.id;
+                                                });
+                                              }
+                                            },
+                                            onDoubleTap: () {
+                                              context.push('/expenses/edit/${tx.id}');
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                               decoration: BoxDecoration(
-                                                color: (isSelected ? const Color(0xFF00E5FF) : Colors.white).withOpacity(0.12),
-                                                shape: BoxShape.circle,
+                                                color: isSelected 
+                                                    ? const Color(0xFF051833) 
+                                                    : Colors.white.withOpacity(0.015),
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: isSelected 
+                                                      ? const Color(0xFF00E5FF) 
+                                                      : Colors.white.withOpacity(0.03),
+                                                ),
                                               ),
-                                              child: Icon(
-                                                Icons.receipt_long_outlined, 
-                                                color: isSelected ? const Color(0xFF00E5FF) : Colors.white70, 
-                                                size: 16,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                              child: Row(
                                                 children: [
-                                                  Text(
-                                                    tx.merchant ?? tx.description ?? 'General Expense',
-                                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                  Container(
+                                                    padding: const EdgeInsets.all(8),
+                                                    decoration: BoxDecoration(
+                                                      color: (isSelected ? const Color(0xFF00E5FF) : Colors.white).withOpacity(0.12),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.receipt_long_outlined, 
+                                                      color: isSelected ? const Color(0xFF00E5FF) : Colors.white70, 
+                                                      size: 16,
+                                                    ),
                                                   ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    DateFormat('dd MMM yyyy').format(tx.date),
-                                                    style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          tx.merchant ?? tx.description ?? 'General Expense',
+                                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        Text(
+                                                          DateFormat('dd MMM yyyy').format(tx.date),
+                                                          style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      PrivacyText(
+                                                        rawValue: _formatMoney(tx.amount.toInt()),
+                                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
+                                                    ],
                                                   ),
                                                 ],
                                               ),
                                             ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                PrivacyText(
-                                                  rawValue: _formatMoney(tx.amount.toInt()),
-                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                const Icon(Icons.chevron_right, color: Colors.white24, size: 16),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
+                                          );
+                                        },
                                       ),
-                                    );
-                                  },
-                                ),
-                              const SizedBox(height: 40),
+                              ),
                             ],
                           );
                         }
 
+                        _categoryKeys.clear();
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -326,6 +413,8 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                 onSelected: (id) {
                                   setState(() {
                                     _selectedCategoryId = id;
+                                    final index = chartData.indexWhere((item) => item.id == id);
+                                    _scrollToCategory(id, index);
                                   });
                                 },
                                 centerTitle: 'Total Expense',
@@ -368,6 +457,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                       child: const Text('No transactions match filters.', style: TextStyle(color: Colors.white24, fontSize: 13)),
                                     )
                                   : ListView.separated(
+                                      controller: _categoryScrollController,
                                       padding: const EdgeInsets.fromLTRB(20.0, 0.0, 20.0, 40.0),
                                       physics: const BouncingScrollPhysics(),
                                       itemCount: chartData.length,
@@ -377,8 +467,10 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                         final cat = categoriesMap[item.id];
                                         final iconData = _getCategoryIcon(cat?.icon);
                                         final isSelected = _selectedCategoryId == item.id;
+                                        final itemKey = _categoryKeys.putIfAbsent(item.id, () => GlobalKey());
                                         
                                         return GestureDetector(
+                                          key: itemKey,
                                           onTap: () {
                                             if (_selectedCategoryId == item.id) {
                                               setState(() {

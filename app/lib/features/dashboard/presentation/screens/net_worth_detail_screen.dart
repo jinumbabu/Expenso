@@ -8,7 +8,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/privacy_text.dart';
-import '../../../../shared/widgets/blue_donut_chart.dart';
+import '../../../../shared/widgets/reusable_net_worth_ring.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../accounts/presentation/providers/account_formatters.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
@@ -140,6 +140,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                                   liabilitiesPct: liabilitiesPct,
                                   assetFraction: assetFraction,
                                   isPrivate: isPrivate,
+                                  selectedMonth: selectedMonth,
                                 ),
                                 const SizedBox(height: 20),
 
@@ -217,6 +218,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
     required double liabilitiesPct,
     required double assetFraction,
     required bool isPrivate,
+    required DateTime selectedMonth,
   }) {
     return GlassCard(
       child: Column(
@@ -261,12 +263,15 @@ class NetWorthDetailScreen extends ConsumerWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  BlueDonutChart(
-                    savingsPercentage: assetFraction,
-                    size: 54,
-                    trackColor: const Color(0xFFFF3B30),
-                  ),
-                  const SizedBox(width: 8),
+                  if (assetFraction >= 0) ...[
+                    ReusableNetWorthRing(
+                      key: ValueKey('net_worth_ring_details_${selectedMonth.toIso8601String()}'),
+                      valueFraction: assetFraction,
+                      size: 54,
+                      trackColor: const Color(0xFFFF3B30),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
