@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../features/analytics/presentation/models/analytics_chart_data.dart';
+import '../utils/analytics_formatter.dart';
 
 class ReusableDonutChart extends StatelessWidget {
   final List<ChartDatum> data;
@@ -20,11 +21,6 @@ class ReusableDonutChart extends StatelessWidget {
     required this.centerValue,
     required this.isPrivate,
   });
-
-  String _formatMoneyDouble(double amountInCents) {
-    final double amount = amountInCents / 100.0;
-    return NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 2).format(amount);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +60,7 @@ class ReusableDonutChart extends StatelessWidget {
 
       sections.add(PieChartSectionData(
         color: sectionColor,
-        value: datum.value,
+        value: datum.value.abs(),
         title: isSelected 
             ? (isPrivate ? '**%' : '${datum.percentage.toStringAsFixed(0)}%')
             : '',
@@ -79,8 +75,8 @@ class ReusableDonutChart extends StatelessWidget {
     final String label = centerDatum != null ? centerDatum.label.toUpperCase() : centerTitle.toUpperCase();
     final String amount = isPrivate 
         ? '₹••••' 
-        : (centerDatum != null ? _formatMoneyDouble(centerDatum.value) : _formatMoneyDouble(centerValue));
-    final String? pctText = (centerDatum != null && !isPrivate) ? '${centerDatum.percentage.toStringAsFixed(1)}%' : null;
+        : (centerDatum != null ? AnalyticsFormatter.formatCurrency(centerDatum.value) : AnalyticsFormatter.formatCurrency(centerValue));
+    final String? pctText = (centerDatum != null && !isPrivate) ? AnalyticsFormatter.formatPercentage(centerDatum.percentage) : null;
 
     final pieChartWidget = PieChart(
       PieChartData(

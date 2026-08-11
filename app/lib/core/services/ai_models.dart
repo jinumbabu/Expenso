@@ -152,6 +152,7 @@ class FinancialContext {
   final int healthScore;
   final List<String> topSpendingCategories;
   final List<String> recentFinancialTrends;
+  final String accountSummary;
 
   const FinancialContext({
     required this.currentBalance,
@@ -163,6 +164,7 @@ class FinancialContext {
     required this.healthScore,
     required this.topSpendingCategories,
     required this.recentFinancialTrends,
+    required this.accountSummary,
   });
 
   String toPromptString() {
@@ -175,6 +177,7 @@ class FinancialContext {
     buffer.writeln('Health Score (0-100): $healthScore');
     buffer.writeln('Budget Status: $budgetStatus');
     buffer.writeln('Upcoming Bills: $upcomingBills');
+    buffer.writeln('Account Balances:\n$accountSummary');
     
     buffer.writeln('Top Spending Categories:');
     if (topSpendingCategories.isEmpty) {

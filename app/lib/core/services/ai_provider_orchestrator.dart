@@ -547,6 +547,30 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
       );
     }
 
+    // Load recent chat history for session context window
+    final db = _ref.read(databaseProvider);
+    final history = await db.chatHistoryDao.getChatHistory(userId);
+    final recentHistory = history
+        .where((m) => m.message.trim().isNotEmpty)
+        .toList();
+    if (recentHistory.isNotEmpty && recentHistory.last.message == message) {
+      recentHistory.removeLast();
+    }
+    final contextWindow = recentHistory.length > 6
+        ? recentHistory.sublist(recentHistory.length - 6)
+        : recentHistory;
+
+    final historyBuffer = StringBuffer();
+    if (contextWindow.isNotEmpty) {
+      historyBuffer.writeln('=== RECENT CONVERSATION HISTORY ===');
+      for (var msg in contextWindow) {
+        final roleName = msg.role == 'user' ? 'User' : 'Expenso AI';
+        historyBuffer.writeln('$roleName: ${msg.message}');
+      }
+      historyBuffer.writeln('===================================\n');
+    }
+    final combinedMessage = '${historyBuffer.toString()}Current User Question: $message';
+
     final activeProvider = state.aiProvider;
     final activeModel = state.selectedModels[activeProvider] ?? _getDefaultModel(activeProvider);
     final activeKey = getActiveKeyForProvider(activeProvider);
@@ -554,28 +578,29 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
     // 3. API Key not present
     if (activeKey == null || activeKey.key.trim().isEmpty) {
       dev.log('AiProviderOrchestrator: Missing API Key for $activeProvider. Trying fallback chain.');
-      return await _executeFallbackChain(message, context, userId, activeProvider);
+      return await _executeFallbackChain(combinedMessage, message, context, userId, activeProvider);
     }
 
     // 4. Try execution of selected Online AI Provider
     try {
       final stopwatch = Stopwatch()..start();
       final clientProvider = _createProviderInstance(activeProvider, activeKey.key, activeModel);
-      final response = await clientProvider.chat(message, context);
+      final response = await clientProvider.chat(combinedMessage, context);
       stopwatch.stop();
 
-      final totalTokens = _estimateTokens(message) + _estimateTokens(response.reply);
+      final totalTokens = _estimateTokens(combinedMessage) + _estimateTokens(response.reply);
       await _updateUsageStats(activeKey.id, stopwatch.elapsedMilliseconds, totalTokens);
 
       return response;
     } catch (e) {
       dev.log('AiProviderOrchestrator: Call to $activeProvider failed: $e. Entering fallback chain.');
-      return await _executeFallbackChain(message, context, userId, activeProvider);
+      return await _executeFallbackChain(combinedMessage, message, context, userId, activeProvider);
     }
   }
 
   Future<AIResponse> _executeFallbackChain(
     String message,
+    String originalMessage,
     FinancialContext context,
     String userId,
     String failedProvider,
@@ -616,7 +641,7 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
 
     // All failed: fall back to Offline AI
     dev.log('AiProviderOrchestrator: All fallbacks failed. Falling back to Offline AI.');
-    final offlineRes = await offlineProvider.chat(message, context);
+    final offlineRes = await offlineProvider.chat(originalMessage, context);
     await setAiMode('offline');
     await setAiProvider('offline');
 
@@ -644,6 +669,17 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
     final categories = await db.categoryDao.getCategoriesForUser(userId);
     final categoriesMap = {for (var c in categories) c.id: c};
     final budgets = await db.budgetDao.getBudgetsForUser(userId);
+
+    final accounts = await db.accountDao.getAccountsForUser(userId);
+    final accountBuffer = StringBuffer();
+    if (accounts.isEmpty) {
+      accountBuffer.write('No accounts registered.');
+    } else {
+      for (var acc in accounts) {
+        final bal = acc.balance / 100.0;
+        accountBuffer.writeln('- ${acc.name} (${acc.type}): INR ${bal.toStringAsFixed(2)}');
+      }
+    }
 
     final financialData = FinancialCalculationService.calculate(
       transactions: transactions,
@@ -737,6 +773,7 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
       healthScore: advisorState.healthScore,
       topSpendingCategories: topCategories,
       recentFinancialTrends: trends,
+      accountSummary: accountBuffer.toString().trim(),
     );
   }
 }

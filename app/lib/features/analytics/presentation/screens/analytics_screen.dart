@@ -16,6 +16,7 @@ import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../core/database/app_database.dart';
 import '../models/analytics_chart_data.dart';
 import '../services/analytics_aggregation_service.dart';
+import '../../../../shared/utils/analytics_formatter.dart';
 
 class AnalyticsScreen extends ConsumerStatefulWidget {
   const AnalyticsScreen({super.key});
@@ -69,12 +70,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   DateTime? _selectedHeatmapDate;
 
   String _formatMoney(int amountInCents) {
-    final double amount = amountInCents / 100.0;
-    return NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 0).format(amount);
+    return AnalyticsFormatter.formatCurrency(amountInCents / 100.0);
   }
 
   String _formatMoneyDouble(double amount) {
-    return NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 0).format(amount);
+    return AnalyticsFormatter.formatCurrency(amount);
   }
 
   Color _getCategoryColor(String name) {
@@ -861,6 +861,47 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                             },
                           ),
                         ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 45,
+                            getTitlesWidget: (value, meta) {
+                              if (value == meta.min) {
+                                return const SideTitleWidget(
+                                  axisSide: AxisSide.left,
+                                  child: Text('0', style: TextStyle(color: Colors.white38, fontSize: 8)),
+                                );
+                              }
+                              return SideTitleWidget(
+                                  axisSide: AxisSide.left,
+                                  child: Text(
+                                    AnalyticsFormatter.formatAxisValue(value),
+                                    style: const TextStyle(color: Colors.white38, fontSize: 8),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                  ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (touchedSpot) => const Color(0xFF0F172A).withOpacity(0.9),
+                          tooltipBorder: const BorderSide(color: Color(0xFF00E5FF), width: 0.5),
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((spot) {
+                              final bar = spot.bar;
+                              final isIncome = bar.color == const Color(0xFF0066FF);
+                              final label = isIncome ? 'Income' : 'Expense';
+                              final val = spot.y;
+                              return LineTooltipItem(
+                                '$label\n${AnalyticsFormatter.formatCurrency(val)}',
+                                const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              );
+                            }).toList();
+                          },
+                        ),
                       ),
                       borderData: FlBorderData(show: false),
                       lineBarsData: [
@@ -957,7 +998,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
         sections.add(PieChartSectionData(
           color: sectionColor,
-          value: datum.value,
+          value: datum.value.abs(),
           title: isSelected ? '${datum.percentage.toStringAsFixed(0)}%' : '',
           radius: radius,
           titleStyle: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
@@ -1811,14 +1852,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                     width: 160,
                     child: _buildUniversalChart(
                       chartType: _accountChartType,
-                      data: data.map((d) => ChartDatum(
-                        id: d.id,
-                        label: d.label,
-                        value: d.value.abs(),
-                        percentage: d.percentage,
-                        color: d.color,
-                        transactionCount: 0,
-                      )).toList(),
+                      data: data,
                       selectedId: _selectedAccountId,
                       onSelected: (id) {
                         setState(() {
@@ -1839,14 +1873,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             ] else ...[
               _buildUniversalChart(
                 chartType: _accountChartType,
-                data: data.map((d) => ChartDatum(
-                  id: d.id,
-                  label: d.label,
-                  value: d.value.abs(),
-                  percentage: d.percentage,
-                  color: d.color,
-                  transactionCount: 0,
-                )).toList(),
+                data: data,
                 selectedId: _selectedAccountId,
                 onSelected: (id) {
                   setState(() {
@@ -2839,6 +2866,22 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               },
             ),
           ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 45,
+              getTitlesWidget: (value, meta) {
+                if (value == meta.max) return const SizedBox.shrink();
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  child: Text(
+                    AnalyticsFormatter.formatCompactCurrency(value),
+                    style: const TextStyle(color: Colors.white38, fontSize: 8),
+                  ),
+                );
+              },
+            ),
+          ),
         ),
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
@@ -2851,7 +2894,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                 if (spot.barIndex == 0) metric = 'Income';
                 if (spot.barIndex == 1) metric = 'Expense';
                 return LineTooltipItem(
-                  '${point.label}\n$metric: ${_formatMoneyDouble(spot.y)}',
+                  '${point.label}\n$metric: ${AnalyticsFormatter.formatCurrency(spot.y)}',
                   const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                 );
               }).toList();
@@ -2903,18 +2946,17 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 45,
               interval: interval,
               getTitlesWidget: (value, meta) {
-                if (value == 0) {
-                  return const Text('₹0', style: TextStyle(color: Colors.white38, fontSize: 8));
-                }
                 if (value == meta.max) return const SizedBox.shrink();
-                if (value >= 1000) {
-                  final kVal = (value / 1000).toStringAsFixed(0);
-                  return Text('₹${kVal}K', style: const TextStyle(color: Colors.white38, fontSize: 8));
-                }
-                return Text('₹${value.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white38, fontSize: 8));
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  child: Text(
+                    AnalyticsFormatter.formatCompactCurrency(value),
+                    style: const TextStyle(color: Colors.white38, fontSize: 8),
+                  ),
+                );
               },
             ),
           ),
@@ -2955,7 +2997,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               final point = points[groupIndex];
               final monthNum = (groupIndex + 1).toString().padLeft(2, '0');
               return BarTooltipItem(
-                'Month: $monthNum\nIncome: ${_formatMoneyDouble(point.income)}\nExpense: ${_formatMoneyDouble(point.expense)}',
+                'Month: $monthNum\nIncome: ${AnalyticsFormatter.formatCurrency(point.income)}\nExpense: ${AnalyticsFormatter.formatCurrency(point.expense)}',
                 const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
               );
             },

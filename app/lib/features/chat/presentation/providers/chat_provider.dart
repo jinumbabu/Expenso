@@ -24,8 +24,8 @@ final Provider<ChatRepository> chatRepositoryProvider = Provider<ChatRepository>
 });
 
 // Chat History Future Provider (refreshed when messages are sent/cleared)
-final FutureProviderFamily<List<ChatHistoryItem>, String> chatHistoryProvider =
-    FutureProvider.family<List<ChatHistoryItem>, String>((ref, userId) async {
+final chatHistoryProvider =
+    FutureProvider.autoDispose.family<List<ChatHistoryItem>, String>((ref, userId) async {
   final repo = ref.watch(chatRepositoryProvider);
   return await repo.getChatHistory(userId);
 });

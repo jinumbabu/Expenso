@@ -10,6 +10,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../providers/chat_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -72,20 +76,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     'Spending Insights',
   ];
 
-  // Empty chat welcome state queries
-  final List<String> _welcomeQueries = [
-    'Show my monthly summary',
-    'Where did I spend the most?',
-    'Upcoming bills',
-    'Analyze my spending',
-    'Help me create a budget',
+  static const List<List<String>> _suggestionSets = [
+    [
+      'Show my monthly summary',
+      'Where did I spend the most?',
+      'Upcoming bills',
+      'Analyze my spending',
+    ],
+    [
+      'How much did I save this month?',
+      'What are my biggest expenses?',
+      'Show my recent transactions',
+      'Help me create a budget',
+    ],
+    [
+      'What\'s affecting my net worth?',
+      'Which category costs me the most?',
+      'Do I have upcoming bills?',
+      'Find unusual spending',
+    ],
+    [
+      'Compare this month with last month',
+      'Show my top spending categories',
+      'How can I reduce my expenses?',
+      'Show my financial health',
+    ],
+    [
+      'What did I spend today?',
+      'Where am I overspending?',
+      'Show my income this month',
+      'Give me a financial summary',
+    ],
   ];
+
+  late List<String> _currentWelcomeQueries;
 
   @override
   void initState() {
     super.initState();
     _focusNode.addListener(_onFocusChange);
     _scrollController.addListener(_scrollListener);
+    
+    // Choose a random welcome queries set
+    final random = math.Random();
+    _currentWelcomeQueries = List.from(_suggestionSets[random.nextInt(_suggestionSets.length)]);
   }
 
   void _scrollListener() {
@@ -358,18 +392,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _selectedFileType = 'image';
                   });
                 }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF00E5FF)),
-              title: const Text('Attach Statement or Document (PDF/CSV/Excel)', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedFile = File('statement.pdf');
-                  _selectedFileName = 'bank_statement_july.pdf';
-                  _selectedFileType = 'pdf';
-                });
               },
             ),
             const SizedBox(height: 8),
@@ -663,19 +685,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 }
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file_outlined, color: Color(0xFF00E5FF)),
-              title: const Text('Attach Statement or Document (PDF/CSV)', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                // Simulate document selection
-                setState(() {
-                  _selectedFile = File('statement.pdf');
-                  _selectedFileName = 'bank_statement_july.pdf';
-                  _selectedFileType = 'pdf';
-                });
-              },
-            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -687,11 +696,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF050505),
+        backgroundColor: const Color(0xFF0F1A1C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF0066FF), width: 1.2)),
-        title: const Text('Clear Chat History', style: TextStyle(color: Colors.white)),
+        title: const Text('Clear conversation?', style: TextStyle(color: Colors.white)),
         content: const Text(
-          'Are you sure you want to delete all messages? This action is local and irreversible.',
+          'This will remove the current chat from your conversation history.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -704,6 +713,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onPressed: () {
               Navigator.pop(context);
               ref.read(chatNotifierProvider.notifier).clearChat(userId);
+              setState(() {
+                final random = math.Random();
+                _currentWelcomeQueries = List.from(_suggestionSets[random.nextInt(_suggestionSets.length)]);
+              });
             },
             child: const Text('Clear', style: TextStyle(color: Colors.white)),
           ),
@@ -745,9 +758,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   const Center(
                     child: Text('AI Chat Menu', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(height: 20),
-
-                  _buildMenuSection('AI', [
+                                  _buildMenuSection('AI', [
                     _buildMenuItem(context, Icons.settings_outlined, 'AI Settings', () {
                       Navigator.pop(context);
                       context.push('/ai-settings');
@@ -755,14 +766,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     _buildMenuItem(context, Icons.vpn_key_outlined, 'API Keys Manager', () {
                       Navigator.pop(context);
                       context.push('/api-manager');
-                    }),
-                    _buildMenuItem(context, Icons.hub_outlined, 'AI Providers', () {
-                      Navigator.pop(context);
-                      context.push('/ai-settings');
-                    }),
-                    _buildMenuItem(context, Icons.swap_horiz_rounded, 'Switch AI Model', () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Use the model selection dropdown in the header to switch models.')));
                     }),
                     _buildMenuItem(context, Icons.wifi_off_outlined, 'Offline AI', () async {
                       Navigator.pop(context);
@@ -828,7 +831,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }),
                     _buildMenuItem(context, Icons.share_outlined, 'Export Chat', () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exporting complete chat to clipboard as CSV...')));
+                      final aiConfig = ref.read(aiProviderOrchestratorProvider);
+                      final isOffline = aiConfig.aiMode == 'offline' || aiConfig.aiProvider == 'offline';
+                      final Map<String, String> localProviderDisplayNames = {
+                        'offline': 'Offline AI',
+                        'gemini': 'Google Gemini',
+                        'openai': 'OpenAI',
+                        'claude': 'Claude',
+                        'groq': 'Groq',
+                        'openrouter': 'OpenRouter',
+                        'deepseek': 'DeepSeek',
+                        'together': 'Together AI',
+                        'mistral': 'Mistral',
+                      };
+                      final Map<String, String> localModelMap = {
+                        'offline-ai': 'Offline AI',
+                        'gemini-2.5-flash': 'Gemini 2.5 Flash',
+                        'gemini-2.5-pro': 'Gemini 2.5 Pro',
+                        'gemini-2.0-flash': 'Gemini 2.0 Flash',
+                        'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
+                        'gpt-5': 'GPT-5',
+                        'gpt-5-mini': 'GPT-5 Mini',
+                        'gpt-5-nano': 'GPT-5 Nano',
+                        'gpt-4.1': 'GPT-4.1',
+                        'gpt-4.1-mini': 'GPT-4.1 Mini',
+                        'claude-4-sonnet': 'Claude Sonnet 4',
+                        'claude-4-opus': 'Claude Opus 4',
+                        'llama-4': 'Llama 4',
+                        'llama-3.3-70b-specdec': 'Llama 3.3 70B',
+                        'deepseek-r1-distill-llama-70b': 'DeepSeek R1',
+                        'qwen-2.5-coder-32b': 'Qwen',
+                        'google/gemini-2.5-pro': 'Gemini 2.5 Pro',
+                        'openai/gpt-4o': 'GPT',
+                        'anthropic/claude-3-5-sonnet': 'Claude',
+                        'deepseek/deepseek-chat': 'DeepSeek',
+                        'meta-llama/llama-3.1-70b-instruct': 'Llama',
+                        'mistralai/mistral-large': 'Mistral',
+                        'qwen/qwen-2.5-72b-instruct': 'Qwen',
+                        'deepseek-chat': 'DeepSeek Chat',
+                        'deepseek-reasoner': 'DeepSeek Reasoner',
+                        'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo': 'Llama 3.1 70B',
+                        'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo': 'Llama 3.1 8B',
+                        'deepseek-ai/DeepSeek-V3': 'DeepSeek V3',
+                        'mistral-large-latest': 'Mistral Large',
+                        'mistral-medium-latest': 'Mistral Medium',
+                        'mistral-small-latest': 'Mistral Small',
+                        'open-mixtral-8x22b': 'Mixtral 8x22B',
+                      };
+                      final pName = isOffline ? 'Offline AI' : (localProviderDisplayNames[aiConfig.aiProvider] ?? aiConfig.aiProvider.toUpperCase());
+                      final mId = isOffline ? 'offline' : (aiConfig.selectedModels[aiConfig.aiProvider] ?? 'gemini-2.5-flash');
+                      final mDisplayName = localModelMap[mId] ?? mId;
+                      final messages = ref.read(chatHistoryProvider(userId)).value ?? [];
+                      _exportChatAsPdf(messages, pName, mDisplayName);
                     }),
                     _buildMenuItem(context, Icons.delete_sweep_outlined, 'Clear Conversation', () {
                       Navigator.pop(context);
@@ -840,7 +894,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }),
                     _buildMenuItem(context, Icons.copy_all_outlined, 'Copy Entire Chat', () {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entire chat content copied to clipboard.')));
+                      final messages = ref.read(chatHistoryProvider(userId)).value ?? [];
+                      _copyConversation(messages);
                     }),
                   ]),
 
@@ -1030,6 +1085,165 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return cleanLines.join('\n').trim();
   }
 
+  Future<void> _exportChatAsPdf(List<ChatHistoryItem> messages, String activeProvider, String modelDisplayName) async {
+    if (messages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No conversation to export.'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final pdfDoc = pw.Document();
+      
+      pdfDoc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Expenso AI Chat History',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.teal,
+                      ),
+                    ),
+                    pw.Text(
+                      DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 12),
+              
+              // Metadata
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Provider: $activeProvider', style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey800)),
+                    pw.SizedBox(height: 2),
+                    pw.Text('Model: $modelDisplayName', style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey800)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              
+              // Messages
+              ...messages.map((msg) {
+                final isMe = msg.role == 'user';
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 16),
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: isMe ? PdfColors.blue50 : PdfColors.white,
+                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                            isMe ? 'User' : 'Expenso AI',
+                            style: pw.TextStyle(
+                              fontSize: 11,
+                              fontWeight: pw.FontWeight.bold,
+                              color: isMe ? PdfColors.blue800 : PdfColors.teal800,
+                            ),
+                          ),
+                          pw.Text(
+                            DateFormat('HH:mm').format(msg.createdAt),
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(height: 6),
+                      pw.Text(
+                        _cleanMessageText(msg.message).replaceAll('₹', 'INR '),
+                        style: const pw.TextStyle(
+                          fontSize: 10,
+                          lineSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ];
+          },
+        ),
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/expenso_chat_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await file.writeAsBytes(await pdfDoc.save());
+
+      // Share PDF through Share Sheet
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Expenso AI Chat History Export',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to export PDF: ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _copyConversation(List<ChatHistoryItem> messages) async {
+    if (messages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No conversation to copy.')),
+      );
+      return;
+    }
+
+    final buffer = StringBuffer();
+    for (var msg in messages) {
+      final role = msg.role == 'user' ? 'User' : 'Expenso AI';
+      final text = _cleanMessageText(msg.message);
+      buffer.writeln('$role:\n$text\n');
+    }
+
+    await Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conversation copied to clipboard.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -1208,10 +1422,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     return PopScope(
-      canPop: false,
+      canPop: true,
       onPopInvoked: (didPop) {
         if (didPop) return;
-        context.go('/dashboard');
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/dashboard');
+        }
       },
       child: Scaffold(
         body: Container(
@@ -1225,7 +1443,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           child: SafeArea(
             child: Column(
               children: [
-                // COMPACT HEADER (Goal 2 & 3)
+                // COMPACT HEADER
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Row(
@@ -1234,7 +1452,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       // Back Arrow to Dashboard
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-                        onPressed: () => context.go('/dashboard'),
+                        onPressed: () {
+                          if (context.canPop()) {
+                            context.pop();
+                          } else {
+                            context.go('/dashboard');
+                          }
+                        },
                         constraints: const BoxConstraints(),
                         padding: EdgeInsets.zero,
                         splashRadius: 20,
@@ -1256,127 +1480,135 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              children: [
-                                PopupMenuButton<MapEntry<String, String>>(
-                                  tooltip: 'Quick switch model',
-                                  offset: const Offset(0, 24),
-                                  onSelected: (entry) async {
-                                    final provider = entry.key;
-                                    final model = entry.value;
-                                    final orchestrator = ref.read(aiProviderOrchestratorProvider.notifier);
-                                    if (provider == 'offline') {
-                                      await orchestrator.setAiMode('offline');
-                                      await orchestrator.setAiProvider('offline');
-                                    } else {
-                                      await orchestrator.setAiMode('online');
-                                      await orchestrator.setAiProvider(provider);
-                                      await orchestrator.setAiModel(provider, model);
-                                    }
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Switched to ${modelMap[model] ?? model}'),
-                                          duration: const Duration(seconds: 1),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  itemBuilder: (context) {
-                                    final List<PopupMenuEntry<MapEntry<String, String>>> items = [];
+                            PopupMenuButton<MapEntry<String, String>>(
+                              tooltip: 'Quick switch model',
+                              offset: const Offset(0, 24),
+                              onSelected: (entry) async {
+                                final provider = entry.key;
+                                final model = entry.value;
+                                final orchestrator = ref.read(aiProviderOrchestratorProvider.notifier);
+                                if (provider == 'offline') {
+                                  await orchestrator.setAiMode('offline');
+                                  await orchestrator.setAiProvider('offline');
+                                } else {
+                                  await orchestrator.setAiMode('online');
+                                  await orchestrator.setAiProvider(provider);
+                                  await orchestrator.setAiModel(provider, model);
+                                }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Switched to ${modelMap[model] ?? model}'),
+                                      duration: const Duration(seconds: 1),
+                                    ),
+                                  );
+                                }
+                              },
+                              itemBuilder: (context) {
+                                final List<PopupMenuEntry<MapEntry<String, String>>> items = [];
+                                
+                                // 1. Dynamic Saved/Configured Providers Section
+                                final savedProviders = aiConfig.savedKeys
+                                    .map((k) => k.provider)
+                                    .toSet()
+                                    .toList();
                                     
-                                    items.add(const PopupMenuItem(
-                                      value: MapEntry('offline', 'offline-ai'),
-                                      child: Text('Offline AI', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                    ));
-                                    items.add(const PopupMenuDivider());
-
-                                    final Map<String, List<MapEntry<String, String>>> providerModels = {
-                                      'gemini': [
-                                        const MapEntry('gemini-2.5-flash', 'Gemini 2.5 Flash'),
-                                        const MapEntry('gemini-2.5-pro', 'Gemini 2.5 Pro'),
-                                      ],
-                                      'openai': [
-                                        const MapEntry('gpt-5-mini', 'GPT-5 Mini'),
-                                        const MapEntry('gpt-5', 'GPT-5'),
-                                      ],
-                                      'claude': [
-                                        const MapEntry('claude-4-sonnet', 'Claude Sonnet 4'),
-                                        const MapEntry('claude-4-opus', 'Claude Opus 4'),
-                                      ],
-                                      'groq': [
-                                        const MapEntry('llama-4', 'Llama 4'),
-                                        const MapEntry('deepseek-r1-distill-llama-70b', 'DeepSeek R1'),
-                                      ],
-                                      'openrouter': [
-                                        const MapEntry('google/gemini-2.5-pro', 'OpenRouter Gemini'),
-                                        const MapEntry('openai/gpt-4o', 'OpenRouter GPT'),
-                                      ],
-                                      'deepseek': [
-                                        const MapEntry('deepseek-chat', 'DeepSeek Chat'),
-                                        const MapEntry('deepseek-reasoner', 'DeepSeek Reasoner'),
-                                      ],
-                                      'together': [
-                                        const MapEntry('meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo', 'Together Llama 3.1'),
-                                        const MapEntry('deepseek-ai/DeepSeek-V3', 'Together DeepSeek V3'),
-                                      ],
-                                      'mistral': [
-                                        const MapEntry('mistral-large-latest', 'Mistral Large'),
-                                      ],
-                                    };
-
-                                    for (var entry in providerModels.entries) {
-                                      items.add(PopupMenuItem(
-                                        enabled: false,
-                                        child: Text(
-                                          providerDisplayNames[entry.key]?.toUpperCase() ?? entry.key.toUpperCase(),
-                                          style: const TextStyle(color: Colors.tealAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                                        ),
-                                      ));
-                                      for (var modelEntry in entry.value) {
-                                        items.add(PopupMenuItem(
-                                          value: MapEntry(entry.key, modelEntry.key),
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(left: 8.0),
-                                            child: Text(modelEntry.value, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                          ),
-                                        ));
-                                      }
-                                      items.add(const PopupMenuDivider());
-                                    }
-                                    if (items.isNotEmpty && items.last is PopupMenuDivider) {
-                                      items.removeLast();
-                                    }
-                                    return items;
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        modelDisplayName,
-                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                if (savedProviders.isNotEmpty) {
+                                  items.add(const PopupMenuItem(
+                                    enabled: false,
+                                    child: Text(
+                                      'AI PROVIDERS',
+                                      style: TextStyle(
+                                        color: Colors.tealAccent,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
                                       ),
-                                      const SizedBox(width: 2),
-                                      const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 16),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: dotColor.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: dotColor.withOpacity(0.3), width: 0.8),
-                                  ),
+                                    ),
+                                  ));
+                                  
+                                  for (var provider in savedProviders) {
+                                    final modelId = aiConfig.selectedModels[provider] ?? 'gemini-2.5-flash';
+                                    final modelName = modelMap[modelId] ?? modelId;
+                                    final providerDisplayName = providerDisplayNames[provider] ?? provider.toUpperCase();
+                                    
+                                    items.add(PopupMenuItem(
+                                      value: MapEntry(provider, modelId),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              modelName,
+                                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            Text(
+                                              'Powered by $providerDisplayName',
+                                              style: const TextStyle(color: Colors.white30, fontSize: 9),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ));
+                                  }
+                                  items.add(const PopupMenuDivider());
+                                }
+                                
+                                // 2. Offline AI Section
+                                items.add(const PopupMenuItem(
+                                  enabled: false,
                                   child: Text(
-                                    badgeText.toUpperCase(),
-                                    style: TextStyle(color: dotColor, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                    'OFFLINE AI',
+                                    style: TextStyle(
+                                      color: Colors.tealAccent,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ));
+                                items.add(const PopupMenuItem(
+                                  value: MapEntry('offline', 'offline-ai'),
+                                  child: Padding(
+                                    padding: EdgeInsets.only(left: 8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Offline AI',
+                                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          'Powered by Local AI',
+                                          style: TextStyle(color: Colors.white30, fontSize: 9),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ));
+                                
+                                return items;
+                              },
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      modelDisplayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 16),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 1),
+                            const SizedBox(height: 2),
                             Text(
                               'Powered by $providerName',
                               style: const TextStyle(color: Colors.white54, fontSize: 9.5),
@@ -1384,183 +1616,173 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ],
                         ),
                       ),
-                      // Three-dot Overflow Menu (Goal 2 & 3)
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 22),
-                        color: const Color(0xFF0A0F1D),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: Colors.white.withOpacity(0.08)),
-                        ),
-                        onSelected: (value) async {
-                          switch (value) {
-                            case 'settings':
-                              context.push('/ai-settings');
-                              break;
-                            case 'api_manager':
-                              context.push('/api-manager');
-                              break;
-                            case 'provider':
-                              context.push('/ai-settings');
-                              break;
-                            case 'model':
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Tap the model name in the header to switch models.')),
-                              );
-                              break;
-                            case 'help':
-                              context.push('/chat-help');
-                              break;
-                            case 'export':
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Exporting conversation...')),
-                              );
-                              break;
-                            case 'copy':
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Conversation copied to clipboard.')),
-                              );
-                              break;
-                            case 'clear':
-                              _confirmClearHistory(userId);
-                              break;
-                            case 'privacy':
-                              context.push('/privacy');
-                              break;
-                            case 'about':
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: const Color(0xFF0A0F1D),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  title: const Text('About Expenso AI', style: TextStyle(color: Colors.white)),
-                                  content: const Text('Expenso AI Copilot v3.0\nSecure locally managed financial advisor.', style: TextStyle(color: Colors.white70)),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))
+                      const SizedBox(width: 12),
+                      // Right Side Column: Badge on top, Settings Icon on bottom
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: dotColor.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: dotColor.withOpacity(0.3), width: 0.8),
+                            ),
+                            child: Text(
+                              badgeText.toUpperCase(),
+                              style: TextStyle(color: dotColor, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
+                            color: const Color(0xFF0A0F1D),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: Colors.white.withOpacity(0.08)),
+                            ),
+                            onSelected: (value) async {
+                              final chatHistoryAsync = ref.read(chatHistoryProvider(userId));
+                              final messages = chatHistoryAsync.value ?? [];
+                              switch (value) {
+                                case 'settings':
+                                  context.push('/ai-settings');
+                                  break;
+                                case 'api_manager':
+                                  context.push('/api-manager');
+                                  break;
+                                case 'help':
+                                  context.push('/chat-help');
+                                  break;
+                                case 'export':
+                                  _exportChatAsPdf(messages, providerName, modelDisplayName);
+                                  break;
+                                case 'copy':
+                                  _copyConversation(messages);
+                                  break;
+                                case 'clear':
+                                  _confirmClearHistory(userId);
+                                  break;
+                                case 'privacy':
+                                  context.push('/privacy');
+                                  break;
+                                case 'about':
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      backgroundColor: const Color(0xFF0A0F1D),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      title: const Text('About Expenso AI', style: TextStyle(color: Colors.white)),
+                                      content: const Text('Expenso AI Copilot v3.0\nSecure locally managed financial advisor.', style: TextStyle(color: Colors.white70)),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))
+                                      ],
+                                    ),
+                                  );
+                                  break;
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                enabled: false,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isOffline ? 'OFFLINE AI' : 'ONLINE AI',
+                                      style: TextStyle(color: dotColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      connectionInfoText,
+                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                    ),
                                   ],
                                 ),
-                              );
-                              break;
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            enabled: false,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isOffline ? 'OFFLINE AI' : 'ONLINE AI',
-                                  style: TextStyle(color: dotColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                              ),
+                              const PopupMenuDivider(height: 1),
+                              const PopupMenuItem(
+                                value: 'settings',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.settings_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('AI Settings', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  connectionInfoText,
-                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
+                              const PopupMenuItem(
+                                value: 'api_manager',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.vpn_key_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('API Manager', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuDivider(height: 1),
-                          const PopupMenuItem(
-                            value: 'settings',
-                            child: Row(
-                              children: [
-                                Icon(Icons.settings_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('AI Settings', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'api_manager',
-                            child: Row(
-                              children: [
-                                Icon(Icons.vpn_key_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('API Manager', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'provider',
-                            child: Row(
-                              children: [
-                                Icon(Icons.hub_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Change AI Provider', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'model',
-                            child: Row(
-                              children: [
-                                Icon(Icons.swap_horiz_rounded, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Change AI Model', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'help',
-                            child: Row(
-                              children: [
-                                Icon(Icons.help_outline_rounded, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Help & Tutorials', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'export',
-                            child: Row(
-                              children: [
-                                Icon(Icons.share_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Export Chat', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'copy',
-                            child: Row(
-                              children: [
-                                Icon(Icons.copy_all_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Copy Conversation', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'clear',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_sweep_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Clear Conversation', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'privacy',
-                            child: Row(
-                              children: [
-                                Icon(Icons.security_outlined, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('Privacy', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'about',
-                            child: Row(
-                              children: [
-                                Icon(Icons.info_outline_rounded, color: Colors.white70, size: 18),
-                                SizedBox(width: 10),
-                                Text('About Expenso AI', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'help',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.help_outline_rounded, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Help & Tutorials', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'export',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.share_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Export Chat', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'copy',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.copy_all_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Copy Conversation', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'clear',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_sweep_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Clear Conversation', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'privacy',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.security_outlined, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('Privacy', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'about',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline_rounded, color: Colors.white70, size: 18),
+                                    SizedBox(width: 10),
+                                    Text('About Expenso AI', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1879,7 +2101,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
           const SizedBox(height: 28),
-          ..._welcomeQueries.map((query) {
+          ..._currentWelcomeQueries.map((query) {
             IconData itemIcon = Icons.help_outline_rounded;
             if (query.contains('summary') || query.contains('Report')) {
               itemIcon = Icons.summarize_outlined;

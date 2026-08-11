@@ -13,6 +13,7 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../analytics/presentation/models/analytics_chart_data.dart';
 import '../providers/privacy_provider.dart';
 import 'dashboard_summary_screen.dart';
+import '../../../../shared/utils/analytics_formatter.dart';
 
 class ExpenseBreakdownScreen extends ConsumerStatefulWidget {
   const ExpenseBreakdownScreen({super.key});
@@ -167,7 +168,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
       list.add(ChartDatum(
         id: tx.id,
         label: label,
-        value: tx.amount.toDouble(),
+        value: tx.amount.toDouble() / 100.0,
         percentage: percentage,
         color: colors[i % colors.length],
         transactionCount: 1,
@@ -236,7 +237,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                             ChartDatum(
                               id: catId,
                               label: cat?.name ?? 'Other',
-                              value: amount.toDouble(),
+                              value: amount.toDouble() / 100.0,
                               percentage: percentage,
                               color: _getCategoryColor(cat?.icon),
                               transactionCount: 1,
@@ -276,7 +277,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                     });
                                   },
                                   centerTitle: currentCatName,
-                                  centerValue: categoryTotal.toDouble(),
+                                  centerValue: categoryTotal.toDouble() / 100.0,
                                   isPrivate: isPrivate,
                                 ),
                               ),
@@ -418,7 +419,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                   });
                                 },
                                 centerTitle: 'Total Expense',
-                                centerValue: totalExpense.toDouble(),
+                                centerValue: totalExpense.toDouble() / 100.0,
                                 isPrivate: isPrivate,
                               ),
                             ),
@@ -440,7 +441,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                     ),
                                   ),
                                   PrivacyText(
-                                    rawValue: _formatMoney(totalExpense),
+                                    rawValue: AnalyticsFormatter.formatCurrency(totalExpense.toDouble() / 100.0),
                                     style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
                                   ),
                                 ],
@@ -540,7 +541,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     PrivacyText(
-                                                      rawValue: _formatMoney(item.value.toInt()),
+                                                      rawValue: AnalyticsFormatter.formatCurrency(item.value),
                                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
                                                     ),
                                                     const SizedBox(width: 6),
