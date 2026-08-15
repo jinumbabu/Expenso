@@ -288,7 +288,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      const Text('Total Assets', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
+                      const Text('Asset Share', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
                       const SizedBox(height: 3),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
@@ -302,7 +302,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      const Text('Total Liabilities', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
+                      const Text('Liability Share', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
                     ],
                   ),
                 ],

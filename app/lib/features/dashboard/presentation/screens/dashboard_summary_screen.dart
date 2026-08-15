@@ -226,6 +226,10 @@ class DashboardSummaryScreen extends ConsumerWidget {
       data: (summary) => summary.netAssets,
       orElse: () => 0,
     );
+    final finalTotalAssets = accountSummaryAsync.maybeWhen(
+      data: (summary) => summary.totalAssets,
+      orElse: () => 0,
+    );
     final isPrivate = ref.watch(privacyModeProvider);
 
     // Calculate dynamic budget left from budgets database
@@ -374,7 +378,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
                 _buildNetWorthCard(
                   context,
                   ref,
-                  finalNetWorth,
+                  finalTotalAssets,
                   finalIncome,
                   finalExpense,
                   finalBudgetLeft,
@@ -768,7 +772,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
                       Row(
                         children: [
                           const Text(
-                            'NET WORTH',
+                            'SAVINGS',
                             style: TextStyle(
                               color: Color(0xFF00E5FF),
                               fontSize: 11,
