@@ -394,7 +394,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
 
                 // 5. Upcoming Bills
                 _buildUpcomingBillsSection(context),
-                const SizedBox(height: 120), // Padding for floating nav bar
+                const SizedBox(height: 24), // Clean bottom clearance above navigation bar
               ],
             ),
           ),

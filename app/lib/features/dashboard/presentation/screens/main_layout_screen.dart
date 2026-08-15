@@ -44,7 +44,8 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
         }
       },
       child: Scaffold(
-        extendBody: true, // Crucial for floating navbar overlay
+        backgroundColor: const Color(0xFF050505),
+        extendBody: false, // Crucial to prevent content from scrolling behind/underneath
         body: widget.child,
         bottomNavigationBar: Container(
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -155,11 +156,10 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
   }) {
     final color = isSelected ? const Color(0xFF0066FF) : Colors.white54;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 64,
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
