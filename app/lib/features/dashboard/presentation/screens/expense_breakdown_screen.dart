@@ -514,12 +514,11 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                       });
                                     },
                                     itemBuilder: (context) {
-                                      final totalStr = AnalyticsFormatter.formatCurrency(totalExpense.toDouble() / 100.0);
                                       return [
                                         PopupMenuItem(
                                           value: 'Category',
                                           child: Text(
-                                            'SPENDING BY CATEGORY — $totalStr',
+                                            'SPENDING BY CATEGORY',
                                             style: TextStyle(
                                               color: _breakdownMode == 'Category' ? const Color(0xFF00E5FF) : Colors.white70,
                                               fontSize: 11,
@@ -530,7 +529,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                         PopupMenuItem(
                                           value: 'Account',
                                           child: Text(
-                                            'SPENDING BY ACCOUNT — $totalStr',
+                                            'SPENDING BY ACCOUNT',
                                             style: TextStyle(
                                               color: _breakdownMode == 'Account' ? const Color(0xFF00E5FF) : Colors.white70,
                                               fontSize: 11,
@@ -541,7 +540,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                         PopupMenuItem(
                                           value: 'Payment Type',
                                           child: Text(
-                                            'SPENDING BY PAYMENT TYPE — $totalStr',
+                                            'SPENDING BY PAYMENT METHOD',
                                             style: TextStyle(
                                               color: _breakdownMode == 'Payment Type' ? const Color(0xFF00E5FF) : Colors.white70,
                                               fontSize: 11,
@@ -559,7 +558,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                               ? 'SPENDING BY CATEGORY'
                                               : _breakdownMode == 'Account'
                                                   ? 'SPENDING BY ACCOUNT'
-                                                  : 'SPENDING BY PAYMENT TYPE',
+                                                  : 'SPENDING BY PAYMENT METHOD',
                                           style: const TextStyle(
                                             color: Color(0xFF00E5FF),
                                             fontSize: 11,
