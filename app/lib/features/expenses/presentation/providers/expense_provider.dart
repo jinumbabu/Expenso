@@ -389,17 +389,67 @@ final StateNotifierProvider<ExpenseListNotifier, AsyncValue<List<Transaction>>> 
   );
 });
 
+DateTimeRange? getDateRangeFromPreset(String preset) {
+  final now = DateTime.now();
+  switch (preset) {
+    case 'today':
+      final start = DateTime(now.year, now.month, now.day);
+      final end = start.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+      return DateTimeRange(start: start, end: end);
+    case 'yesterday':
+      final yest = now.subtract(const Duration(days: 1));
+      final start = DateTime(yest.year, yest.month, yest.day);
+      final end = start.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+      return DateTimeRange(start: start, end: end);
+    case 'this_week':
+      final start = now.subtract(Duration(days: now.weekday - 1));
+      final startOnly = DateTime(start.year, start.month, start.day);
+      final end = startOnly.add(const Duration(days: 7)).subtract(const Duration(seconds: 1));
+      return DateTimeRange(start: startOnly, end: end);
+    case 'this_month':
+      final start = DateTime(now.year, now.month, 1);
+      final lastDay = DateTime(now.year, now.month + 1, 0).day;
+      final end = DateTime(now.year, now.month, lastDay, 23, 59, 59);
+      return DateTimeRange(start: start, end: end);
+    case 'last_month':
+      final lastM = now.month == 1 ? 12 : now.month - 1;
+      final year = now.month == 1 ? now.year - 1 : now.year;
+      final start = DateTime(year, lastM, 1);
+      final lastDay = DateTime(year, lastM + 1, 0).day;
+      final end = DateTime(year, lastM, lastDay, 23, 59, 59);
+      return DateTimeRange(start: start, end: end);
+    case 'last_3_months':
+      final start = now.subtract(const Duration(days: 90));
+      final startOnly = DateTime(start.year, start.month, start.day);
+      final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      return DateTimeRange(start: startOnly, end: endOnly);
+    case 'last_6_months':
+      final start = now.subtract(const Duration(days: 180));
+      final startOnly = DateTime(start.year, start.month, start.day);
+      final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      return DateTimeRange(start: startOnly, end: endOnly);
+    case 'this_year':
+      final start = now.subtract(const Duration(days: 365));
+      final startOnly = DateTime(start.year, start.month, start.day);
+      final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      return DateTimeRange(start: startOnly, end: endOnly);
+    case 'all_time':
+    default:
+      return null;
+  }
+}
+
 // Search & Filter State Providers
 final StateProvider<String> searchQueryProvider = StateProvider<String>((ref) => '');
 final StateProvider<String?> filterCategoryProvider = StateProvider<String?>((ref) => null);
 final StateProvider<String?> filterTypeProvider = StateProvider<String?>((ref) => null);
 final StateProvider<String?> filterPaymentMethodProvider = StateProvider<String?>((ref) => null);
-final StateProvider<DateTimeRange?> filterDateRangeProvider = StateProvider<DateTimeRange?>((ref) => null);
+final StateProvider<DateTimeRange?> filterDateRangeProvider = StateProvider<DateTimeRange?>((ref) => getDateRangeFromPreset('this_month'));
 final StateProvider<String?> filterAccountProvider = StateProvider<String?>((ref) => null);
 final StateProvider<double?> filterMinAmountProvider = StateProvider<double?>((ref) => null);
 final StateProvider<double?> filterMaxAmountProvider = StateProvider<double?>((ref) => null);
 final StateProvider<String> filterSortByProvider = StateProvider<String>((ref) => 'newest');
-final StateProvider<String?> activeDatePresetProvider = StateProvider<String?>((ref) => 'all_time');
+final StateProvider<String?> activeDatePresetProvider = StateProvider<String?>((ref) => 'this_month');
 
 class SavedFilterPreset {
   final String name;
@@ -865,4 +915,106 @@ class NlpService {
 final Provider<NlpService> nlpServiceProvider = Provider<NlpService>((ref) {
   return NlpService(ref);
 });
+
+int getAccountTypePriority(String type) {
+  switch (type.toLowerCase()) {
+    case 'cash':
+      return 1;
+    case 'savings':
+    case 'current':
+    case 'salary':
+    case 'debit_card':
+    case 'bank':
+      return 2;
+    case 'credit_card':
+      return 3;
+    case 'wallet':
+    case 'upi_wallet':
+    case 'digital_wallet':
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+final Provider<AsyncValue<List<Account>>> sortedAccountsProvider = Provider<AsyncValue<List<Account>>>((ref) {
+  final accountsAsync = ref.watch(accountsProvider);
+  final txsAsync = ref.watch(expenseListNotifierProvider);
+
+  return accountsAsync.when(
+    data: (accounts) {
+      return txsAsync.maybeWhen(
+        data: (txs) {
+          final counts = <String, int>{};
+          for (var tx in txs) {
+            final accId = tx.accountId;
+            if (accId != null) {
+              counts[accId] = (counts[accId] ?? 0) + 1;
+            }
+          }
+
+          final sortedList = List<Account>.from(accounts);
+          final originalIndices = {for (int i = 0; i < accounts.length; i++) accounts[i].id: i};
+
+          sortedList.sort((a, b) {
+            final aPriority = getAccountTypePriority(a.type);
+            final bPriority = getAccountTypePriority(b.type);
+            if (aPriority != bPriority) {
+              return aPriority.compareTo(bPriority);
+            }
+
+            final aCount = counts[a.id] ?? 0;
+            final bCount = counts[b.id] ?? 0;
+            if (aCount != bCount) {
+              return bCount.compareTo(aCount); // DESC
+            }
+
+            return originalIndices[a.id]!.compareTo(originalIndices[b.id]!); // stable sort
+          });
+
+          return AsyncValue.data(sortedList);
+        },
+        orElse: () {
+          final sortedList = List<Account>.from(accounts);
+          final originalIndices = {for (int i = 0; i < accounts.length; i++) accounts[i].id: i};
+          sortedList.sort((a, b) {
+            final aPriority = getAccountTypePriority(a.type);
+            final bPriority = getAccountTypePriority(b.type);
+            if (aPriority != bPriority) {
+              return aPriority.compareTo(bPriority);
+            }
+            return originalIndices[a.id]!.compareTo(originalIndices[b.id]!);
+          });
+          return AsyncValue.data(sortedList);
+        },
+      );
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (e, st) => AsyncValue.error(e, st),
+  );
+});
+
+class MerchantResolver {
+  static String resolve({
+    required String? enteredMerchant,
+    required String? subcategoryName,
+    required String? categoryName,
+  }) {
+    final cleanMerchant = enteredMerchant?.trim() ?? '';
+    if (cleanMerchant.isNotEmpty) {
+      return cleanMerchant;
+    }
+    final cleanSub = subcategoryName?.trim() ?? '';
+    if (cleanSub.isNotEmpty) {
+      return cleanSub;
+    }
+    final cleanCat = categoryName?.trim() ?? '';
+    if (cleanCat.isNotEmpty) {
+      return cleanCat;
+    }
+    return 'Other';
+  }
+}
+
+
 

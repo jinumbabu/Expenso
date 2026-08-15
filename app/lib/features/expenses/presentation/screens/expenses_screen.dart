@@ -16,60 +16,44 @@ final _categorySearchQueryProvider = StateProvider.autoDispose<String>((ref) => 
 final _accountSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 final _pmSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
-class ExpensesScreen extends ConsumerWidget {
+class ExpensesScreen extends ConsumerStatefulWidget {
   const ExpensesScreen({super.key});
+
+  @override
+  ConsumerState<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
+  bool _isSearchActive = false;
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(activeDatePresetProvider.notifier).state = 'this_month';
+      ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset('this_month');
+      ref.read(searchQueryProvider.notifier).state = '';
+      ref.read(filterCategoryProvider.notifier).state = null;
+      ref.read(filterTypeProvider.notifier).state = null;
+      ref.read(filterPaymentMethodProvider.notifier).state = null;
+      ref.read(filterAccountProvider.notifier).state = null;
+      ref.read(filterMinAmountProvider.notifier).state = null;
+      ref.read(filterMaxAmountProvider.notifier).state = null;
+      ref.read(filterSortByProvider.notifier).state = 'newest';
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String _formatMoney(int amountInCents) {
     final double amount = amountInCents / 100.0;
     return NumberFormat.simpleCurrency(name: 'INR').format(amount);
-  }
-
-  DateTimeRange? _getDateRangeFromPreset(String preset) {
-    final now = DateTime.now();
-    switch (preset) {
-      case 'today':
-        final start = DateTime(now.year, now.month, now.day);
-        final end = start.add(const Duration(hours: 23, minutes: 59, seconds: 59));
-        return DateTimeRange(start: start, end: end);
-      case 'yesterday':
-        final yest = now.subtract(const Duration(days: 1));
-        final start = DateTime(yest.year, yest.month, yest.day);
-        final end = start.add(const Duration(hours: 23, minutes: 59, seconds: 59));
-        return DateTimeRange(start: start, end: end);
-      case 'this_week':
-        final start = now.subtract(Duration(days: now.weekday - 1));
-        final startOnly = DateTime(start.year, start.month, start.day);
-        final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        return DateTimeRange(start: startOnly, end: endOnly);
-      case 'this_month':
-        final start = DateTime(now.year, now.month, 1);
-        final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        return DateTimeRange(start: start, end: end);
-      case 'last_month':
-        final lastM = now.month == 1 ? 12 : now.month - 1;
-        final year = now.month == 1 ? now.year - 1 : now.year;
-        final start = DateTime(year, lastM, 1);
-        final lastDay = DateTime(year, lastM + 1, 0).day;
-        final end = DateTime(year, lastM, lastDay, 23, 59, 59);
-        return DateTimeRange(start: start, end: end);
-      case 'last_3_months':
-        final start = now.subtract(const Duration(days: 90));
-        final startOnly = DateTime(start.year, start.month, start.day);
-        final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        return DateTimeRange(start: startOnly, end: endOnly);
-      case 'last_6_months':
-        final start = now.subtract(const Duration(days: 180));
-        final startOnly = DateTime(start.year, start.month, start.day);
-        final endOnly = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        return DateTimeRange(start: startOnly, end: endOnly);
-      case 'this_year':
-        final start = DateTime(now.year, 1, 1);
-        final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        return DateTimeRange(start: start, end: end);
-      case 'all_time':
-      default:
-        return null;
-    }
   }
 
   void _showCategorySearchSheet(BuildContext context, WidgetRef ref, List<Category> categories) {
@@ -386,7 +370,7 @@ class ExpensesScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final filteredTransactions = ref.watch(filteredTransactionsProvider);
     final txsAsync = ref.watch(expenseListNotifierProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
@@ -403,6 +387,15 @@ class ExpensesScreen extends ConsumerWidget {
     final minAmount = ref.watch(filterMinAmountProvider);
     final maxAmount = ref.watch(filterMaxAmountProvider);
     final activeDatePreset = ref.watch(activeDatePresetProvider);
+
+    ref.listen<String>(searchQueryProvider, (prev, next) {
+      if (_searchController.text != next) {
+        _searchController.text = next;
+        _searchController.selection = TextSelection.fromPosition(
+          TextPosition(offset: next.length),
+        );
+      }
+    });
 
     // Group transactions by date
     final groupedTxs = <DateTime, List<Transaction>>{};
@@ -464,55 +457,83 @@ class ExpensesScreen extends ConsumerWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () {
+                          if (_isSearchActive) {
+                            ref.read(searchQueryProvider.notifier).state = '';
+                            setState(() {
+                              _isSearchActive = false;
+                            });
+                          } else {
+                            Navigator.of(context).pop();
+                          }
+                        },
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'Transactions (${filteredTransactions.length})',
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        child: _isSearchActive
+                            ? Container(
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.02),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.12)),
+                                ),
+                                child: TextField(
+                                  autofocus: true,
+                                  onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
+                                  controller: _searchController,
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search description, merchant...',
+                                    hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                                    prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 18),
+                                    suffixIcon: searchQuery.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.clear, color: Colors.white54, size: 18),
+                                            onPressed: () {
+                                              ref.read(searchQueryProvider.notifier).state = '';
+                                            },
+                                          )
+                                        : null,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                'Transaction',
+                                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                      ),
+                      if (!_isSearchActive) ...[
+                        IconButton(
+                          icon: const Icon(Icons.search, color: Colors.white, size: 22),
+                          onPressed: () {
+                            setState(() {
+                              _isSearchActive = true;
+                            });
+                          },
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.filter_list_rounded, color: Color(0xFF00E5FF)),
-                        onPressed: () => _showFiltersBottomSheet(context, ref, categories, paymentMethods, accounts),
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.settings_outlined, color: Color(0xFF00E5FF), size: 22),
+                          onPressed: () => _showFiltersBottomSheet(context, ref, categories, paymentMethods, accounts),
+                        ),
+                      ] else
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 22),
+                          onPressed: () {
+                            ref.read(searchQueryProvider.notifier).state = '';
+                            setState(() {
+                              _isSearchActive = false;
+                            });
+                          },
+                        ),
                     ],
                   ),
                 ),
 
-                // Search Bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.02),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.12)),
-                    ),
-                    child: TextField(
-                      onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
-                      controller: TextEditingController(text: searchQuery)..selection = TextSelection.fromPosition(TextPosition(offset: searchQuery.length)),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Search description, merchant...',
-                        hintStyle: const TextStyle(color: Colors.white38),
-                        prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                        suffixIcon: searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, color: Colors.white54),
-                                onPressed: () {
-                                  ref.read(searchQueryProvider.notifier).state = '';
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ),
+                // Period Selector
+                _buildPeriodSelector(ref),
                 const SizedBox(height: 12),
 
                 // Filter Active Chips Row
@@ -573,79 +594,7 @@ class ExpensesScreen extends ConsumerWidget {
                     ),
                   ),
 
-                // Summary Info Card
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20.0, 8.0, 20.0, 16.0),
-                  child: GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                    borderRadius: 24,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                'Total In',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: PrivacyText(
-                                  rawValue: _formatMoney(totalIncomeShown),
-                                  style: const TextStyle(
-                                    color: Color(0xFF00E5FF),
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 36,
-                          color: Colors.white12,
-                        ),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                'Total Out',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: PrivacyText(
-                                  rawValue: _formatMoney(totalExpenseShown),
-                                  style: const TextStyle(
-                                    color: Color(0xFFFF3B30),
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+
 
                 // Transaction List
                 Expanded(
@@ -1182,7 +1131,7 @@ class ExpensesScreen extends ConsumerWidget {
                                             ref.read(filterAccountProvider.notifier).state = p.accountId;
                                             ref.read(activeDatePresetProvider.notifier).state = p.datePreset;
                                             if (p.datePreset != null) {
-                                              ref.read(filterDateRangeProvider.notifier).state = _getDateRangeFromPreset(p.datePreset!);
+                                              ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset(p.datePreset!);
                                             } else {
                                               ref.read(filterDateRangeProvider.notifier).state = p.dateRange;
                                             }
@@ -1328,7 +1277,7 @@ class ExpensesScreen extends ConsumerWidget {
                                                 ref.read(filterDateRangeProvider.notifier).state = null;
                                               }
                                             } else {
-                                              ref.read(filterDateRangeProvider.notifier).state = _getDateRangeFromPreset(entry.key);
+                                              ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset(entry.key);
                                             }
                                           }
                                         },
@@ -1546,6 +1495,96 @@ class ExpensesScreen extends ConsumerWidget {
             const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPeriodSelector(WidgetRef ref) {
+    final periods = ['Today', 'Week', 'Month', 'Last Month', '3M', '6M', '1Y', 'Custom'];
+    final activePreset = ref.watch(activeDatePresetProvider);
+
+    String presetForPeriod(String period) {
+      switch (period) {
+        case 'Today': return 'today';
+        case 'Week': return 'this_week';
+        case 'Month': return 'this_month';
+        case 'Last Month': return 'last_month';
+        case '3M': return 'last_3_months';
+        case '6M': return 'last_6_months';
+        case '1Y': return 'this_year';
+        case 'Custom': return 'custom';
+        default: return 'all_time';
+      }
+    }
+
+    return Container(
+      height: 48,
+      color: Colors.transparent,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: periods.length,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemBuilder: (context, i) {
+          final p = periods[i];
+          final preset = presetForPeriod(p);
+          final isSelected = activePreset == preset;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                if (p == 'Custom') {
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    builder: (context, child) {
+                      return Theme(
+                        data: ThemeData.dark().copyWith(
+                          colorScheme: const ColorScheme.dark(
+                            primary: Color(0xFF00E5FF),
+                            onPrimary: Colors.black,
+                            surface: Color(0xFF0F172A),
+                            onSurface: Colors.white,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (range != null) {
+                    ref.read(activeDatePresetProvider.notifier).state = 'custom';
+                    ref.read(filterDateRangeProvider.notifier).state = range;
+                  }
+                } else {
+                  ref.read(activeDatePresetProvider.notifier).state = preset;
+                  ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset(preset);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF051833) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF00E5FF) : Colors.white.withOpacity(0.08),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    p,
+                    style: TextStyle(
+                      color: isSelected ? const Color(0xFF00E5FF) : Colors.white60,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

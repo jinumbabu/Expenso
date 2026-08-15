@@ -58,6 +58,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   DateTime _selectedDate = DateTime.now();
 
   bool _isLoading = false;
+  bool _pendingSaveAfterCategorySelection = false;
   bool _isEditMode = false;
   bool _hasCustomTime = false;
   Transaction? _existingTransaction;
@@ -224,7 +225,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }
 
   Future<void> _autoDetectAccountAndPaymentMethod(TransactionDraft draft) async {
-    final accounts = ref.read(accountsProvider).value ?? [];
+    final accounts = ref.read(sortedAccountsProvider).value ?? [];
     final pms = await ref.read(paymentMethodsProvider.future);
     if (accounts.isEmpty || pms.isEmpty) return;
 
@@ -360,7 +361,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   Future<void> _setDefaultPaymentMethod() async {
     final pms = await ref.read(paymentMethodsProvider.future);
-    final accounts = ref.read(accountsProvider).value ?? [];
+    final accounts = ref.read(sortedAccountsProvider).value ?? [];
     if (accounts.isNotEmpty && pms.isNotEmpty && mounted) {
       if (_selectedAccountId == null) {
         final defaultAcc = accounts.firstWhere((a) => a.isDefault, orElse: () => accounts.first);
@@ -489,6 +490,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _categoryController.text = parent.name;
         }
       });
+
+      if (_pendingSaveAfterCategorySelection) {
+        _pendingSaveAfterCategorySelection = false;
+        _saveTransaction();
+      }
+    } else {
+      _pendingSaveAfterCategorySelection = false;
     }
   }
 
@@ -568,52 +576,96 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     return false;
   }
 
+  Future<String> _resolveMerchantName() async {
+    String? subName;
+    if (_selectedSubcategoryId != null) {
+      final categories = ref.read(categoriesProvider).value ?? [];
+      subName = categories.firstWhere((c) => c.id == _selectedSubcategoryId, orElse: () => null as dynamic)?.name;
+      if (subName == null) {
+        final db = ref.read(databaseProvider);
+        final cat = await db.categoryDao.getCategoryById(_selectedSubcategoryId!);
+        subName = cat?.name;
+      }
+    }
+
+    String? catName;
+    if (_selectedCategoryId != null) {
+      final categories = ref.read(categoriesProvider).value ?? [];
+      catName = categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => null as dynamic)?.name;
+      if (catName == null) {
+        final db = ref.read(databaseProvider);
+        final cat = await db.categoryDao.getCategoryById(_selectedCategoryId!);
+        catName = cat?.name;
+      }
+    }
+
+    return MerchantResolver.resolve(
+      enteredMerchant: _merchantController.text,
+      subcategoryName: subName,
+      categoryName: catName,
+    );
+  }
+
   Future<void> _saveTransaction() async {
+    if (_isLoading) return;
+
+    // STEP 1: Check amount
     if (!_formKey.currentState!.validate()) return;
 
     final isTransfer = _transactionType == 'transfer_debit' || _transactionType == 'transfer_credit';
 
+    // STEP 2: Check financial account
     if (!isTransfer) {
-      final auth = ref.read(authProvider);
-      final userId = auth.user?.id;
-      if (userId == null) {
+      if (_selectedAccountId == null) {
+        final accounts = ref.read(sortedAccountsProvider).value ?? [];
+        final pms = await ref.read(paymentMethodsProvider.future);
+        if (mounted) {
+          _showAccountSelectionSheet(context, accounts, pms);
+        }
+        return;
+      }
+    } else {
+      if (_sourceAccountId == null || _destAccountId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User is not authenticated')),
+          const SnackBar(content: Text('Please select both source and destination accounts')),
         );
         return;
       }
+      if (_sourceAccountId == _destAccountId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Source and destination accounts must be different')),
+        );
+        return;
+      }
+    }
 
+    // STEP 3: Check category
+    if (!isTransfer) {
+      if (_selectedCategoryId == null || _categoryController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a category')),
+        );
+        _pendingSaveAfterCategorySelection = true;
+        _openCategoryPickerSheet();
+        return;
+      }
+    }
+
+    // Authenticated user check & category database insertion if missing
+    final auth = ref.read(authProvider);
+    final userId = auth.user?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User is not authenticated')),
+      );
+      return;
+    }
+
+    if (!isTransfer) {
       final db = ref.read(databaseProvider);
       final existingCategories = await db.categoryDao.getCategoriesForUser(userId);
 
       var categoryText = _categoryController.text.trim();
-      if (categoryText.isEmpty) {
-        var otherCat = existingCategories.firstWhere(
-          (c) => c.name.toLowerCase() == 'other' && c.parentId == null && c.type == _transactionType,
-          orElse: () => null as dynamic,
-        );
-        if (otherCat == null) {
-          final newId = const Uuid().v4();
-          otherCat = Category(
-            id: newId,
-            userId: userId,
-            name: 'Other',
-            type: _transactionType,
-            icon: 'folder',
-            color: '0xFF808080',
-            isSystemDefault: false,
-            createdAt: DateTime.now(),
-            usageCount: 1,
-          );
-          await db.categoryDao.insertCategory(otherCat);
-          ref.invalidate(categoriesProvider);
-        }
-        _selectedCategoryId = otherCat.id;
-        _selectedSubcategoryId = null;
-        categoryText = 'Other';
-        _categoryController.text = 'Other';
-      }
-
       String parentName = categoryText;
       String? subName;
       if (categoryText.contains(' > ')) {
@@ -654,30 +706,14 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         );
         return;
       }
-    } else {
-      if (_sourceAccountId == null || _destAccountId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select both source and destination accounts')),
-        );
-        return;
-      }
-      if (_sourceAccountId == _destAccountId) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Source and destination accounts must be different')),
-        );
-        return;
-      }
     }
+
+    // STEP 4: Resolve merchant fallback
+    final resolvedMerchant = await _resolveMerchantName();
 
     setState(() => _isLoading = true);
 
     try {
-      final auth = ref.read(authProvider);
-      final userId = auth.user?.id;
-      if (userId == null) {
-        throw Exception('User is not authenticated');
-      }
-
       final doubleAmount = double.parse(_amountController.text);
       final intAmount = (doubleAmount * 100).round();
 
@@ -702,7 +738,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             final debitTx = _existingTransaction!.type == 'transfer_debit' ? _existingTransaction! : otherSide;
             final creditTx = _existingTransaction!.type == 'transfer_credit' ? _existingTransaction! : otherSide;
 
-            final accounts = ref.read(accountsProvider).value ?? [];
+            final accounts = ref.read(sortedAccountsProvider).value ?? [];
             final fromAcc = accounts.firstWhere((a) => a.id == _sourceAccountId, orElse: () => accounts.first);
             final toAcc = accounts.firstWhere((a) => a.id == _destAccountId, orElse: () => accounts.first);
 
@@ -739,7 +775,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           amount: intAmount,
           currency: auth.user?.currency ?? 'INR',
           description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
-          merchant: _merchantController.text.isNotEmpty ? _merchantController.text : null,
+          merchant: resolvedMerchant,
           date: txDate,
           source: _isEditMode ? _existingTransaction!.source : 'manual',
           confidenceScore: _isEditMode ? _existingTransaction!.confidenceScore : null,
@@ -1306,7 +1342,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       _isEditMode ? (_isTransfer ? 'Edit Transfer' : 'Edit Transaction') : 'Add Transaction',
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 48),
+                    IconButton(
+                      icon: const Icon(Icons.check_rounded, color: Colors.white),
+                      onPressed: _isLoading ? null : _saveTransaction,
+                    ),
                   ],
                 ),
               ),
@@ -1732,7 +1771,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       ],
 
                       if (_isTransfer) ...[
-                        ref.watch(accountsProvider).when(
+                        ref.watch(sortedAccountsProvider).when(
                           data: (accounts) {
                             if (accounts.isEmpty) return const SizedBox.shrink();
                             final activeAccs = accounts.where((a) => a.isActive == true).toList();
@@ -1748,7 +1787,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        ref.watch(accountsProvider).when(
+                        ref.watch(sortedAccountsProvider).when(
                           data: (accounts) {
                             if (accounts.isEmpty) return const SizedBox.shrink();
                             final activeAccs = accounts.where((a) => a.isActive == true && a.id != _sourceAccountId).toList();
@@ -1770,7 +1809,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                           style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                         ),
                         const SizedBox(height: 12),
-                        ref.watch(accountsProvider).when(
+                        ref.watch(sortedAccountsProvider).when(
                           data: (accounts) {
                             if (accounts.isEmpty) return const SizedBox.shrink();
 
@@ -1800,7 +1839,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                           style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                         ),
                         const SizedBox(height: 12),
-                        ref.watch(accountsProvider).when(
+                        ref.watch(sortedAccountsProvider).when(
                           data: (accounts) {
                             final activeAcc = accounts.firstWhere((a) => a.id == _selectedAccountId, orElse: () => accounts.first);
                             return PaymentMethodPicker(
@@ -2261,6 +2300,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }
 
   Future<void> _duplicateTransaction() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
       final auth = ref.read(authProvider);
@@ -2271,6 +2311,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       final intAmount = (doubleAmount * 100).round();
 
       final now = DateTime.now();
+      final resolvedMerchant = await _resolveMerchantName();
 
       final duplicatedTx = Transaction(
         id: const Uuid().v4(),
@@ -2282,7 +2323,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         amount: intAmount,
         currency: auth.user?.currency ?? 'INR',
         description: _descriptionController.text.isNotEmpty ? '${_descriptionController.text} (Copy)' : 'Copy',
-        merchant: _merchantController.text.isNotEmpty ? _merchantController.text : null,
+        merchant: resolvedMerchant,
         date: now,
         source: 'manual',
         syncStatus: 'pending',

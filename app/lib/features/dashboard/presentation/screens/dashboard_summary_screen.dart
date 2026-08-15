@@ -1367,7 +1367,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
         _buildGridCard(
           context,
           icon: Icons.account_balance_wallet_outlined,
-          label: 'Expenses',
+          label: 'Transaction',
           subtitle: 'View & Manage',
           color: const Color(0xFF0066FF),
           onTap: () => context.push('/expenses'),

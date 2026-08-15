@@ -10,6 +10,7 @@ import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/privacy_text.dart';
 import '../../../../shared/widgets/reusable_donut_chart.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../analytics/presentation/models/analytics_chart_data.dart';
 import '../providers/privacy_provider.dart';
 import 'dashboard_summary_screen.dart';
@@ -25,6 +26,7 @@ class ExpenseBreakdownScreen extends ConsumerStatefulWidget {
 class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen> {
   String _selectedPeriod = 'Month'; // Today, Week, Month, Last Month, 3M, 6M, 1Y, Custom
   DateTimeRange? _customDateRange;
+  String _breakdownMode = 'Category'; // Category, Account, Payment Type
   String _selectedCategoryId = '';
   bool _isDetailMode = false;
   String _selectedSubExpenseId = '';
@@ -181,6 +183,8 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
   Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(expenseListNotifierProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
+    final accountsAsync = ref.watch(accountsProvider);
+    final paymentMethodsAsync = ref.watch(paymentMethodsProvider);
     final isPrivate = ref.watch(privacyModeProvider);
     final dashboardMonth = ref.watch(dashboardMonthProvider);
 
@@ -207,56 +211,121 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                   data: (txs) {
                     return categoriesAsync.when(
                       data: (categories) {
-                        // Filter transactions matching period
-                        final activeRange = _getRangeForFilter(_selectedPeriod, _customDateRange, dashboardMonth);
-                        final filteredTxs = txs.where((tx) {
-                          final isExp = FinancialCalculationService.isExpense(tx);
-                          final inRange = tx.date.isAfter(activeRange.start.subtract(const Duration(seconds: 1))) &&
-                                          tx.date.isBefore(activeRange.end.add(const Duration(seconds: 1)));
-                          return isExp && inRange;
-                        }).toList();
+                        return accountsAsync.when(
+                          data: (allAccounts) {
+                            return paymentMethodsAsync.when(
+                              data: (allPaymentMethods) {
+                                // Filter transactions matching period
+                                final activeRange = _getRangeForFilter(_selectedPeriod, _customDateRange, dashboardMonth);
+                                final filteredTxs = txs.where((tx) {
+                                  final isExp = FinancialCalculationService.isExpense(tx);
+                                  final inRange = tx.date.isAfter(activeRange.start.subtract(const Duration(seconds: 1))) &&
+                                                  tx.date.isBefore(activeRange.end.add(const Duration(seconds: 1)));
+                                  return isExp && inRange;
+                                }).toList();
 
-                        // Group by category
-                        final categorySpends = <String, int>{};
-                        int totalExpense = 0;
-                        for (var tx in filteredTxs) {
-                          if (tx.categoryId != null) {
-                            categorySpends[tx.categoryId!] = (categorySpends[tx.categoryId!] ?? 0) + tx.amount.toInt();
-                            totalExpense += tx.amount.toInt();
-                          }
-                        }
+                                // Create lookup maps
+                                final categoriesMap = {for (var c in categories) c.id: c};
+                                final accountsMap = {for (var a in allAccounts) a.id: a};
+                                final paymentMethodsMap = {for (var pm in allPaymentMethods) pm.id: pm};
 
-                        // Map categories
-                        final categoriesMap = {for (var c in categories) c.id: c};
-                        final List<ChartDatum> chartData = [];
-                        
-                        categorySpends.forEach((catId, amount) {
-                          final cat = categoriesMap[catId];
-                          final percentage = totalExpense == 0 ? 0.0 : (amount / totalExpense * 100);
-                          chartData.add(
-                            ChartDatum(
-                              id: catId,
-                              label: cat?.name ?? 'Other',
-                              value: amount.toDouble() / 100.0,
-                              percentage: percentage,
-                              color: _getCategoryColor(cat?.icon),
-                              transactionCount: 1,
-                            ),
-                          );
-                        });
+                                final List<ChartDatum> chartData = [];
+                                int totalExpense = 0;
 
-                        // Sort by amount descending
-                        chartData.sort((a, b) => b.value.compareTo(a.value));
+                                if (_breakdownMode == 'Category') {
+                                  // Group by category
+                                  final categorySpends = <String, int>{};
+                                  for (var tx in filteredTxs) {
+                                    if (tx.categoryId != null) {
+                                      categorySpends[tx.categoryId!] = (categorySpends[tx.categoryId!] ?? 0) + tx.amount.toInt();
+                                      totalExpense += tx.amount.toInt();
+                                    }
+                                  }
+                                  categorySpends.forEach((catId, amount) {
+                                    final cat = categoriesMap[catId];
+                                    final percentage = totalExpense == 0 ? 0.0 : (amount / totalExpense * 100);
+                                    chartData.add(
+                                      ChartDatum(
+                                        id: catId,
+                                        label: cat?.name ?? 'Other',
+                                        value: amount.toDouble() / 100.0,
+                                        percentage: percentage,
+                                        color: _getCategoryColor(cat?.icon),
+                                        transactionCount: 1,
+                                      ),
+                                    );
+                                  });
+                                } else if (_breakdownMode == 'Account') {
+                                  // Group by financial account
+                                  final accountSpends = <String, int>{};
+                                  for (var tx in filteredTxs) {
+                                    if (tx.accountId != null) {
+                                      accountSpends[tx.accountId!] = (accountSpends[tx.accountId!] ?? 0) + tx.amount.toInt();
+                                      totalExpense += tx.amount.toInt();
+                                    }
+                                  }
+                                  accountSpends.forEach((accId, amount) {
+                                    final acc = accountsMap[accId];
+                                    final percentage = totalExpense == 0 ? 0.0 : (amount / totalExpense * 100);
+                                    chartData.add(
+                                      ChartDatum(
+                                        id: accId,
+                                        label: acc?.name ?? 'Other Account',
+                                        value: amount.toDouble() / 100.0,
+                                        percentage: percentage,
+                                        color: _getAccountColor(acc?.colorTheme),
+                                        transactionCount: 1,
+                                      ),
+                                    );
+                                  });
+                                } else if (_breakdownMode == 'Payment Type') {
+                                  // Group by payment method
+                                  final paymentSpends = <String, int>{};
+                                  for (var tx in filteredTxs) {
+                                    if (tx.paymentMethodId != null) {
+                                      paymentSpends[tx.paymentMethodId!] = (paymentSpends[tx.paymentMethodId!] ?? 0) + tx.amount.toInt();
+                                      totalExpense += tx.amount.toInt();
+                                    }
+                                  }
+                                  paymentSpends.forEach((pmId, amount) {
+                                    final pm = paymentMethodsMap[pmId];
+                                    final percentage = totalExpense == 0 ? 0.0 : (amount / totalExpense * 100);
+                                    chartData.add(
+                                      ChartDatum(
+                                        id: pmId,
+                                        label: pm?.name ?? pmId,
+                                        value: amount.toDouble() / 100.0,
+                                        percentage: percentage,
+                                        color: _getPaymentMethodColor(pm?.type ?? 'upi'),
+                                        transactionCount: 1,
+                                      ),
+                                    );
+                                  });
+                                }
 
-                        if (_isDetailMode) {
-                          // Category specific details mode
-                          final categoryTxs = filteredTxs.where((tx) => tx.categoryId == _selectedCategoryId).toList()
-                            ..sort((a, b) => b.date.compareTo(a.date));
-                          final int categoryTotal = categoryTxs.fold(0, (sum, tx) => sum + tx.amount.toInt());
-                          final subChartData = _getSubExpenseChartData(categoryTxs, categoryTotal);
-                          final currentCatName = categoriesMap[_selectedCategoryId]?.name ?? 'Category';
+                                // Sort by amount descending
+                                chartData.sort((a, b) => b.value.compareTo(a.value));
 
-                          _subExpenseKeys.clear();
+                                if (_isDetailMode) {
+                                  final List<Transaction> categoryTxs;
+                                  final String currentCatName;
+
+                                  if (_breakdownMode == 'Category') {
+                                    categoryTxs = filteredTxs.where((tx) => tx.categoryId == _selectedCategoryId).toList();
+                                    currentCatName = categoriesMap[_selectedCategoryId]?.name ?? 'Category';
+                                  } else if (_breakdownMode == 'Account') {
+                                    categoryTxs = filteredTxs.where((tx) => tx.accountId == _selectedCategoryId).toList();
+                                    currentCatName = accountsMap[_selectedCategoryId]?.name ?? 'Account';
+                                  } else {
+                                    categoryTxs = filteredTxs.where((tx) => tx.paymentMethodId == _selectedCategoryId).toList();
+                                    currentCatName = paymentMethodsMap[_selectedCategoryId]?.name ?? _selectedCategoryId;
+                                  }
+                                  categoryTxs.sort((a, b) => b.date.compareTo(a.date));
+
+                                  final int categoryTotal = categoryTxs.fold(0, (sum, tx) => sum + tx.amount.toInt());
+                                  final subChartData = _getSubExpenseChartData(categoryTxs, categoryTotal);
+
+                                  _subExpenseKeys.clear();
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -425,19 +494,86 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                             ),
                             const SizedBox(height: 24),
 
-                            // 3. Category Details Header (Fixed)
+                            // 3. Details Header (Dropdown switcher)
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 20.0),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'SPENDING BY CATEGORY',
-                                    style: TextStyle(
-                                      color: Color(0xFF00E5FF),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.2,
+                                  PopupMenuButton<String>(
+                                    offset: const Offset(0, 30),
+                                    color: const Color(0xFF0A0F1D),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: BorderSide(color: Colors.white.withOpacity(0.08)),
+                                    ),
+                                    onSelected: (val) {
+                                      setState(() {
+                                        _breakdownMode = val;
+                                        _selectedCategoryId = ''; // Reset selected ID when switching mode
+                                      });
+                                    },
+                                    itemBuilder: (context) {
+                                      final totalStr = AnalyticsFormatter.formatCurrency(totalExpense.toDouble() / 100.0);
+                                      return [
+                                        PopupMenuItem(
+                                          value: 'Category',
+                                          child: Text(
+                                            'SPENDING BY CATEGORY — $totalStr',
+                                            style: TextStyle(
+                                              color: _breakdownMode == 'Category' ? const Color(0xFF00E5FF) : Colors.white70,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'Account',
+                                          child: Text(
+                                            'SPENDING BY ACCOUNT — $totalStr',
+                                            style: TextStyle(
+                                              color: _breakdownMode == 'Account' ? const Color(0xFF00E5FF) : Colors.white70,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'Payment Type',
+                                          child: Text(
+                                            'SPENDING BY PAYMENT TYPE — $totalStr',
+                                            style: TextStyle(
+                                              color: _breakdownMode == 'Payment Type' ? const Color(0xFF00E5FF) : Colors.white70,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ];
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _breakdownMode == 'Category'
+                                              ? 'SPENDING BY CATEGORY'
+                                              : _breakdownMode == 'Account'
+                                                  ? 'SPENDING BY ACCOUNT'
+                                                  : 'SPENDING BY PAYMENT TYPE',
+                                          style: const TextStyle(
+                                            color: Color(0xFF00E5FF),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.keyboard_arrow_down,
+                                          color: Color(0xFF00E5FF),
+                                          size: 14,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   PrivacyText(
@@ -465,8 +601,19 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                                       itemBuilder: (context, index) {
                                         final item = chartData[index];
-                                        final cat = categoriesMap[item.id];
-                                        final iconData = _getCategoryIcon(cat?.icon);
+                                        
+                                        final IconData iconData;
+                                        if (_breakdownMode == 'Category') {
+                                          final cat = categoriesMap[item.id];
+                                          iconData = _getCategoryIcon(cat?.icon);
+                                        } else if (_breakdownMode == 'Account') {
+                                          final acc = accountsMap[item.id];
+                                          iconData = _getAccountIcon(acc?.icon);
+                                        } else {
+                                          final pm = paymentMethodsMap[item.id];
+                                          iconData = _getPaymentMethodIcon(pm?.type ?? 'upi');
+                                        }
+
                                         final isSelected = _selectedCategoryId == item.id;
                                         final itemKey = _categoryKeys.putIfAbsent(item.id, () => GlobalKey());
                                         
@@ -556,6 +703,14 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                     ),
                             ),
                           ],
+                        );
+                              },
+                              loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
+                              error: (err, _) => Center(child: Text('Error loading payment methods: $err', style: const TextStyle(color: Colors.red))),
+                            );
+                          },
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
+                          error: (err, _) => Center(child: Text('Error loading accounts: $err', style: const TextStyle(color: Colors.red))),
                         );
                       },
                       loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF))),
@@ -734,5 +889,79 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
       if (icon.contains('health') || icon.contains('med')) return Icons.medical_services_outlined;
     }
     return Icons.category_outlined;
+  }
+
+  Color _getAccountColor(String? colorStr) {
+    if (colorStr != null && colorStr.isNotEmpty) {
+      try {
+        return Color(int.parse(colorStr));
+      } catch (_) {}
+    }
+    return const Color(0xFF0066FF);
+  }
+
+  IconData _getAccountIcon(String? iconName) {
+    if (iconName != null && iconName.isNotEmpty) {
+      switch (iconName.toLowerCase()) {
+        case 'cash':
+        case 'account_balance_wallet':
+          return Icons.account_balance_wallet_outlined;
+        case 'savings':
+        case 'bank':
+        case 'account_balance':
+          return Icons.account_balance_outlined;
+        case 'current':
+        case 'building':
+        case 'business':
+          return Icons.business_outlined;
+        case 'wallet':
+          return Icons.wallet_outlined;
+        case 'credit_card':
+          return Icons.credit_card_outlined;
+      }
+    }
+    return Icons.account_balance_outlined;
+  }
+
+  IconData _getPaymentMethodIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'cash':
+        return Icons.account_balance_wallet_outlined;
+      case 'upi':
+        return Icons.mobile_friendly;
+      case 'card':
+        return Icons.credit_card;
+      case 'bank':
+        return Icons.account_balance;
+      case 'wallet':
+        return Icons.wallet_outlined;
+      case 'loan':
+        return Icons.monetization_on_outlined;
+      case 'investment':
+        return Icons.trending_up_rounded;
+      default:
+        return Icons.payment;
+    }
+  }
+
+  Color _getPaymentMethodColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'cash':
+        return const Color(0xFF00E5FF);
+      case 'upi':
+        return const Color(0xFF0066FF);
+      case 'card':
+        return const Color(0xFFFF3B30);
+      case 'bank':
+        return Colors.teal;
+      case 'wallet':
+        return const Color(0xFFFFB703);
+      case 'loan':
+        return Colors.amber;
+      case 'investment':
+        return Colors.purpleAccent;
+      default:
+        return Colors.grey;
+    }
   }
 }
