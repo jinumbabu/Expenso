@@ -77,19 +77,19 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
                   children: [
                     _buildNavItem(
                       context: context,
-                      isSelected: true, // Always selected since it's the home Dashboard
-                      icon: Icons.grid_view_outlined,
-                      activeIcon: Icons.grid_view_rounded,
-                      label: 'Dashboard',
-                      onTap: () {}, // Already on Dashboard
+                      isSelected: false,
+                      icon: Icons.account_balance_outlined,
+                      activeIcon: Icons.account_balance,
+                      label: 'Account',
+                      onTap: () => context.push('/accounts'),
                     ),
                     _buildNavItem(
                       context: context,
                       isSelected: false,
-                      icon: Icons.chat_bubble_outline_rounded,
-                      activeIcon: Icons.chat_bubble_rounded,
-                      label: 'AI Chat',
-                      onTap: () => context.push('/chat'),
+                      icon: Icons.account_balance_wallet_outlined,
+                      activeIcon: Icons.account_balance_wallet,
+                      label: 'Transaction',
+                      onTap: () => context.push('/expenses'),
                     ),
                     // Center Floating Action Button
                     GestureDetector(
@@ -130,10 +130,10 @@ class _MainLayoutScreenState extends State<MainLayoutScreen> {
                     _buildNavItem(
                       context: context,
                       isSelected: false,
-                      icon: Icons.settings_outlined,
-                      activeIcon: Icons.settings_rounded,
-                      label: 'Settings',
-                      onTap: () => context.push('/privacy-settings'),
+                      icon: Icons.chat_bubble_outline_rounded,
+                      activeIcon: Icons.chat_bubble_rounded,
+                      label: 'AI Chat',
+                      onTap: () => context.push('/chat'),
                     ),
                   ],
                 ),

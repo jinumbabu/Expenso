@@ -1354,7 +1354,6 @@ class DashboardSummaryScreen extends ConsumerWidget {
 
 
 
-  // Feature Grid Builder
   Widget _buildFeatureGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 3,
@@ -1364,22 +1363,6 @@ class DashboardSummaryScreen extends ConsumerWidget {
       mainAxisSpacing: 12,
       childAspectRatio: 1.05,
       children: [
-        _buildGridCard(
-          context,
-          icon: Icons.account_balance_wallet_outlined,
-          label: 'Transaction',
-          subtitle: 'View & Manage',
-          color: const Color(0xFF0066FF),
-          onTap: () => context.push('/expenses'),
-        ),
-        _buildGridCard(
-          context,
-          icon: Icons.account_balance_outlined,
-          label: 'Account',
-          subtitle: 'All Accounts',
-          color: const Color(0xFF00E5FF),
-          onTap: () => context.push('/accounts'),
-        ),
         _buildGridCard(
           context,
           icon: Icons.pie_chart_outline_outlined,
@@ -1395,14 +1378,6 @@ class DashboardSummaryScreen extends ConsumerWidget {
           subtitle: 'Set & Achieve',
           color: const Color(0xFFF72585),
           onTap: () => context.push('/goals'),
-        ),
-        _buildGridCard(
-          context,
-          icon: Icons.bar_chart_outlined,
-          label: 'Reports',
-          subtitle: 'Analytics & Trends',
-          color: const Color(0xFF4CC9F0),
-          onTap: () => context.push('/analytics'),
         ),
         _buildGridCard(
           context,
