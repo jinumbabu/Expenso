@@ -111,6 +111,7 @@ void main() {
         healthScore: 85,
         topSpendingCategories: [],
         recentFinancialTrends: [],
+        accountSummary: 'SBI Savings: ₹5,000.00\nHDFC Credit Card: -₹500.00',
       );
 
       final response = await provider.chat('What is my balance?', context);
@@ -131,6 +132,7 @@ void main() {
         healthScore: 85,
         topSpendingCategories: ['Food: ₹120.00'],
         recentFinancialTrends: ['Spending increased'],
+        accountSummary: 'SBI Savings: ₹5,000.00\nHDFC Credit Card: -₹500.00',
       );
 
       final prompt = context.toPromptString();

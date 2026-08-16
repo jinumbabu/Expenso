@@ -34,6 +34,7 @@ import '../../features/budgets/presentation/screens/budgets_screen.dart';
 import '../../features/expenses/presentation/screens/monthly_transaction_detail_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_screen.dart';
 import '../../features/accounts/presentation/screens/account_detail_screen.dart';
+import '../../features/accounts/presentation/screens/credit_card_detail_screen.dart';
 import '../../features/expenses/presentation/screens/bills_management_screen.dart';
 import '../../features/expenses/presentation/screens/bill_detail_screen.dart';
 
@@ -96,6 +97,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/accounts',
         builder: (context, state) => const AccountsScreen(),
+      ),
+      GoRoute(
+        path: '/credit-card-detail',
+        builder: (context, state) => const CreditCardDetailScreen(),
       ),
       GoRoute(
         path: '/accounts/:id',

@@ -145,7 +145,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                                 const SizedBox(height: 20),
 
                                 // 2. Account Balances Section (Assets & Liabilities grouped)
-                                _buildAccountsSection(assetAccounts, liabilityAccounts),
+                                _buildAccountsSection(context, assetAccounts, liabilityAccounts),
                                 const SizedBox(height: 20),
 
                                 // 3. Top Spending Categories Section
@@ -375,7 +375,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAccountsSection(List<Account> assets, List<Account> liabilities) {
+  Widget _buildAccountsSection(BuildContext context, List<Account> assets, List<Account> liabilities) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -407,10 +407,23 @@ class NetWorthDetailScreen extends ConsumerWidget {
             style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.8),
           ),
           const SizedBox(height: 8),
-          ...liabilities.map((acc) => Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: _buildAccountCard(acc, true),
-          )),
+          ...liabilities.map((acc) {
+            final card = _buildAccountCard(acc, true);
+            if (acc.type == 'credit_card') {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => context.push('/credit-card-detail'),
+                  child: card,
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: card,
+            );
+          }),
         ],
       ],
     );

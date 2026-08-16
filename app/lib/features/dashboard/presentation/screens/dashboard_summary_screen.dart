@@ -970,7 +970,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: GestureDetector(
-                  onTap: () => context.push('/accounts'),
+                  onTap: () => context.push('/credit-card-detail'),
                   child: _buildMiniCard(
                     icon: Icons.credit_card_rounded,
                     title: 'Credit Card',

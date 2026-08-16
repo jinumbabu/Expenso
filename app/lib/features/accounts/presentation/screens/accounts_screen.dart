@@ -717,7 +717,11 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           // Swipe Right: open details screen directly
-          context.push('/accounts/${acc.id}');
+          if (acc.type == 'credit_card') {
+            context.push('/credit-card-detail');
+          } else {
+            context.push('/accounts/${acc.id}');
+          }
         } else {
           // Swipe Left: show quick actions sheet
           _showAccountActionsSheet(context, acc);
@@ -745,7 +749,13 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     final lastBillText = _formatMoney(acc.totalAmountDue ?? 0);
 
     return InkWell(
-      onTap: () => context.push('/accounts/${acc.id}'),
+      onTap: () {
+        if (acc.type == 'credit_card') {
+          context.push('/credit-card-detail');
+        } else {
+          context.push('/accounts/${acc.id}');
+        }
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 8.0),
         decoration: BoxDecoration(
