@@ -513,45 +513,55 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
   Widget _buildCustomHeader() {
     return Container(
       color: const Color(0xFF080808),
-      padding: const EdgeInsets.only(top: 8, bottom: 12, left: 4, right: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4, right: 8),
+      height: 64,
+      child: Stack(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                      onPressed: () => context.pop(),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        transitionBuilder: (Widget child, Animation<double> animation) {
-                          return FadeTransition(opacity: animation, child: child);
-                        },
-                        child: Text(
-                          _hasText ? 'Note' : 'Quick Add AI',
-                          key: ValueKey<String>(_hasText ? 'Note' : 'Quick Add AI'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
+          // Center: Title & Subtitle
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Quick Add AI',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Add multiple transactions at once',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Left: Back button
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                onPressed: () => context.pop(),
               ),
-              AnimatedSwitcher(
+            ),
+          ),
+          // Right: Action controls (Undo / Redo / Clear)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: !_hasText
                     ? const SizedBox.shrink()
@@ -588,13 +598,6 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
                         ],
                       ),
               ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.only(left: 56),
-            child: Text(
-              'Add multiple transactions at once',
-              style: TextStyle(color: Colors.white38, fontSize: 14),
             ),
           ),
         ],
