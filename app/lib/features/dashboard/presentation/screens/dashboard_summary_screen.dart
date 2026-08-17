@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' hide Column;
@@ -2021,48 +2022,154 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
       if (status.isGranted) {
         return true;
       }
-      
-      if (status.isDenied) {
-        final newStatus = await Permission.camera.request();
-        if (newStatus.isGranted) {
-          return true;
+
+      if (status.isPermanentlyDenied) {
+        if (mounted) {
+          final openSettings = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF0F1A1C),
+              title: const Text('Camera Permission Disabled', style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Camera permission is disabled.\nPlease enable camera access in Settings to scan receipts.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('[Cancel]', style: TextStyle(color: Colors.white54)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('[Open Settings]', style: TextStyle(color: Color(0xFF00E5FF))),
+                ),
+              ],
+            ),
+          );
+          if (openSettings == true) {
+            await openAppSettings();
+          }
+        }
+        return false;
+      }
+
+      // Check if status is denied
+      final newStatus = await Permission.camera.request();
+      if (newStatus.isGranted) {
+        return true;
+      }
+
+      if (newStatus.isPermanentlyDenied) {
+        if (mounted) {
+          final openSettings = await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF0F1A1C),
+              title: const Text('Camera Permission Disabled', style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Camera permission is disabled.\nPlease enable camera access in Settings to scan receipts.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('[Cancel]', style: TextStyle(color: Colors.white54)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('[Open Settings]', style: TextStyle(color: Color(0xFF00E5FF))),
+                ),
+              ],
+            ),
+          );
+          if (openSettings == true) {
+            await openAppSettings();
+          }
+        }
+        return false;
+      }
+
+      // Just regular denial (user denied standard dialog)
+      if (mounted) {
+        final allowAgain = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF0F1A1C),
+            title: const Text('Camera Permission Required', style: TextStyle(color: Colors.white)),
+            content: const Text(
+              'Camera permission is required to scan receipts.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('[Allow Camera]', style: TextStyle(color: Color(0xFF00E5FF))),
+              ),
+            ],
+          ),
+        );
+        if (allowAgain == true) {
+          final retryStatus = await Permission.camera.request();
+          return retryStatus.isGranted;
         }
       }
     } catch (e, stack) {
       debugPrint('Camera permission handling error: $e\n$stack');
     }
-    
+    return false;
+  }
+
+  void _showCameraUnavailableDialog() {
     if (mounted) {
       showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF0F1A1C),
-          title: const Text('Camera Permission Required', style: TextStyle(color: Colors.white)),
+          title: const Text('Camera unavailable', style: TextStyle(color: Colors.white)),
           content: const Text(
-            'Camera permission is required to scan receipts.',
+            'Unable to access the device camera. Please try again or choose an image from Gallery.',
             style: TextStyle(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                try {
-                  openAppSettings();
-                } catch (e) {
-                  debugPrint('Failed to open app settings: $e');
-                }
-              },
-              child: const Text('[Allow Camera]', style: TextStyle(color: Color(0xFF00E5FF))),
+              child: const Text('[OK]', style: TextStyle(color: Color(0xFF00E5FF))),
             ),
           ],
         ),
       );
     }
-    return false;
+  }
+
+  void _showCameraFailureDialog(String message) {
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF0F1A1C),
+          title: const Text('Camera Error', style: TextStyle(color: Colors.white)),
+          content: Text(
+            'Unable to initialize the camera: $message',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('[OK]', style: TextStyle(color: Color(0xFF00E5FF))),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _startOcrAdd() async {
@@ -2108,8 +2215,24 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
       }
 
       final ocrService = ref.read(ocrServiceProvider);
-      final pickedFile = await ocrService.pickImage(source);
-    if (pickedFile == null) return;
+      XFile? pickedFile;
+      try {
+        pickedFile = await ImagePicker().pickImage(source: source, imageQuality: 80);
+      } on PlatformException catch (e) {
+        debugPrint('Camera PlatformException: $e');
+        if (e.code == 'camera_unavailable' || e.code == 'no_cameras') {
+          _showCameraUnavailableDialog();
+        } else {
+          _showCameraFailureDialog(e.message ?? e.toString());
+        }
+        return;
+      } catch (e) {
+        debugPrint('Camera capture/initialization error: $e');
+        _showCameraFailureDialog(e.toString());
+        return;
+      }
+
+      if (pickedFile == null) return;
 
     final statusNotifier = ValueNotifier<String>('Preparing Image...');
 
