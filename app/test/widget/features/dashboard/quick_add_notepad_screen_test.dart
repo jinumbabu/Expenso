@@ -110,10 +110,9 @@ void main() {
       // Verify default text is present in the editor field
       expect(find.byType(TextField), findsOneWidget);
 
-      // Enter text to show Undo/Redo/Clear buttons
+      // Enter text
       await tester.enterText(find.byType(TextField), 'Food 250');
       await tester.pumpAndSettle();
-      expect(find.text('Clear'), findsOneWidget);
     });
 
     testWidgets('Tapping Preview Table switches tab views', (tester) async {

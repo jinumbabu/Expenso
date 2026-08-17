@@ -513,7 +513,7 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
   Widget _buildCustomHeader() {
     return Container(
       color: const Color(0xFF080808),
-      padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4, right: 8),
+      padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4, right: 4),
       height: 64,
       child: Stack(
         children: [
@@ -552,51 +552,6 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
               child: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white70),
                 onPressed: () => context.pop(),
-              ),
-            ),
-          ),
-          // Right: Action controls (Undo / Redo / Clear)
-          Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: !_hasText
-                    ? const SizedBox.shrink()
-                    : Row(
-                        key: const ValueKey<String>('controls'),
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ValueListenableBuilder<bool>(
-                            valueListenable: _undoStackEmptyNotifier,
-                            builder: (context, undoEmpty, child) {
-                              return IconButton(
-                                icon: const Icon(Icons.undo, color: Colors.white54, size: 20),
-                                onPressed: undoEmpty ? null : _undo,
-                              );
-                            },
-                          ),
-                          ValueListenableBuilder<bool>(
-                            valueListenable: _redoStackEmptyNotifier,
-                            builder: (context, redoEmpty, child) {
-                              return IconButton(
-                                icon: const Icon(Icons.redo, color: Colors.white54, size: 20),
-                                onPressed: redoEmpty ? null : _redo,
-                              );
-                            },
-                          ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.delete_sweep_outlined, color: Color(0xFFFF3B30), size: 18),
-                            label: const Text('Clear', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 13, fontWeight: FontWeight.bold)),
-                            onPressed: _clearAll,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            ),
-                          ),
-                        ],
-                      ),
               ),
             ),
           ),
