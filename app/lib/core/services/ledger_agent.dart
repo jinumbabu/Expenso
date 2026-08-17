@@ -1070,6 +1070,18 @@ Payment Method: $paymentMethod
 
     final updatedAccount = await (_db.select(_db.accounts)..where((a) => a.id.equals(accountId))).getSingleOrNull();
     if (updatedAccount != null) {
+      if (updatedAccount.balanceDiscrepancyDismissed == true) {
+        final toUpdate = updatedAccount.copyWith(
+          importedBalance: Value(importedBalance),
+          hasMismatch: const Value(false),
+          mismatchExpected: const Value(null),
+          mismatchImported: const Value(null),
+          updatedAt: DateTime.now(),
+        );
+        await _db.accountDao.updateAccount(toUpdate);
+        return;
+      }
+
       final expected = updatedAccount.type == 'credit_card'
           ? (updatedAccount.outstandingBalance ?? 0)
           : updatedAccount.balance;
@@ -1160,6 +1172,22 @@ Payment Method: $paymentMethod
     if (account == null) return;
 
     final updated = account.copyWith(
+      hasMismatch: const Value(false),
+      mismatchExpected: const Value(null),
+      mismatchImported: const Value(null),
+      updatedAt: DateTime.now(),
+    );
+    await _db.accountDao.updateAccount(updated);
+    await BalanceEngine(_db).validateAndSelfHeal();
+  }
+
+  /// Permanently dismisses discrepancy warnings for the account.
+  Future<void> dismissDiscrepancy(String accountId) async {
+    final account = await (_db.select(_db.accounts)..where((a) => a.id.equals(accountId))).getSingleOrNull();
+    if (account == null) return;
+
+    final updated = account.copyWith(
+      balanceDiscrepancyDismissed: const Value(true),
       hasMismatch: const Value(false),
       mismatchExpected: const Value(null),
       mismatchImported: const Value(null),

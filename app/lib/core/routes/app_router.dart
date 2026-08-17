@@ -100,7 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/credit-card-detail',
-        builder: (context, state) => const CreditCardDetailScreen(),
+        builder: (context, state) {
+          final cardId = state.uri.queryParameters['cardId'];
+          return CreditCardDetailScreen(initialCardId: cardId);
+        },
       ),
       GoRoute(
         path: '/accounts/:id',

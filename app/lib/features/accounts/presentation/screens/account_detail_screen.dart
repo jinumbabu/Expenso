@@ -381,7 +381,9 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
   }
 
   Widget _buildMismatchBanner(BuildContext context, WidgetRef ref, Account account) {
-    if (account.hasMismatch != true) return const SizedBox.shrink();
+    if (account.hasMismatch != true || account.balanceDiscrepancyDismissed == true) {
+      return const SizedBox.shrink();
+    }
 
     final expectedVal = account.mismatchExpected ?? 0;
     final importedVal = account.mismatchImported ?? 0;
@@ -433,50 +435,74 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white30),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useVertical = constraints.maxWidth < 300;
+              final buttons = [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E5FF),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () async {
+                    try {
+                      await ref.read(accountsProvider.notifier).acceptImportedBalance(account.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('SMS balance accepted')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString()}')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Accept SMS Balance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
-                onPressed: () async {
-                  await ref.read(accountsProvider.notifier).keepVerifiedBalance(account.id);
-                },
-                child: const Text('Keep Verified', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              ),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF00E5FF)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                if (!useVertical) const SizedBox(width: 8) else const SizedBox(height: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white30),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () async {
+                    try {
+                      await ref.read(accountsProvider.notifier).dismissDiscrepancy(account.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Balance discrepancy dismissed')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error dismissing discrepancy: ${e.toString()}')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ),
-                onPressed: () async {
-                  await ref.read(accountsProvider.notifier).acceptImportedBalance(account.id);
-                },
-                child: const Text('Accept SMS Balance', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF3B30),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                ),
-                onPressed: () async {
-                  final auth = ref.read(authProvider);
-                  final userId = auth.user?.id ?? 'system';
-                  
-                  final current = account.type == 'credit_card' ? (account.outstandingBalance ?? 0) : account.balance;
-                  final diff = importedVal - current;
-                  await ref.read(accountsProvider.notifier).createAdjustmentEntry(account.id, userId, diff);
-                },
-                child: const Text('Create Adjustment', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-            ],
+              ];
+
+              if (useVertical) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: buttons,
+                );
+              } else {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: buttons,
+                );
+              }
+            },
           ),
         ],
       ),

@@ -718,7 +718,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
         if (direction == DismissDirection.startToEnd) {
           // Swipe Right: open details screen directly
           if (acc.type == 'credit_card') {
-            context.push('/credit-card-detail');
+            context.push('/credit-card-detail?cardId=${acc.id}');
           } else {
             context.push('/accounts/${acc.id}');
           }
@@ -751,7 +751,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     return InkWell(
       onTap: () {
         if (acc.type == 'credit_card') {
-          context.push('/credit-card-detail');
+          context.push('/credit-card-detail?cardId=${acc.id}');
         } else {
           context.push('/accounts/${acc.id}');
         }

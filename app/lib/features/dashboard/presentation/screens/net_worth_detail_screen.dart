@@ -414,7 +414,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () => context.push('/credit-card-detail'),
+                  onTap: () => context.push('/credit-card-detail?cardId=${acc.id}'),
                   child: card,
                 ),
               );

@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.connect(super.connection);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -309,6 +309,9 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(accounts, accounts.mismatchExpected);
         await migrator.addColumn(accounts, accounts.mismatchImported);
         await migrator.addColumn(accounts, accounts.sortOrder);
+      }
+      if (from < 18) {
+        await migrator.addColumn(accounts, accounts.balanceDiscrepancyDismissed);
       }
     },
   );

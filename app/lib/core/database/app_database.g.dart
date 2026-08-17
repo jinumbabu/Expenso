@@ -785,6 +785,16 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
   late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
       'sort_order', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _balanceDiscrepancyDismissedMeta =
+      const VerificationMeta('balanceDiscrepancyDismissed');
+  @override
+  late final GeneratedColumn<bool> balanceDiscrepancyDismissed =
+      GeneratedColumn<bool>('balance_discrepancy_dismissed', aliasedName, true,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("balance_discrepancy_dismissed" IN (0, 1))'),
+          defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -826,7 +836,8 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         hasMismatch,
         mismatchExpected,
         mismatchImported,
-        sortOrder
+        sortOrder,
+        balanceDiscrepancyDismissed
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1059,6 +1070,13 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
       context.handle(_sortOrderMeta,
           sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
     }
+    if (data.containsKey('balance_discrepancy_dismissed')) {
+      context.handle(
+          _balanceDiscrepancyDismissedMeta,
+          balanceDiscrepancyDismissed.isAcceptableOrUnknown(
+              data['balance_discrepancy_dismissed']!,
+              _balanceDiscrepancyDismissedMeta));
+    }
     return context;
   }
 
@@ -1148,6 +1166,9 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
           .read(DriftSqlType.int, data['${effectivePrefix}mismatch_imported']),
       sortOrder: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sort_order']),
+      balanceDiscrepancyDismissed: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool,
+          data['${effectivePrefix}balance_discrepancy_dismissed']),
     );
   }
 
@@ -1198,6 +1219,7 @@ class Account extends DataClass implements Insertable<Account> {
   final int? mismatchExpected;
   final int? mismatchImported;
   final int? sortOrder;
+  final bool? balanceDiscrepancyDismissed;
   const Account(
       {required this.id,
       required this.userId,
@@ -1238,7 +1260,8 @@ class Account extends DataClass implements Insertable<Account> {
       this.hasMismatch,
       this.mismatchExpected,
       this.mismatchImported,
-      this.sortOrder});
+      this.sortOrder,
+      this.balanceDiscrepancyDismissed});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1344,6 +1367,10 @@ class Account extends DataClass implements Insertable<Account> {
     if (!nullToAbsent || sortOrder != null) {
       map['sort_order'] = Variable<int>(sortOrder);
     }
+    if (!nullToAbsent || balanceDiscrepancyDismissed != null) {
+      map['balance_discrepancy_dismissed'] =
+          Variable<bool>(balanceDiscrepancyDismissed);
+    }
     return map;
   }
 
@@ -1448,6 +1475,10 @@ class Account extends DataClass implements Insertable<Account> {
       sortOrder: sortOrder == null && nullToAbsent
           ? const Value.absent()
           : Value(sortOrder),
+      balanceDiscrepancyDismissed:
+          balanceDiscrepancyDismissed == null && nullToAbsent
+              ? const Value.absent()
+              : Value(balanceDiscrepancyDismissed),
     );
   }
 
@@ -1496,6 +1527,8 @@ class Account extends DataClass implements Insertable<Account> {
       mismatchExpected: serializer.fromJson<int?>(json['mismatchExpected']),
       mismatchImported: serializer.fromJson<int?>(json['mismatchImported']),
       sortOrder: serializer.fromJson<int?>(json['sortOrder']),
+      balanceDiscrepancyDismissed:
+          serializer.fromJson<bool?>(json['balanceDiscrepancyDismissed']),
     );
   }
   @override
@@ -1542,6 +1575,8 @@ class Account extends DataClass implements Insertable<Account> {
       'mismatchExpected': serializer.toJson<int?>(mismatchExpected),
       'mismatchImported': serializer.toJson<int?>(mismatchImported),
       'sortOrder': serializer.toJson<int?>(sortOrder),
+      'balanceDiscrepancyDismissed':
+          serializer.toJson<bool?>(balanceDiscrepancyDismissed),
     };
   }
 
@@ -1585,7 +1620,8 @@ class Account extends DataClass implements Insertable<Account> {
           Value<bool?> hasMismatch = const Value.absent(),
           Value<int?> mismatchExpected = const Value.absent(),
           Value<int?> mismatchImported = const Value.absent(),
-          Value<int?> sortOrder = const Value.absent()}) =>
+          Value<int?> sortOrder = const Value.absent(),
+          Value<bool?> balanceDiscrepancyDismissed = const Value.absent()}) =>
       Account(
         id: id ?? this.id,
         userId: userId ?? this.userId,
@@ -1654,6 +1690,9 @@ class Account extends DataClass implements Insertable<Account> {
             ? mismatchImported.value
             : this.mismatchImported,
         sortOrder: sortOrder.present ? sortOrder.value : this.sortOrder,
+        balanceDiscrepancyDismissed: balanceDiscrepancyDismissed.present
+            ? balanceDiscrepancyDismissed.value
+            : this.balanceDiscrepancyDismissed,
       );
   Account copyWithCompanion(AccountsCompanion data) {
     return Account(
@@ -1739,6 +1778,9 @@ class Account extends DataClass implements Insertable<Account> {
           ? data.mismatchImported.value
           : this.mismatchImported,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      balanceDiscrepancyDismissed: data.balanceDiscrepancyDismissed.present
+          ? data.balanceDiscrepancyDismissed.value
+          : this.balanceDiscrepancyDismissed,
     );
   }
 
@@ -1784,7 +1826,8 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('hasMismatch: $hasMismatch, ')
           ..write('mismatchExpected: $mismatchExpected, ')
           ..write('mismatchImported: $mismatchImported, ')
-          ..write('sortOrder: $sortOrder')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('balanceDiscrepancyDismissed: $balanceDiscrepancyDismissed')
           ..write(')'))
         .toString();
   }
@@ -1830,7 +1873,8 @@ class Account extends DataClass implements Insertable<Account> {
         hasMismatch,
         mismatchExpected,
         mismatchImported,
-        sortOrder
+        sortOrder,
+        balanceDiscrepancyDismissed
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1875,7 +1919,9 @@ class Account extends DataClass implements Insertable<Account> {
           other.hasMismatch == this.hasMismatch &&
           other.mismatchExpected == this.mismatchExpected &&
           other.mismatchImported == this.mismatchImported &&
-          other.sortOrder == this.sortOrder);
+          other.sortOrder == this.sortOrder &&
+          other.balanceDiscrepancyDismissed ==
+              this.balanceDiscrepancyDismissed);
 }
 
 class AccountsCompanion extends UpdateCompanion<Account> {
@@ -1919,6 +1965,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<int?> mismatchExpected;
   final Value<int?> mismatchImported;
   final Value<int?> sortOrder;
+  final Value<bool?> balanceDiscrepancyDismissed;
   final Value<int> rowid;
   const AccountsCompanion({
     this.id = const Value.absent(),
@@ -1961,6 +2008,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.mismatchExpected = const Value.absent(),
     this.mismatchImported = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.balanceDiscrepancyDismissed = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   AccountsCompanion.insert({
@@ -2004,6 +2052,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.mismatchExpected = const Value.absent(),
     this.mismatchImported = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.balanceDiscrepancyDismissed = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         userId = Value(userId),
@@ -2052,6 +2101,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<int>? mismatchExpected,
     Expression<int>? mismatchImported,
     Expression<int>? sortOrder,
+    Expression<bool>? balanceDiscrepancyDismissed,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2096,6 +2146,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (mismatchExpected != null) 'mismatch_expected': mismatchExpected,
       if (mismatchImported != null) 'mismatch_imported': mismatchImported,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (balanceDiscrepancyDismissed != null)
+        'balance_discrepancy_dismissed': balanceDiscrepancyDismissed,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2141,6 +2193,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       Value<int?>? mismatchExpected,
       Value<int?>? mismatchImported,
       Value<int?>? sortOrder,
+      Value<bool?>? balanceDiscrepancyDismissed,
       Value<int>? rowid}) {
     return AccountsCompanion(
       id: id ?? this.id,
@@ -2183,6 +2236,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       mismatchExpected: mismatchExpected ?? this.mismatchExpected,
       mismatchImported: mismatchImported ?? this.mismatchImported,
       sortOrder: sortOrder ?? this.sortOrder,
+      balanceDiscrepancyDismissed:
+          balanceDiscrepancyDismissed ?? this.balanceDiscrepancyDismissed,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2310,6 +2365,10 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (balanceDiscrepancyDismissed.present) {
+      map['balance_discrepancy_dismissed'] =
+          Variable<bool>(balanceDiscrepancyDismissed.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2359,6 +2418,7 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('mismatchExpected: $mismatchExpected, ')
           ..write('mismatchImported: $mismatchImported, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('balanceDiscrepancyDismissed: $balanceDiscrepancyDismissed, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -15346,6 +15406,7 @@ typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   Value<int?> mismatchExpected,
   Value<int?> mismatchImported,
   Value<int?> sortOrder,
+  Value<bool?> balanceDiscrepancyDismissed,
   Value<int> rowid,
 });
 typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
@@ -15389,6 +15450,7 @@ typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<int?> mismatchExpected,
   Value<int?> mismatchImported,
   Value<int?> sortOrder,
+  Value<bool?> balanceDiscrepancyDismissed,
   Value<int> rowid,
 });
 
@@ -15579,6 +15641,10 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
       column: $table.sortOrder, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get balanceDiscrepancyDismissed => $composableBuilder(
+      column: $table.balanceDiscrepancyDismissed,
+      builder: (column) => ColumnFilters(column));
 
   $$UsersTableFilterComposer get userId {
     final $$UsersTableFilterComposer composer = $composerBuilder(
@@ -15786,6 +15852,10 @@ class $$AccountsTableOrderingComposer
   ColumnOrderings<int> get sortOrder => $composableBuilder(
       column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get balanceDiscrepancyDismissed => $composableBuilder(
+      column: $table.balanceDiscrepancyDismissed,
+      builder: (column) => ColumnOrderings(column));
+
   $$UsersTableOrderingComposer get userId {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -15933,6 +16003,9 @@ class $$AccountsTableAnnotationComposer
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
+  GeneratedColumn<bool> get balanceDiscrepancyDismissed => $composableBuilder(
+      column: $table.balanceDiscrepancyDismissed, builder: (column) => column);
+
   $$UsersTableAnnotationComposer get userId {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -16060,6 +16133,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             Value<int?> mismatchExpected = const Value.absent(),
             Value<int?> mismatchImported = const Value.absent(),
             Value<int?> sortOrder = const Value.absent(),
+            Value<bool?> balanceDiscrepancyDismissed = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AccountsCompanion(
@@ -16103,6 +16177,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             mismatchExpected: mismatchExpected,
             mismatchImported: mismatchImported,
             sortOrder: sortOrder,
+            balanceDiscrepancyDismissed: balanceDiscrepancyDismissed,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -16146,6 +16221,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             Value<int?> mismatchExpected = const Value.absent(),
             Value<int?> mismatchImported = const Value.absent(),
             Value<int?> sortOrder = const Value.absent(),
+            Value<bool?> balanceDiscrepancyDismissed = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               AccountsCompanion.insert(
@@ -16189,6 +16265,7 @@ class $$AccountsTableTableManager extends RootTableManager<
             mismatchExpected: mismatchExpected,
             mismatchImported: mismatchImported,
             sortOrder: sortOrder,
+            balanceDiscrepancyDismissed: balanceDiscrepancyDismissed,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

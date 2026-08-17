@@ -185,11 +185,9 @@ void main() {
 
       // 3. Verify Credit Card Overview exists
       expect(find.text('CREDIT CARD OVERVIEW'), findsOneWidget);
-      expect(find.text('Total Credit Limit'), findsOneWidget);
-      expect(find.text('Total Utilised'), findsOneWidget);
+      expect(find.text('Credit Limit'), findsWidgets);
       expect(find.text('Available Limit'), findsOneWidget);
       expect(find.text('Total Amount Due'), findsOneWidget);
-      expect(find.text('Available Credit'), findsOneWidget);
       expect(find.text('Total Outstanding'), findsOneWidget);
 
       // 4. Verify visual donut ring exists
@@ -267,6 +265,65 @@ void main() {
       // Back on Page 1 Dashboard
       expect(find.text('Credit Card'), findsOneWidget);
       expect(find.text('All Cards'), findsOneWidget);
+    });
+
+    testWidgets('Tapping a card in account-wise liabilities navigates directly to Page 2: Analytics and selects the card', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final hdfcTx = Transaction(
+        id: 'tx2',
+        userId: 'user1',
+        accountId: 'card_hdfc',
+        type: 'expense',
+        amount: 50000,
+        currency: 'INR',
+        merchant: 'Starbucks',
+        categoryId: 'cat_shopping',
+        date: now.subtract(const Duration(days: 1)),
+        source: 'manual',
+        isRecurring: false,
+        syncStatus: 'synced',
+        createdAt: now,
+        updatedAt: now,
+      );
+      final fakeNotifier = MockExpenseListNotifier([...mockTxs, hdfcTx]);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            expenseListNotifierProvider.overrideWith((ref) => fakeNotifier),
+            categoriesProvider.overrideWith((ref) => mockCats),
+            accountsProvider.overrideWith((ref) => MockAccountsNotifier(mockAccounts)),
+            recalculatedAccountsProvider.overrideWithValue(AsyncValue.data(mockAccounts)),
+            billsStreamProvider.overrideWith((ref) => Stream.value(mockBills)),
+          ],
+          child: const MaterialApp(
+            home: CreditCardDetailScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify we are on Page 1
+      expect(find.text('Credit Card'), findsOneWidget);
+
+      // Find HDFC Card in the Account-Wise Liabilities list and tap it
+      final hdfcCardFinder = find.byKey(const Key('liability_card_card_hdfc'));
+      expect(hdfcCardFinder, findsOneWidget);
+
+      await tester.tap(hdfcCardFinder);
+      await tester.pumpAndSettle();
+
+      // We should now be on Page 2 Analytics for HDFC Card
+      expect(find.text('HDFC Card'), findsOneWidget);
+      expect(find.text('All Cards'), findsNothing);
+      expect(find.text('TOTAL SPENDING'), findsOneWidget);
     });
 
     testWidgets('Tapping category card on Page 2 navigates to Page 3: Sub-Expenses', (tester) async {

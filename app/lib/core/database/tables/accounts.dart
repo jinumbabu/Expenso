@@ -49,6 +49,7 @@ class Accounts extends Table {
   IntColumn get mismatchExpected => integer().nullable().named('mismatch_expected')();
   IntColumn get mismatchImported => integer().nullable().named('mismatch_imported')();
   IntColumn get sortOrder => integer().nullable().named('sort_order')();
+  BoolColumn get balanceDiscrepancyDismissed => boolean().nullable().withDefault(const Constant(false)).named('balance_discrepancy_dismissed')();
 
   @override
   Set<Column> get primaryKey => {id};

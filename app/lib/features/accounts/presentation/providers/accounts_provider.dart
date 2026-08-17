@@ -222,6 +222,16 @@ class AccountsNotifier extends StateNotifier<AsyncValue<List<Account>>> {
     }
   }
 
+  Future<void> dismissDiscrepancy(String accountId) async {
+    try {
+      state = const AsyncValue.loading();
+      await LedgerAgent(_db).dismissDiscrepancy(accountId);
+      await loadAccounts();
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
+  }
+
   Future<void> createAdjustmentEntry(String accountId, String userId, int amountInCents) async {
     try {
       state = const AsyncValue.loading();

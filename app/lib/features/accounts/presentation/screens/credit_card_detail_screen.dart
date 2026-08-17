@@ -17,7 +17,9 @@ import '../../../dashboard/presentation/providers/privacy_provider.dart';
 import '../../../analytics/presentation/models/analytics_chart_data.dart';
 
 class CreditCardDetailScreen extends ConsumerStatefulWidget {
-  const CreditCardDetailScreen({super.key});
+  final String? initialCardId;
+
+  const CreditCardDetailScreen({super.key, this.initialCardId});
 
   @override
   ConsumerState<CreditCardDetailScreen> createState() => _CreditCardDetailScreenState();
@@ -65,6 +67,23 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
     
     _categoryScrollController = ScrollController();
     _subExpenseScrollController = ScrollController();
+
+    if (widget.initialCardId != null) {
+      _selectedCardId = widget.initialCardId!;
+      _navigationLevel = 2;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CreditCardDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialCardId != oldWidget.initialCardId && widget.initialCardId != null) {
+      setState(() {
+        _selectedCardId = widget.initialCardId!;
+        _navigationLevel = 2;
+        _selectedCategoryId = '';
+      });
+    }
   }
 
   @override
@@ -673,13 +692,32 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
   }
 
   Widget _buildOverviewCard(int limit, int outstanding, int available, int totalAmountDue, double utilisationPct, bool isPrivate) {
+    final double creditLimitPct = limit > 0 ? (available / limit * 100) : 0.0;
+    final double utilisationPctVal = limit > 0 ? (outstanding / limit * 100) : 0.0;
+
+    final String creditLimitPctText = isPrivate ? '**%' : '${creditLimitPct.toStringAsFixed(2)}%';
+    final String utilisationPctText = isPrivate ? '**%' : '${utilisationPctVal.toStringAsFixed(2)}%';
+
     return GlassCard(
       borderRadius: 24,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const Text(
+            'CREDIT CARD OVERVIEW',
+            style: TextStyle(
+              color: Color(0xFF00E5FF),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -687,58 +725,107 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'CREDIT CARD OVERVIEW',
-                      style: TextStyle(
-                        color: Color(0xFF00E5FF),
-                        fontSize: 11,
+                      'Total Outstanding',
+                      style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4),
+                    PrivacyText(
+                      rawValue: _formatMoney(outstanding),
+                      isAccountBalance: true,
+                      style: const TextStyle(
+                        color: Color(0xFFFF3B30),
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text('Total Credit Limit', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Total Amount Due',
+                      style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500),
+                    ),
                     const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: PrivacyText(
-                        rawValue: limit > 0 ? _formatMoney(limit) : 'Not available',
-                        isAccountBalance: true,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    PrivacyText(
+                      rawValue: _formatMoney(totalAmountDue),
+                      isAccountBalance: true,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Row(
+              const SizedBox(width: 16),
+              Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (limit > 0) ...[
                     ReusableNetWorthRing(
                       valueFraction: (available / limit).clamp(0.0, 1.0),
-                      size: 54,
+                      size: 50,
                       trackColor: const Color(0xFFFF3B30),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(height: 12),
                   ],
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Text(
+                    creditLimitPctText,
+                    style: const TextStyle(
+                      color: Color(0xFF0066FF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        isPrivate ? '**%' : '${utilisationPct.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          color: _getUtilisationStatusColor(utilisationPct),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0066FF),
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const Text('Utilisation', style: TextStyle(color: Colors.white30, fontSize: 8.5)),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Credit Limit',
+                        style: TextStyle(color: Colors.white38, fontSize: 8.5),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    utilisationPctText,
+                    style: const TextStyle(
+                      color: Color(0xFFFF3B30),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF3B30),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Utilisation',
+                        style: TextStyle(color: Colors.white38, fontSize: 8.5),
+                      ),
                     ],
                   ),
                 ],
@@ -749,57 +836,46 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
           const Divider(color: Colors.white10, height: 1),
           const SizedBox(height: 16),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Amount Due', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    PrivacyText(
-                      rawValue: _formatMoney(totalAmountDue),
-                      isAccountBalance: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold),
+                    const Text(
+                      'Credit Limit',
+                      style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Available Credit', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
                     PrivacyText(
-                      rawValue: _formatMoney(available),
+                      rawValue: limit > 0 ? _formatMoney(limit) : 'Not available',
                       isAccountBalance: true,
-                      style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 13.5, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Color(0xFF0066FF),
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Utilised', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    PrivacyText(
-                      rawValue: _formatMoney(outstanding),
-                      isAccountBalance: true,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13.5, fontWeight: FontWeight.bold),
+                    const Text(
+                      'Available Limit',
+                      style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Available Limit', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
                     PrivacyText(
                       rawValue: _formatMoney(available),
                       isAccountBalance: true,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13.5, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Total Outstanding', style: TextStyle(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    PrivacyText(
-                      rawValue: _formatMoney(outstanding),
-                      isAccountBalance: true,
-                      style: const TextStyle(color: Color(0xFFFF3B30), fontSize: 13.5, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -844,26 +920,32 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
             final int outstanding = card.outstandingBalance ?? 0;
             final int currentBillAmount = latestBill?.amount ?? 0;
             
-            String dueText = 'Statement not generated';
+            String dueText = '';
             Color dueColor = Colors.white38;
-            if (unpaidBill != null && unpaidBill.dueDate != null) {
+            if (latestBill?.statementDate == null) {
+              dueText = '';
+            } else if (unpaidBill != null && unpaidBill.dueDate != null) {
               dueText = _formatDueDays(unpaidBill.dueDate!, now);
               dueColor = _getDueDaysColor(unpaidBill.dueDate!, now);
             } else if (latestBill != null && latestBill.status == 'paid') {
               dueText = 'Paid';
               dueColor = const Color(0xFF00FF88);
+            } else {
+              dueText = 'Pending';
+              dueColor = const Color(0xFFFF9500);
             }
 
             final String stmtDateStr = latestBill?.statementDate != null 
                 ? DateFormat('dd MMM').format(latestBill!.statementDate!) 
                 : 'Not generated';
 
-            return InkWell(
-              borderRadius: BorderRadius.circular(16),
+            return GestureDetector(
+              key: Key('liability_card_${card.id}'),
+              behavior: HitTestBehavior.opaque,
               onTap: () {
                 setState(() {
                   _selectedCardId = card.id;
-                  _navigationLevel = 1; // Keep user on Page 1 Home
+                  _navigationLevel = 2; // Navigates to Level 2 (Analytics)
                   _selectedCategoryId = '';
                 });
               },
