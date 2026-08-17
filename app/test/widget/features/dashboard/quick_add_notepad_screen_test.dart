@@ -99,7 +99,7 @@ void main() {
       );
 
       // Verify title and subtitle
-      expect(find.text('Quick\nAdd AI'), findsOneWidget);
+      expect(find.text('Quick Add AI'), findsOneWidget);
       expect(find.text('Add multiple transactions at once'), findsOneWidget);
 
       // Verify buttons

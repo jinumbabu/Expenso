@@ -505,56 +505,78 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
 
   Widget _buildCustomHeader() {
     return Container(
-      height: 72,
       color: const Color(0xFF080808),
-      child: Row(
+      padding: const EdgeInsets.only(top: 8, bottom: 12, left: 4, right: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white70),
-            onPressed: () => context.pop(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => context.pop(),
+                    ),
+                    const SizedBox(width: 4),
+                    const Expanded(
+                      child: Text(
+                        'Quick Add AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _undoStackEmptyNotifier,
+                    builder: (context, undoEmpty, child) {
+                      return IconButton(
+                        icon: const Icon(Icons.undo, color: Colors.white54, size: 20),
+                        onPressed: undoEmpty ? null : _undo,
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _redoStackEmptyNotifier,
+                    builder: (context, redoEmpty, child) {
+                      return IconButton(
+                        icon: const Icon(Icons.redo, color: Colors.white54, size: 20),
+                        onPressed: redoEmpty ? null : _redo,
+                      );
+                    },
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_sweep_outlined, color: Color(0xFFFF3B30), size: 18),
+                    label: const Text('Clear', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 13, fontWeight: FontWeight.bold)),
+                    onPressed: _clearAll,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Quick\nAdd AI',
-                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, height: 1.1),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Add multiple transactions at once',
-                  style: TextStyle(color: Colors.white38, fontSize: 10),
-                ),
-              ],
+          const Padding(
+            padding: EdgeInsets.only(left: 56),
+            child: Text(
+              'Add multiple transactions at once',
+              style: TextStyle(color: Colors.white38, fontSize: 14),
             ),
           ),
-          ValueListenableBuilder<bool>(
-            valueListenable: _undoStackEmptyNotifier,
-            builder: (context, undoEmpty, child) {
-              return IconButton(
-                icon: const Icon(Icons.undo, color: Colors.white54, size: 20),
-                onPressed: undoEmpty ? null : _undo,
-              );
-            },
-          ),
-          ValueListenableBuilder<bool>(
-            valueListenable: _redoStackEmptyNotifier,
-            builder: (context, redoEmpty, child) {
-              return IconButton(
-                icon: const Icon(Icons.redo, color: Colors.white54, size: 20),
-                onPressed: redoEmpty ? null : _redo,
-              );
-            },
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.delete_sweep_outlined, color: Color(0xFFFF3B30), size: 18),
-            label: const Text('Clear', style: TextStyle(color: Color(0xFFFF3B30))),
-            onPressed: _clearAll,
-          ),
-          const SizedBox(width: 8),
         ],
       ),
     );
