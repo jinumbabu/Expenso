@@ -103,12 +103,17 @@ void main() {
       expect(find.text('Add multiple transactions at once'), findsOneWidget);
 
       // Verify buttons
-      expect(find.text('Clear'), findsOneWidget);
+      expect(find.text('Clear'), findsNothing);
       expect(find.text('Notepad'), findsOneWidget);
       expect(find.text('Preview Table'), findsOneWidget);
 
       // Verify default text is present in the editor field
       expect(find.byType(TextField), findsOneWidget);
+
+      // Enter text to show Undo/Redo/Clear buttons
+      await tester.enterText(find.byType(TextField), 'Food 250');
+      await tester.pumpAndSettle();
+      expect(find.text('Clear'), findsOneWidget);
     });
 
     testWidgets('Tapping Preview Table switches tab views', (tester) async {

@@ -20,6 +20,7 @@ class QuickAddNotepadScreen extends ConsumerStatefulWidget {
 
 class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> with WidgetsBindingObserver {
   final TextEditingController _notepadController = TextEditingController();
+  bool _hasText = false;
   final ScrollController _notepadScrollController = ScrollController();
   final ScrollController _lineRailScrollController = ScrollController();
   final FocusNode _notepadFocusNode = FocusNode();
@@ -155,6 +156,12 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
 
   void _onTextChanged() {
     final text = _notepadController.text;
+    final hasText = text.isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() {
+        _hasText = hasText;
+      });
+    }
     final selection = _notepadController.selection;
 
     // Track active typing line index based on selection
@@ -522,51 +529,64 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
                       onPressed: () => context.pop(),
                     ),
                     const SizedBox(width: 4),
-                    const Expanded(
-                      child: Text(
-                        'Quick Add AI',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          return FadeTransition(opacity: animation, child: child);
+                        },
+                        child: Text(
+                          _hasText ? 'Note' : 'Quick Add AI',
+                          key: ValueKey<String>(_hasText ? 'Note' : 'Quick Add AI'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _undoStackEmptyNotifier,
-                    builder: (context, undoEmpty, child) {
-                      return IconButton(
-                        icon: const Icon(Icons.undo, color: Colors.white54, size: 20),
-                        onPressed: undoEmpty ? null : _undo,
-                      );
-                    },
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _redoStackEmptyNotifier,
-                    builder: (context, redoEmpty, child) {
-                      return IconButton(
-                        icon: const Icon(Icons.redo, color: Colors.white54, size: 20),
-                        onPressed: redoEmpty ? null : _redo,
-                      );
-                    },
-                  ),
-                  TextButton.icon(
-                    icon: const Icon(Icons.delete_sweep_outlined, color: Color(0xFFFF3B30), size: 18),
-                    label: const Text('Clear', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 13, fontWeight: FontWeight.bold)),
-                    onPressed: _clearAll,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                  ),
-                ],
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: !_hasText
+                    ? const SizedBox.shrink()
+                    : Row(
+                        key: const ValueKey<String>('controls'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ValueListenableBuilder<bool>(
+                            valueListenable: _undoStackEmptyNotifier,
+                            builder: (context, undoEmpty, child) {
+                              return IconButton(
+                                icon: const Icon(Icons.undo, color: Colors.white54, size: 20),
+                                onPressed: undoEmpty ? null : _undo,
+                              );
+                            },
+                          ),
+                          ValueListenableBuilder<bool>(
+                            valueListenable: _redoStackEmptyNotifier,
+                            builder: (context, redoEmpty, child) {
+                              return IconButton(
+                                icon: const Icon(Icons.redo, color: Colors.white54, size: 20),
+                                onPressed: redoEmpty ? null : _redo,
+                              );
+                            },
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.delete_sweep_outlined, color: Color(0xFFFF3B30), size: 18),
+                            label: const Text('Clear', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 13, fontWeight: FontWeight.bold)),
+                            onPressed: _clearAll,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -1591,7 +1611,7 @@ class NotepadEditor extends StatelessWidget {
               decoration: InputDecoration(
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.only(top: 12, bottom: 12, left: 12, right: 12),
-                hintText: "Type transaction here ...\n\nExample:\n\nPurchase 500 cash\nYesterday Dinner 250 from HDFC\n7 Aug Fuel 1000 SBI Credit Card\n4 July 5000 transfer HDFC to SBI",
+                hintText: "Type transaction here...\n\nExample:\n\nCoffee 20 cash\nYesterday Taxi 100 from HSBC\n7 Aug shopping 1000 HDFC\n10 July transfer HSBC to SBI",
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.12), height: 1.35),
               ),
             ),
