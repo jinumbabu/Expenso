@@ -8,11 +8,23 @@ import 'package:app/features/expenses/presentation/providers/expense_provider.da
 import 'package:app/features/auth/domain/repositories/auth_repository.dart';
 import 'package:app/core/security/audit_logger.dart';
 import 'package:app/core/services/quick_add_notepad_service.dart';
+import 'package:app/features/accounts/presentation/providers/accounts_provider.dart';
 
 class FakeDatabase extends Fake implements AppDatabase {}
 class FakeAuthRepository extends Fake implements AuthRepository {}
 class FakeAuditLogger extends Fake implements AuditLogger {}
 class FakeRef extends Fake implements Ref {}
+class FakeAccountsNotifier extends AccountsNotifier {
+  FakeAccountsNotifier() : super(db: FakeDatabase(), userId: null) {
+    state = const AsyncValue.data([]);
+  }
+
+  @override
+  void _initStream() {}
+
+  @override
+  Future<void> loadAccounts() async {}
+}
 
 class MockAuthNotifier extends AuthNotifier {
   MockAuthNotifier(User user) : super(FakeAuthRepository(), FakeAuditLogger(), FakeRef()) {
@@ -27,7 +39,7 @@ class MockQuickAddNotepadService extends QuickAddNotepadService {
   MockQuickAddNotepadService(super.ref);
 
   @override
-  List<ParsedLine> parseDocument(String documentText) {
+  List<ParsedLine> parseDocument(String documentText, [List<Account>? accounts]) {
     return [
       ParsedLine(rawText: 'Food 250', amount: 250.0, category: 'Food', merchant: 'Food', type: 'expense', accountName: 'Cash', accountType: 'cash'),
     ];
@@ -77,6 +89,7 @@ void main() {
             authProvider.overrideWith((ref) => mockAuth),
             categoriesProvider.overrideWith((ref) => Future.value([])),
             paymentMethodsProvider.overrideWith((ref) => Future.value([])),
+            accountsProvider.overrideWith((ref) => FakeAccountsNotifier()),
             quickAddNotepadServiceProvider.overrideWith((ref) => MockQuickAddNotepadService(ref)),
           ],
           child: const MaterialApp(
@@ -86,7 +99,7 @@ void main() {
       );
 
       // Verify title and subtitle
-      expect(find.text('Quick Add AI Journal'), findsOneWidget);
+      expect(find.text('Quick\nAdd AI'), findsOneWidget);
       expect(find.text('Add multiple transactions at once'), findsOneWidget);
 
       // Verify buttons
@@ -117,6 +130,7 @@ void main() {
             paymentMethodsProvider.overrideWith((ref) => Future.value([
               PaymentMethod(id: 'pm-1', userId: 'user-123', name: 'Cash', type: 'cash', usageCount: 0, createdAt: DateTime.now()),
             ])),
+            accountsProvider.overrideWith((ref) => FakeAccountsNotifier()),
             quickAddNotepadServiceProvider.overrideWith((ref) => MockQuickAddNotepadService(ref)),
           ],
           child: const MaterialApp(

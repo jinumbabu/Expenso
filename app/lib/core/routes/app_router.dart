@@ -35,6 +35,7 @@ import '../../features/expenses/presentation/screens/monthly_transaction_detail_
 import '../../features/accounts/presentation/screens/accounts_screen.dart';
 import '../../features/accounts/presentation/screens/account_detail_screen.dart';
 import '../../features/accounts/presentation/screens/credit_card_detail_screen.dart';
+import '../../features/accounts/presentation/screens/account_ledger_credit_card_detail_screen.dart';
 import '../../features/expenses/presentation/screens/bills_management_screen.dart';
 import '../../features/expenses/presentation/screens/bill_detail_screen.dart';
 
@@ -108,6 +109,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/accounts/:id',
         builder: (context, state) => AccountDetailScreen(
+          accountId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/accounts/credit-card/:id',
+        builder: (context, state) => AccountLedgerCreditCardDetailScreen(
           accountId: state.pathParameters['id']!,
         ),
       ),

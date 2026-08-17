@@ -2039,7 +2039,7 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
           backgroundColor: const Color(0xFF0F1A1C),
           title: const Text('Camera Permission Required', style: TextStyle(color: Colors.white)),
           content: const Text(
-            'Expenso needs camera access to scan receipts. Please enable it in Settings.',
+            'Camera permission is required to scan receipts.',
             style: TextStyle(color: Colors.white70),
           ),
           actions: [
@@ -2056,7 +2056,7 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
                   debugPrint('Failed to open app settings: $e');
                 }
               },
-              child: const Text('Open Settings', style: TextStyle(color: Color(0xFF00E5FF))),
+              child: const Text('[Allow Camera]', style: TextStyle(color: Color(0xFF00E5FF))),
             ),
           ],
         ),
@@ -2066,48 +2066,49 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
   }
 
   Future<void> _startOcrAdd() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: const Color(0xFF050505),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Scan Receipt',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined, color: Color(0xFF0066FF)),
-              title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.image_outlined, color: Color(0xFF0066FF)),
-              title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            const SizedBox(height: 8),
-          ],
+    try {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: const Color(0xFF050505),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-      ),
-    );
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'Scan Receipt',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined, color: Color(0xFF0066FF)),
+                title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.image_outlined, color: Color(0xFF0066FF)),
+                title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      );
 
-    if (source == null) return;
+      if (source == null) return;
 
-    if (source == ImageSource.camera) {
-      final hasPermission = await _checkAndRequestCameraPermission();
-      if (!hasPermission) return;
-    }
+      if (source == ImageSource.camera) {
+        final hasPermission = await _checkAndRequestCameraPermission();
+        if (!hasPermission) return;
+      }
 
-    final ocrService = ref.read(ocrServiceProvider);
-    final pickedFile = await ocrService.pickImage(source);
+      final ocrService = ref.read(ocrServiceProvider);
+      final pickedFile = await ocrService.pickImage(source);
     if (pickedFile == null) return;
 
     final statusNotifier = ValueNotifier<String>('Preparing Image...');
@@ -2183,6 +2184,14 @@ class _AiQuickAddWidgetState extends ConsumerState<_AiQuickAddWidget> {
         Navigator.pop(context); // pop loader in case it didn't pop
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Scanning failed: $e'), backgroundColor: const Color(0xFFFF3B30)),
+        );
+      }
+    }
+    } catch (e, stack) {
+      debugPrint('OCR flow execution crash: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
         );
       }
     }

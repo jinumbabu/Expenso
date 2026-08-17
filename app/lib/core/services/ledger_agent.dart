@@ -701,77 +701,86 @@ Payment Method: $paymentMethod
         Account? destAccount;
         String destAccountName = 'Transfer Account';
 
-        final isAtm = tx.merchant?.toLowerCase().contains('atm') == true ||
-                      tx.merchant?.toLowerCase().contains('withdrawal') == true ||
-                      tx.description?.toLowerCase().contains('atm') == true ||
-                      tx.description?.toLowerCase().contains('withdrawal') == true ||
-                      tx.accountType?.toLowerCase().contains('atm') == true;
-
-        if (isAtm) {
+        if (tx.referenceNumber != null && tx.referenceNumber!.isNotEmpty) {
           destAccount = await (_db.select(_db.accounts)
-            ..where((a) => a.userId.equals(tx.userId) & a.type.equals('cash'))
+            ..where((a) => a.id.equals(tx.referenceNumber!) & a.userId.equals(tx.userId))
             ..limit(1)
           ).getSingleOrNull();
+        }
 
+        if (destAccount == null) {
+          final isAtm = tx.merchant?.toLowerCase().contains('atm') == true ||
+                        tx.merchant?.toLowerCase().contains('withdrawal') == true ||
+                        tx.description?.toLowerCase().contains('atm') == true ||
+                        tx.description?.toLowerCase().contains('withdrawal') == true ||
+                        tx.accountType?.toLowerCase().contains('atm') == true;
+
+          if (isAtm) {
+            destAccount = await (_db.select(_db.accounts)
+              ..where((a) => a.userId.equals(tx.userId) & a.type.equals('cash'))
+              ..limit(1)
+            ).getSingleOrNull();
+
+            if (destAccount == null) {
+              destAccount = await _getOrCreateAccount(
+                tx.userId,
+                'Cash Wallet',
+                'cash',
+                bankName: 'Cash',
+                colorTheme: '0xFF00E5FF',
+                icon: 'account_balance_wallet',
+                isEstimated: false,
+                openingBalance: 0,
+                initialBalance: tx.amount.toInt(),
+              );
+            }
+          } else if (tx.merchant != null && tx.merchant!.isNotEmpty && 
+              tx.merchant != 'General Merchant' && tx.merchant != 'Cash/Bank Deposit' && tx.merchant != 'Local Purchase') {
+            destAccountName = '${tx.merchant} A/c XXXX';
+            
+            final last4Match = RegExp(r'\b\d{3,4}\b').firstMatch(destAccountName);
+            final last4 = last4Match?.group(0);
+
+            destAccount = await _findExistingAccount(
+              userId: tx.userId,
+              type: 'savings',
+              bankName: tx.merchant!,
+              last4: last4 ?? 'XXXX',
+            );
+
+            if (destAccount == null) {
+              final existingAccounts = await (_db.select(_db.accounts)
+                ..where((a) => a.userId.equals(tx.userId))
+              ).get();
+              
+              for (var existing in existingAccounts) {
+                final destNameLower = tx.merchant!.toLowerCase();
+                final existingNameLower = existing.name.toLowerCase();
+                final existingBankLower = (existing.bankName ?? '').toLowerCase();
+                if (existingNameLower.contains(destNameLower) || 
+                    (existingNameLower.isNotEmpty && destNameLower.contains(existingNameLower)) || 
+                    (existingBankLower.isNotEmpty && existingBankLower.contains(destNameLower)) || 
+                    (existingBankLower.isNotEmpty && destNameLower.contains(existingBankLower))) {
+                  destAccount = existing;
+                  break;
+                }
+              }
+            }
+          }
+          
           if (destAccount == null) {
             destAccount = await _getOrCreateAccount(
               tx.userId,
-              'Cash Wallet',
-              'cash',
-              bankName: 'Cash',
-              colorTheme: '0xFF00E5FF',
-              icon: 'account_balance_wallet',
-              isEstimated: false,
+              destAccountName,
+              'savings',
+              bankName: tx.merchant ?? 'Transfer Destination',
+              colorTheme: '0xFF0066FF',
+              icon: 'account_balance',
+              isEstimated: tx.source == 'sms',
               openingBalance: 0,
               initialBalance: tx.amount.toInt(),
             );
           }
-        } else if (tx.merchant != null && tx.merchant!.isNotEmpty && 
-            tx.merchant != 'General Merchant' && tx.merchant != 'Cash/Bank Deposit' && tx.merchant != 'Local Purchase') {
-          destAccountName = '${tx.merchant} A/c XXXX';
-          
-          final last4Match = RegExp(r'\b\d{3,4}\b').firstMatch(destAccountName);
-          final last4 = last4Match?.group(0);
-
-          destAccount = await _findExistingAccount(
-            userId: tx.userId,
-            type: 'savings',
-            bankName: tx.merchant!,
-            last4: last4 ?? 'XXXX',
-          );
-
-          if (destAccount == null) {
-            final existingAccounts = await (_db.select(_db.accounts)
-              ..where((a) => a.userId.equals(tx.userId))
-            ).get();
-            
-            for (var existing in existingAccounts) {
-              final destNameLower = tx.merchant!.toLowerCase();
-              final existingNameLower = existing.name.toLowerCase();
-              final existingBankLower = (existing.bankName ?? '').toLowerCase();
-              if (existingNameLower.contains(destNameLower) || 
-                  (existingNameLower.isNotEmpty && destNameLower.contains(existingNameLower)) || 
-                  (existingBankLower.isNotEmpty && existingBankLower.contains(destNameLower)) || 
-                  (existingBankLower.isNotEmpty && destNameLower.contains(existingBankLower))) {
-                destAccount = existing;
-                break;
-              }
-            }
-          }
-        }
-        
-        if (destAccount == null) {
-          destAccount = await _getOrCreateAccount(
-            tx.userId,
-            destAccountName,
-            'savings',
-            bankName: tx.merchant ?? 'Transfer Destination',
-            colorTheme: '0xFF0066FF',
-            icon: 'account_balance',
-            isEstimated: tx.source == 'sms',
-            openingBalance: 0,
-            initialBalance: tx.amount.toInt(),
-          );
         }
 
         return {

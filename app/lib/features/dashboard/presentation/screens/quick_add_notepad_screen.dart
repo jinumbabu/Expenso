@@ -246,7 +246,8 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
     _isProcessingNotifier.value = true;
     try {
       final parser = ref.read(quickAddNotepadServiceProvider);
-      final rawParsed = parser.parseDocument(_notepadController.text);
+      final accounts = ref.read(accountsProvider).value ?? [];
+      final rawParsed = parser.parseDocument(_notepadController.text, accounts);
       
       // Check duplicates against SQLite
       final reconciled = await parser.detectDuplicates(rawParsed, userId);
@@ -504,7 +505,7 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
 
   Widget _buildCustomHeader() {
     return Container(
-      height: 56,
+      height: 72,
       color: const Color(0xFF080808),
       child: Row(
         children: [
@@ -513,18 +514,19 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
             onPressed: () => context.pop(),
           ),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Quick Add AI Journal',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                const Text(
+                  'Quick\nAdd AI',
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, height: 1.1),
                 ),
-                Text(
+                const SizedBox(height: 2),
+                const Text(
                   'Add multiple transactions at once',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                  style: TextStyle(color: Colors.white38, fontSize: 10),
                 ),
               ],
             ),
@@ -985,17 +987,22 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$typeName • ${item.category ?? "Miscellaneous"}',
+                  item.type == 'transfer'
+                      ? 'Transfer • ${item.accountName ?? "From"} → ${item.merchant ?? "To"}'
+                      : '$typeName • ${item.category ?? "Miscellaneous"}',
                   style: TextStyle(
-                    color: item.type == 'income' ? const Color(0xFF00FF88) : const Color(0xFFFF9F0A),
+                    color: item.type == 'transfer'
+                        ? const Color(0xFF00E5FF)
+                        : (item.type == 'income' ? const Color(0xFF00FF88) : const Color(0xFFFF9F0A)),
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
                 ),
+                const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
@@ -1003,7 +1010,7 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'Confidence: $confidencePercent%',
+                    'Confidence $confidencePercent%',
                     style: TextStyle(
                       color: isLowConfidence ? const Color(0xFFFFCC00) : const Color(0xFF00E5FF),
                       fontSize: 10,
@@ -1021,14 +1028,23 @@ class _QuickAddNotepadScreenState extends ConsumerState<QuickAddNotepadScreen> w
                     text: TextSpan(
                       style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
                       children: [
-                        const TextSpan(text: 'Merchant:\n', style: TextStyle(color: Colors.white38)),
-                        TextSpan(text: '${item.merchant ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        if (item.type == 'transfer') ...[
+                          const TextSpan(text: 'From:\n', style: TextStyle(color: Colors.white38)),
+                          TextSpan(text: '${item.accountName ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                          const TextSpan(text: 'To:\n', style: TextStyle(color: Colors.white38)),
+                          TextSpan(text: '${item.merchant ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        ] else ...[
+                          const TextSpan(text: 'Merchant:\n', style: TextStyle(color: Colors.white38)),
+                          TextSpan(text: '${item.merchant ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        ],
                         const TextSpan(text: 'Amount:\n', style: TextStyle(color: Colors.white38)),
                         TextSpan(text: '₹${item.amount?.toStringAsFixed(0) ?? "0"}\n', style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
-                        const TextSpan(text: 'Account:\n', style: TextStyle(color: Colors.white38)),
-                        TextSpan(text: '${item.accountName ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-                        const TextSpan(text: 'Payment:\n', style: TextStyle(color: Colors.white38)),
-                        TextSpan(text: '${item.paymentMethod ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        if (item.type != 'transfer') ...[
+                          const TextSpan(text: 'Account:\n', style: TextStyle(color: Colors.white38)),
+                          TextSpan(text: '${item.accountName ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                          const TextSpan(text: 'Payment:\n', style: TextStyle(color: Colors.white38)),
+                          TextSpan(text: '${item.paymentMethod ?? "-"}\n', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        ],
                         const TextSpan(text: 'Date:\n', style: TextStyle(color: Colors.white38)),
                         TextSpan(
                           text: item.dueDate != null && DateFormat('yyyy-MM-dd').format(item.dueDate!) == DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 1)))
@@ -1553,7 +1569,7 @@ class NotepadEditor extends StatelessWidget {
               decoration: InputDecoration(
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.only(top: 12, bottom: 12, left: 12, right: 12),
-                hintText: "Type transactions here...\n\nExample:\nTea 20\nSalary 30000\nPetrol 1200",
+                hintText: "Type transaction here ...\n\nExample:\n\nPurchase 500 cash\nYesterday Dinner 250 from HDFC\n7 Aug Fuel 1000 SBI Credit Card\n4 July 5000 transfer HDFC to SBI",
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.12), height: 1.35),
               ),
             ),

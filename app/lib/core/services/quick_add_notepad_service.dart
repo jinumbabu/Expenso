@@ -7,6 +7,7 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/expenses/presentation/providers/expense_provider.dart';
 import '../../features/accounts/presentation/providers/accounts_provider.dart';
 import 'ledger_agent.dart';
+import 'package:intl/intl.dart';
 
 class ParsedLine {
   final String rawText;
@@ -95,14 +96,14 @@ class QuickAddNotepadService {
   QuickAddNotepadService(this._ref) : _db = _ref.read(databaseProvider);
 
   /// Main entry point to parse a full block of multiline text offline.
-  List<ParsedLine> parseDocument(String documentText) {
+  List<ParsedLine> parseDocument(String documentText, [List<Account>? accounts]) {
     final lines = documentText.split('\n');
     final List<ParsedLine> results = [];
 
     for (var rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
-      results.add(parseLine(line));
+      results.add(parseLine(line, accounts));
     }
     return results;
   }
@@ -198,8 +199,50 @@ class QuickAddNotepadService {
     return now;
   }
 
+  /// Helper to clean transfer account queries.
+  String _cleanAccountQuery(String part, String? dateToken, String? amountToken) {
+    String clean = part.toLowerCase();
+    if (amountToken != null) {
+      clean = clean.replaceAll(amountToken.toLowerCase(), '');
+    }
+    if (dateToken != null) {
+      clean = clean.replaceAll(dateToken.toLowerCase(), '');
+    }
+    final wordsToRemove = [
+      'transfer', 'from', 'to', 'send', 'sent', 'move', 'atm withdrawal', 'cash deposit',
+      'yesterday', 'today', 'tomorrow', 'rs', '₹', 'inr', 'usd', 'arrow'
+    ];
+    for (var word in wordsToRemove) {
+      clean = clean.replaceAll(RegExp('\\b$word\\b', caseSensitive: false), '');
+    }
+    clean = clean.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '');
+    return clean.trim();
+  }
+
+  /// Helper to resolve accounts case-insensitively.
+  Map<String, dynamic> _resolveAccountFromQuery(String query, List<Account> accounts) {
+    if (query.isEmpty) {
+      return {'status': 'none'};
+    }
+    final exactMatches = accounts.where((a) => a.name.toLowerCase().trim() == query).toList();
+    if (exactMatches.length == 1) {
+      return {'status': 'resolved', 'account': exactMatches.first};
+    }
+    final matched = accounts.where((a) {
+      final name = a.name.toLowerCase().trim();
+      return name == query || name.contains(query) || query.contains(name);
+    }).toList();
+    if (matched.length == 1) {
+      return {'status': 'resolved', 'account': matched.first};
+    } else if (matched.length > 1) {
+      return {'status': 'ambiguous', 'matches': matched};
+    }
+    return {'status': 'unmatched'};
+  }
+
   /// Parses a single transaction line using regular expressions and rule-based NLP.
-  ParsedLine parseLine(String line) {
+  ParsedLine parseLine(String line, [List<Account>? accountsList]) {
+    final accounts = accountsList ?? [];
     final clean = line.trim();
     if (clean.isEmpty) {
       return ParsedLine(rawText: line, type: 'expense', error: 'Empty line', confidence: 0.0);
@@ -358,6 +401,162 @@ class QuickAddNotepadService {
     }
 
     // 5. Check for internal transfers
+    Account? sourceAcc;
+    Account? destAcc;
+    bool isTransfer = false;
+    bool isAmbiguous = false;
+    List<Account> ambiguousMatches = [];
+
+    final hasTransferKeyword = lower.contains('transfer') ||
+        lower.contains('send') ||
+        lower.contains('move') ||
+        lower.contains('sent') ||
+        lower.contains('atm withdrawal') ||
+        lower.contains('cash deposit');
+
+    final toMatch = RegExp(r'\bto\b|→|->').firstMatch(lower);
+    if (toMatch != null && hasTransferKeyword && accounts.isNotEmpty) {
+      final splitIdx = toMatch.start;
+      final part1 = lower.substring(0, splitIdx);
+      final part2 = lower.substring(splitIdx + toMatch.group(0)!.length);
+      
+      final query1 = _cleanAccountQuery(part1, null, null);
+      final query2 = _cleanAccountQuery(part2, null, null);
+      
+      final res1 = _resolveAccountFromQuery(query1, accounts);
+      final res2 = _resolveAccountFromQuery(query2, accounts);
+      
+      if (res1['status'] == 'resolved' && res2['status'] == 'resolved') {
+        sourceAcc = res1['account'] as Account;
+        destAcc = res2['account'] as Account;
+        isTransfer = true;
+      } else if (res1['status'] == 'ambiguous' || res2['status'] == 'ambiguous') {
+        isAmbiguous = true;
+        isTransfer = true;
+        if (res1['status'] == 'ambiguous') ambiguousMatches.addAll(res1['matches'] as List<Account>);
+        if (res2['status'] == 'ambiguous') ambiguousMatches.addAll(res2['matches'] as List<Account>);
+      } else if (res1['status'] == 'unmatched' || res2['status'] == 'unmatched') {
+        isTransfer = true;
+      }
+    }
+
+    if (sourceAcc == null && destAcc == null && !isAmbiguous && hasTransferKeyword && accounts.isNotEmpty) {
+      final sortedAccounts = List<Account>.from(accounts)
+        ..sort((a, b) => b.name.length.compareTo(a.name.length));
+
+      final List<Map<String, dynamic>> matched = [];
+      for (var acc in sortedAccounts) {
+        final accName = acc.name.toLowerCase();
+        int startIdx = lower.indexOf(accName);
+        while (startIdx != -1) {
+          bool isWordBoundary = true;
+          if (startIdx > 0) {
+            final prevChar = lower[startIdx - 1];
+            if (RegExp(r'[a-zA-Z0-9]').hasMatch(prevChar)) isWordBoundary = false;
+          }
+          if (startIdx + accName.length < lower.length) {
+            final nextChar = lower[startIdx + accName.length];
+            if (RegExp(r'[a-zA-Z0-9]').hasMatch(nextChar)) isWordBoundary = false;
+          }
+
+          if (isWordBoundary) {
+            bool overlaps = false;
+            for (var m in matched) {
+              final mStart = m['start'] as int;
+              final mEnd = m['end'] as int;
+              if ((startIdx >= mStart && startIdx < mEnd) || (startIdx + accName.length > mStart && startIdx + accName.length <= mEnd)) {
+                overlaps = true;
+                break;
+              }
+            }
+            if (!overlaps) {
+              matched.add({
+                'account': acc,
+                'start': startIdx,
+                'end': startIdx + accName.length,
+              });
+            }
+          }
+          startIdx = lower.indexOf(accName, startIdx + 1);
+        }
+      }
+
+      matched.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+
+      if (matched.length == 2) {
+        sourceAcc = matched[0]['account'] as Account;
+        destAcc = matched[1]['account'] as Account;
+        isTransfer = true;
+      } else if (matched.length > 2) {
+        isAmbiguous = true;
+        isTransfer = true;
+      } else if (matched.length == 1) {
+        isTransfer = true;
+      }
+    }
+
+    if (isTransfer) {
+      if (isAmbiguous) {
+        return ParsedLine(
+          rawText: clean,
+          amount: amount,
+          type: 'transfer',
+          merchant: 'Ambiguous Destination',
+          accountName: 'Ambiguous Source',
+          category: 'Transfer',
+          dueDate: transactionDate,
+          confidence: 0.5,
+          error: 'Ambiguous transfer accounts',
+          suggestion: 'Check source and destination account names.',
+        );
+      }
+
+      if (sourceAcc != null && destAcc != null) {
+        final sourceBalance = sourceAcc.type == 'credit_card'
+            ? (sourceAcc.creditLimit ?? 0) - (sourceAcc.outstandingBalance ?? 0)
+            : sourceAcc.balance;
+
+        final transferAmountCents = (amount * 100).round();
+
+        String? balanceError;
+        if (sourceBalance < transferAmountCents) {
+          final formattedBal = NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 0).format(sourceBalance / 100);
+          final formattedAmt = NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 0).format(transferAmountCents / 100);
+          final formattedDiff = NumberFormat.simpleCurrency(name: 'INR', decimalDigits: 0).format((transferAmountCents - sourceBalance) / 100);
+          
+          balanceError = 'Insufficient Balance\n\n${sourceAcc.name} available balance:\n$formattedBal\nTransfer amount:\n$formattedAmt\nRequired:\n$formattedDiff more';
+        }
+
+        return ParsedLine(
+          rawText: clean,
+          amount: amount,
+          type: 'transfer',
+          merchant: destAcc.name,
+          accountName: sourceAcc.name,
+          accountType: sourceAcc.type,
+          paymentMethod: sourceAcc.type == 'cash' ? 'Cash' : 'Debit Card',
+          category: 'Transfer',
+          dueDate: transactionDate,
+          confidence: 0.95,
+          error: balanceError,
+          suggestion: balanceError ?? 'Internal Transfer: Moves ₹${amount.toStringAsFixed(2)} from ${sourceAcc.name} to ${destAcc.name}.',
+        );
+      } else {
+        return ParsedLine(
+          rawText: clean,
+          amount: amount,
+          type: 'transfer',
+          merchant: 'Unresolved Destination',
+          accountName: 'Unresolved Source',
+          category: 'Transfer',
+          dueDate: transactionDate,
+          confidence: 0.5,
+          error: 'Unresolved transfer accounts',
+          suggestion: 'Ensure two valid account names are provided.',
+        );
+      }
+    }
+
     final isTransferType = lower.contains('transfer') ||
         lower.contains('sent to') ||
         lower.contains('send to') ||
@@ -729,9 +928,10 @@ class QuickAddNotepadService {
 
     final ledger = _ref.read(ledgerAgentProvider);
 
-    // Fetch categories and payment methods to map ids
+    // Fetch categories, payment methods, and accounts to map ids
     final allCats = await _db.categoryDao.getCategoriesForUser(userId);
     final allPms = await _db.paymentMethodDao.getPaymentMethodsForUser(userId);
+    final allAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
 
     for (var line in lines) {
       if (line.error != null) {
@@ -807,6 +1007,66 @@ class QuickAddNotepadService {
           }
         }
 
+        // Resolve source and destination accounts
+        String? resolvedAccountId;
+        String? resolvedRefNumber = line.accountName;
+
+        if (line.type == 'transfer') {
+          Account? sourceAcc;
+          Account? destAcc;
+
+          for (var a in allAccounts) {
+            if (a.name.toLowerCase() == (line.accountName ?? '').toLowerCase()) {
+              sourceAcc = a;
+            }
+          }
+          if (sourceAcc == null) {
+            for (var a in allAccounts) {
+              if (a.name.toLowerCase().contains((line.accountName ?? '').toLowerCase())) {
+                sourceAcc = a;
+                break;
+              }
+            }
+          }
+
+          for (var a in allAccounts) {
+            if (a.name.toLowerCase() == (line.merchant ?? '').toLowerCase()) {
+              destAcc = a;
+            }
+          }
+          if (destAcc == null) {
+            for (var a in allAccounts) {
+              if (a.name.toLowerCase().contains((line.merchant ?? '').toLowerCase())) {
+                destAcc = a;
+                break;
+              }
+            }
+          }
+
+          if (sourceAcc != null && destAcc != null) {
+            resolvedAccountId = sourceAcc.id;
+            resolvedRefNumber = destAcc.id;
+          }
+        } else {
+          Account? matchedAcc;
+          for (var a in allAccounts) {
+            if (a.name.toLowerCase() == (line.accountName ?? '').toLowerCase()) {
+              matchedAcc = a;
+            }
+          }
+          if (matchedAcc == null) {
+            for (var a in allAccounts) {
+              if (a.name.toLowerCase().contains((line.accountName ?? '').toLowerCase())) {
+                matchedAcc = a;
+                break;
+              }
+            }
+          }
+          if (matchedAcc != null) {
+            resolvedAccountId = matchedAcc.id;
+          }
+        }
+
         // 3. Construct transaction companion
         final transaction = Transaction(
           id: const Uuid().v4(),
@@ -823,7 +1083,8 @@ class QuickAddNotepadService {
           source: 'quick_add_notepad',
           isRecurring: false,
           syncStatus: 'pending',
-          referenceNumber: line.accountName ?? 'Cash Wallet', // Stored custom account name
+          accountId: resolvedAccountId,
+          referenceNumber: resolvedRefNumber,
           accountType: line.accountType ?? 'cash', // Stored custom account type
           billStatus: line.type == 'upcoming_bill' ? 'pending' : null,
           dueDate: line.dueDate,
