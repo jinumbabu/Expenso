@@ -248,7 +248,7 @@ class NotificationsScreen extends ConsumerWidget {
 
   Widget _buildPendingDraftsBanner(BuildContext context, int count) {
     return GestureDetector(
-      onTap: () => context.push('/sms-drafts'),
+      onTap: () => context.push('/sms-transactions'),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -442,7 +442,7 @@ class NotificationsScreen extends ConsumerWidget {
     final body = n.body.toLowerCase();
 
     if (title.contains('sms') || body.contains('sms') || title.contains('draft') || body.contains('draft')) {
-      context.push('/sms-drafts');
+      context.push('/sms-transactions');
     } else if (title.contains('goal') || body.contains('goal')) {
       context.push('/goals');
     } else if (title.contains('budget') || body.contains('budget')) {

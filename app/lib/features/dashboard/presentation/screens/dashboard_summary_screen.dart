@@ -1662,6 +1662,16 @@ class DashboardSummaryScreen extends ConsumerWidget {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.textsms_outlined, color: Color(0xFF00E5FF)),
+              title: const Text('SMS Transactions', style: TextStyle(color: Colors.white, fontSize: 14)),
+              subtitle: const Text('Scan, review & save', style: TextStyle(color: Colors.white38, fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/sms-transactions');
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.auto_awesome_outlined, color: Color(0xFF00E5FF)),
               title: const Text('AI Settings', style: TextStyle(color: Colors.white, fontSize: 14)),
               subtitle: const Text('Configure model & API keys', style: TextStyle(color: Colors.white38, fontSize: 11)),

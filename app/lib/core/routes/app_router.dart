@@ -17,7 +17,7 @@ import '../../features/backup/presentation/screens/backup_screen.dart';
 import '../../features/backup/presentation/screens/conflict_resolution_screen.dart';
 import '../../features/backup/presentation/screens/diagnostics_screen.dart';
 import '../../features/backup/presentation/screens/google_drive_diagnostics_screen.dart';
-import '../../features/sms_parser/presentation/screens/sms_drafts_screen.dart';
+import '../../features/sms_parser/presentation/screens/sms_transactions_screen.dart';
 import '../../features/sms_parser/presentation/screens/developer_test_screen.dart';
 import '../../features/advisor/presentation/screens/advisor_screen.dart';
 import '../../features/dashboard/presentation/screens/privacy_settings_screen.dart';
@@ -131,8 +131,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const GoogleDriveDiagnosticsScreen(),
       ),
       GoRoute(
-        path: '/sms-drafts',
-        builder: (context, state) => const SmsDraftsScreen(),
+        path: '/sms-transactions',
+        builder: (context, state) => const SmsTransactionsScreen(),
       ),
       GoRoute(
         path: '/notifications',

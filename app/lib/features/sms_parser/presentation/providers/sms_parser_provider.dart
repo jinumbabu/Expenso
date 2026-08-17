@@ -60,6 +60,8 @@ class SmsScannerState {
   final bool autoImportEnabled;
   final DateTime? lastPermissionRequestTime;
   final bool isInboxAccessible;
+  final int scannedSmsCount;
+  final int detectedTransactionsCount;
 
   SmsScannerState({
     this.isScanning = false,
@@ -72,6 +74,8 @@ class SmsScannerState {
     this.autoImportEnabled = true,
     this.lastPermissionRequestTime,
     this.isInboxAccessible = false,
+    this.scannedSmsCount = 0,
+    this.detectedTransactionsCount = 0,
   });
 
   SmsScannerState copyWith({
@@ -85,6 +89,8 @@ class SmsScannerState {
     bool? autoImportEnabled,
     DateTime? lastPermissionRequestTime,
     bool? isInboxAccessible,
+    int? scannedSmsCount,
+    int? detectedTransactionsCount,
   }) {
     return SmsScannerState(
       isScanning: isScanning ?? this.isScanning,
@@ -97,6 +103,8 @@ class SmsScannerState {
       autoImportEnabled: autoImportEnabled ?? this.autoImportEnabled,
       lastPermissionRequestTime: lastPermissionRequestTime ?? this.lastPermissionRequestTime,
       isInboxAccessible: isInboxAccessible ?? this.isInboxAccessible,
+      scannedSmsCount: scannedSmsCount ?? this.scannedSmsCount,
+      detectedTransactionsCount: detectedTransactionsCount ?? this.detectedTransactionsCount,
     );
   }
 }
@@ -605,6 +613,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
 
       int addedCount = 0;
       int unrecognizedCount = 0;
+      int scannedCount = 0;
 
       for (final msg in messages) {
         if (msg.body == null || msg.id == null) continue;
@@ -612,6 +621,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
 
         // Skip messages older than our fetch threshold
         if (msgDate.isBefore(fetchSince)) continue;
+
+        scannedCount++;
 
         // Check if message matches transactional content
         final result = await _smsAgent.processSms(msg.body!, msgDate, userId: userId);
@@ -741,6 +752,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
         isScanning: false,
         newTransactionsCount: addedCount,
         unrecognizedCount: unrecognizedCount,
+        scannedSmsCount: scannedCount,
+        detectedTransactionsCount: addedCount + unrecognizedCount,
         lastSyncTime: now,
       );
 
@@ -965,6 +978,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
     _ref.invalidate(categoriesProvider);
     _ref.invalidate(unrecognizedMessagesStreamProvider);
     _ref.invalidate(transactionDraftsStreamProvider);
+    _ref.invalidate(savedSmsTransactionsCountProvider);
     dev.log('[Dashboard Refresh] Status: Refreshed (Invalidated UI state providers)');
   }
 
@@ -1131,4 +1145,17 @@ final StateNotifierProvider<SmsScannerNotifier, SmsScannerState> smsScannerProvi
     secureStorage: secureStorage,
     ref: ref,
   );
+});
+
+// Saved SMS Transactions Count Provider
+final savedSmsTransactionsCountProvider = FutureProvider<int>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final auth = ref.watch(authProvider);
+  final userId = auth.user?.id;
+  if (userId == null) return 0;
+  final result = await db.customSelect(
+    'SELECT COUNT(*) as c FROM transactions WHERE user_id = ? AND source = ?',
+    variables: [Variable<String>(userId), Variable<String>('sms')],
+  ).getSingle();
+  return result.read<int>('c');
 });

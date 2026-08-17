@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/sms_parser_provider.dart';
 import '../../../../core/database/app_database.dart';
@@ -9,9 +10,10 @@ import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../accounts/presentation/providers/account_formatters.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../../core/services/sms_account_matcher.dart';
+import '../../../../shared/widgets/glass_card.dart';
 
-class SmsDraftsScreen extends ConsumerWidget {
-  const SmsDraftsScreen({super.key});
+class SmsTransactionsScreen extends ConsumerWidget {
+  const SmsTransactionsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,6 +21,10 @@ class SmsDraftsScreen extends ConsumerWidget {
     final scannerState = ref.watch(smsScannerProvider);
     final accounts = ref.watch(accountsProvider).value ?? [];
     final paymentMethods = ref.watch(paymentMethodsProvider).value ?? [];
+    final savedCountAsync = ref.watch(savedSmsTransactionsCountProvider);
+
+    final pendingCount = draftsAsync.value?.length ?? 0;
+    final savedCount = savedCountAsync.value ?? 0;
 
     return Scaffold(
       body: Container(
@@ -32,152 +38,123 @@ class SmsDraftsScreen extends ConsumerWidget {
         child: SafeArea(
           child: Column(
             children: [
-              // Screen Header
+              // Screen Header (Centered Title, Back Button Left)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      onPressed: () => context.pop(),
-                    ),
-                    const Text(
-                      'SMS Alerts & Drafts',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.logo_dev, color: Colors.tealAccent),
-                      tooltip: 'Simulate/Test SMS',
-                      onPressed: () => _showMockSmsDialog(context, ref),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(color: Colors.white10, height: 1),
-
-              // Status and Scanning Actions
-              if (scannerState.errorMessage != null)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
-                  ),
-                  child: Row(
+                child: SizedBox(
+                  height: 64,
+                  child: Stack(
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-                      const SizedBox(width: 12),
-                      Expanded(
+                      const Center(
                         child: Text(
-                          scannerState.errorMessage!,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          'SMS Transactions',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                            onPressed: () => context.pop(),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: IconButton(
+                            icon: const Icon(Icons.logo_dev, color: Colors.tealAccent),
+                            tooltip: 'Simulate/Test SMS',
+                            onPressed: () => _showMockSmsDialog(context, ref),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ),
 
-              // Scan Action Button
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 8.0),
-                child: Row(
+              const Divider(color: Colors.white10, height: 1),
+
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(20.0),
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.tealAccent.shade400,
-                          foregroundColor: const Color(0xFF00241F),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    // Scanner Status Alerts
+                    if (scannerState.errorMessage != null) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                         ),
-                        onPressed: scannerState.isScanning
-                            ? null
-                            : () => ref.read(smsScannerProvider.notifier).scanInbox(),
-                        icon: scannerState.isScanning
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00241F)),
-                              )
-                            : const Icon(Icons.sync_alt),
-                        label: Text(
-                          scannerState.isScanning ? 'SCANNING...' : 'SCAN SMS INBOX',
-                          style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                scannerState.errorMessage!,
+                                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Section 1: SMS Transaction Scanner Card
+                    _buildScannerControlCard(context, ref, scannerState),
+
+                    const SizedBox(height: 20),
+
+                    // Section 2: Stats Summary Card
+                    _buildStatsSummaryCard(scannerState, pendingCount, savedCount),
+
+                    const SizedBox(height: 24),
+
+                    // Section 3: Pending transactions header and bulk actions
+                    _buildPendingHeaderRow(context, ref, draftsAsync),
+
+                    const SizedBox(height: 12),
+
+                    // List of drafts or empty state
+                    draftsAsync.when(
+                      data: (drafts) {
+                        if (drafts.isEmpty) {
+                          return _buildEmptyState();
+                        }
+                        return Column(
+                          children: drafts.map((draft) {
+                            return _buildDraftCard(context, ref, draft, accounts, paymentMethods);
+                          }).toList(),
+                        );
+                      },
+                      loading: () => const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+                        ),
+                      ),
+                      error: (err, stack) => Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent)),
                         ),
                       ),
                     ),
                   ],
-                ),
-              ),
-
-              // Bulk Action Buttons Row
-              draftsAsync.maybeWhen(
-                data: (drafts) {
-                  if (drafts.isEmpty) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-                    child: Row(
-                      children: [
-                        // Approve All
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.tealAccent,
-                              side: const BorderSide(color: Colors.teal),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                            onPressed: () => _handleApproveAll(context, ref),
-                            icon: const Icon(Icons.done_all_rounded, size: 18),
-                            label: const Text('APPROVE ALL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Delete All
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFFF3B30),
-                              side: const BorderSide(color: Color(0xFFFF3B30)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            ),
-                            onPressed: () => _handleDeleteAll(context, ref),
-                            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                            label: const Text('DELETE ALL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                orElse: () => const SizedBox.shrink(),
-              ),
-
-              // Drafts List
-              Expanded(
-                child: draftsAsync.when(
-                  data: (drafts) {
-                    if (drafts.isEmpty) {
-                      return _buildEmptyState();
-                    }
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      itemCount: drafts.length,
-                      itemBuilder: (context, index) {
-                        final draft = drafts[index];
-                        return _buildDraftCard(context, ref, draft, accounts, paymentMethods);
-                      },
-                    );
-                  },
-                  loading: () => const Center(child: CircularProgressIndicator(color: Colors.teal)),
-                  error: (err, stack) => Center(
-                    child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent)),
-                  ),
                 ),
               ),
             ],
@@ -187,35 +164,222 @@ class SmsDraftsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+  Widget _buildScannerControlCard(BuildContext context, WidgetRef ref, SmsScannerState scannerState) {
+    final permissionGranted = scannerState.smsPermissionStatus.isGranted;
+
+    return GlassCard(
+      padding: const EdgeInsets.all(20),
+      borderRadius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SMS Transaction Scanner',
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Automatically scan supported SMS messages for financial transactions.',
+            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 16),
+          if (!permissionGranted) ...[
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.02),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.04)),
+                color: Colors.amber.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.withOpacity(0.2)),
               ),
-              child: const Icon(Icons.textsms_outlined, size: 64, color: Colors.teal),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SMS Access Required',
+                    style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Expenso AI needs SMS access to detect financial transactions.',
+                    style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'No Pending Drafts',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0066FF),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => ref.read(smsScannerProvider.notifier).requestSmsPermission(),
+              child: const Text('Allow SMS Access', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Banking transaction alerts received via SMS will be parsed locally and appear here as drafts for your approval.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 13, height: 1.5),
+          ] else ...[
+            Row(
+              children: [
+                const Text(
+                  'SMS Access',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FF88).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    '✓ Enabled',
+                    style: TextStyle(color: Color(0xFF00FF88), fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-          ],
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0066FF),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: scannerState.isScanning
+                  ? null
+                  : () => ref.read(smsScannerProvider.notifier).scanInbox(),
+              icon: scannerState.isScanning
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.sync_alt, size: 18),
+              label: Text(
+                scannerState.isScanning ? 'Scanning SMS...' : 'Scan SMS',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ]
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSummaryCard(SmsScannerState scannerState, int pendingCount, int savedCount) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      borderRadius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SCAN STATUS',
+            style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildStatItem('SMS Scanned', '${scannerState.scannedSmsCount}'),
+              _buildStatItem('Transactions', '${scannerState.detectedTransactionsCount}'),
+              _buildStatItem('Pending Review', '$pendingCount', color: const Color(0xFFFFCC00)),
+              _buildStatItem('Saved', '$savedCount', color: const Color(0xFF00FF88)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, {Color? color}) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color ?? const Color(0xFF00E5FF),
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingHeaderRow(BuildContext context, WidgetRef ref, AsyncValue<List<TransactionDraft>> draftsAsync) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text(
+          'PENDING TRANSACTIONS',
+          style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
         ),
+        draftsAsync.maybeWhen(
+          data: (drafts) {
+            if (drafts.isEmpty) return const SizedBox.shrink();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () => _handleApproveAll(context, ref),
+                  child: const Text('Approve All', style: TextStyle(color: Color(0xFF00FF88), fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () => _handleDeleteAll(context, ref),
+                  child: const Text('Delete All', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+          orElse: () => const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.015),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.04)),
+            ),
+            child: const Icon(Icons.textsms_outlined, size: 48, color: Colors.teal),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No Pending Transactions',
+            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Detected transactions should appear here\nfor user review.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.4),
+          ),
+        ],
       ),
     );
   }
@@ -235,13 +399,6 @@ class SmsDraftsScreen extends ConsumerWidget {
           end: Alignment.bottomRight,
         ),
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0066FF).withOpacity(0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Center(
         child: Text(
@@ -292,7 +449,6 @@ class SmsDraftsScreen extends ConsumerWidget {
     final dateStr = DateFormat('MMM dd, yyyy • hh:mm a').format(draft.date);
     final merchantName = draft.merchant ?? (isExpense ? 'General Expense' : 'Income Deposit');
     
-    // Auto-detect Account and Payment Method details
     final detected = _detectDraftAccountAndPm(draft, accounts, paymentMethods);
     final suggestedCategory = draft.category ?? (isExpense ? 'Shopping' : 'Salary');
     final confidenceScore = ((draft.confidenceScore ?? 0.85) * 100).toStringAsFixed(0);
@@ -354,11 +510,8 @@ class SmsDraftsScreen extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Merchant Logo
                 _buildMerchantLogo(merchantName),
                 const SizedBox(width: 14),
-
-                // Details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,8 +531,6 @@ class SmsDraftsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-
-                // Amount
                 Text(
                   '${isExpense ? "-" : "+"}₹$amountFormatted',
                   style: TextStyle(
@@ -399,7 +550,6 @@ class SmsDraftsScreen extends ConsumerWidget {
               spacing: 8,
               runSpacing: 6,
               children: [
-                // Suggested Category chip
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -419,7 +569,6 @@ class SmsDraftsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // Detected Account chip
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -443,7 +592,6 @@ class SmsDraftsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // Detected Payment Mode chip
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -486,7 +634,6 @@ class SmsDraftsScreen extends ConsumerWidget {
               alignment: WrapAlignment.end,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                // Dismiss Action
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white54,
@@ -506,7 +653,6 @@ class SmsDraftsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.close_rounded, size: 16),
                   label: const Text('Dismiss', style: TextStyle(fontSize: 12)),
                 ),
-                // Review & Approve Action
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0066FF),
