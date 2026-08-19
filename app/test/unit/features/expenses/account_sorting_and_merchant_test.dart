@@ -3,15 +3,60 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app/core/database/app_database.dart';
 import 'package:app/features/expenses/presentation/providers/expense_provider.dart';
 import 'package:app/features/accounts/presentation/providers/accounts_provider.dart';
+import 'package:app/features/expenses/domain/usecases/get_transactions_usecase.dart';
+import 'package:app/features/expenses/domain/usecases/create_transaction_usecase.dart';
+import 'package:app/features/expenses/domain/usecases/update_transaction_usecase.dart';
+import 'package:app/features/expenses/domain/usecases/delete_transaction_usecase.dart';
 
-// Fake StateNotifier for Accounts
-class FakeAccountsNotifier extends StateNotifier<AsyncValue<List<Account>>> {
-  FakeAccountsNotifier(List<Account> accounts) : super(AsyncValue.data(accounts));
+class FakeDatabase extends Fake implements AppDatabase {}
+class FakeGetTransactionsUseCase extends Fake implements GetTransactionsUseCase {}
+class FakeCreateTransactionUseCase extends Fake implements CreateTransactionUseCase {}
+class FakeUpdateTransactionUseCase extends Fake implements UpdateTransactionUseCase {}
+class FakeDeleteTransactionUseCase extends Fake implements DeleteTransactionUseCase {}
+
+class FakeRef extends Fake implements Ref {
+  @override
+  ProviderSubscription<T> listen<T>(
+    ProviderListenable<T> provider,
+    void Function(T? previous, T next) listener, {
+    void Function(Object error, StackTrace stackTrace)? onError,
+    bool fireImmediately = false,
+  }) {
+    return FakeProviderSubscription<T>();
+  }
 }
 
-// Fake StateNotifier for Transactions
-class FakeExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
-  FakeExpenseListNotifier(List<Transaction> txs) : super(AsyncValue.data(txs));
+class FakeProviderSubscription<T> extends Fake implements ProviderSubscription<T> {
+  @override
+  void close() {}
+}
+
+// Fake AccountsNotifier subclass
+class FakeAccountsNotifier extends AccountsNotifier {
+  FakeAccountsNotifier(List<Account> accounts) : super(db: FakeDatabase(), userId: 'user-1') {
+    state = AsyncValue.data(accounts);
+  }
+
+  @override
+  void _initStream() {}
+}
+
+// Fake ExpenseListNotifier subclass
+class FakeExpenseListNotifier extends ExpenseListNotifier {
+  FakeExpenseListNotifier(List<Transaction> txs)
+      : super(
+          getTransactions: FakeGetTransactionsUseCase(),
+          createTransaction: FakeCreateTransactionUseCase(),
+          updateTransaction: FakeUpdateTransactionUseCase(),
+          deleteTransaction: FakeDeleteTransactionUseCase(),
+          userId: 'user-1',
+          ref: FakeRef(),
+        ) {
+    state = AsyncValue.data(txs);
+  }
+
+  @override
+  Future<void> loadTransactions() async {}
 }
 
 void main() {
@@ -107,6 +152,7 @@ void main() {
         type: 'cash',
         balance: 1000,
         isDefault: true,
+        isEstimated: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -117,6 +163,7 @@ void main() {
         type: 'savings',
         balance: 500,
         isDefault: false,
+        isEstimated: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -127,6 +174,7 @@ void main() {
         type: 'savings',
         balance: 1500,
         isDefault: false,
+        isEstimated: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -137,6 +185,7 @@ void main() {
         type: 'credit_card',
         balance: -200,
         isDefault: false,
+        isEstimated: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -147,6 +196,7 @@ void main() {
         type: 'wallet',
         balance: 30,
         isDefault: false,
+        isEstimated: false,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ),
@@ -174,11 +224,11 @@ void main() {
     test('Ordering within group based on selection frequency (HDFC Savings > SBI Savings)', () {
       final txs = [
         // HDFC selected 3 times
-        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 300, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 300, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
         // SBI selected 1 time
-        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 400, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 400, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
       ];
 
       final container = ProviderContainer(
@@ -201,14 +251,14 @@ void main() {
     test('Ordering changes when SBI Savings usage exceeds HDFC Savings', () {
       final txs = [
         // HDFC selected 2 times
-        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
         // SBI selected 5 times
-        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 10, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 20, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-5', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 30, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-6', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 40, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-7', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 50, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 10, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 20, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-5', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 30, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-6', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 40, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-7', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 50, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
       ];
 
       final container = ProviderContainer(
@@ -230,10 +280,10 @@ void main() {
       final txs = [
         // Credit card selected 50 times
         for (int i = 0; i < 50; i++)
-          Transaction(id: 'tx-cc-$i', userId: 'user-1', accountId: 'hdfc-cc', type: 'expense', amount: 100, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          Transaction(id: 'tx-cc-$i', userId: 'user-1', accountId: 'hdfc-cc', type: 'expense', amount: 100, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
         // Wallet selected 100 times
         for (int i = 0; i < 100; i++)
-          Transaction(id: 'tx-w-$i', userId: 'user-1', accountId: 'paytm-wallet', type: 'expense', amount: 50, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+          Transaction(id: 'tx-w-$i', userId: 'user-1', accountId: 'paytm-wallet', type: 'expense', amount: 50, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
       ];
 
       final container = ProviderContainer(
@@ -256,10 +306,10 @@ void main() {
     test('Tied selection counts preserve original database order (stable sorting)', () {
       final txs = [
         // Both SBI and HDFC have 2 selections
-        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 10, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
-        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 20, date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-1', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 100, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-2', userId: 'user-1', accountId: 'hdfc-acc', type: 'expense', amount: 200, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-3', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 10, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+        Transaction(id: 'tx-4', userId: 'user-1', accountId: 'sbi-acc', type: 'expense', amount: 20, currency: 'INR', isRecurring: false, syncStatus: 'synced', date: DateTime.now(), source: 'manual', createdAt: DateTime.now(), updatedAt: DateTime.now()),
       ];
 
       final container = ProviderContainer(

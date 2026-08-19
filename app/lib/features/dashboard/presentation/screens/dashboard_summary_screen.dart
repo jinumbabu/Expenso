@@ -300,76 +300,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                 ],
 
-                // SMS Permission warning banner
-                () {
-                  final scannerState = ref.watch(smsScannerProvider);
-                  if (scannerState.smsPermissionStatus.isGranted) {
-                    return const SizedBox.shrink();
-                  }
 
-                  final isPermanentlyDenied = scannerState.smsPermissionStatus.isPermanentlyDenied;
-                  
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.amber.withOpacity(0.15),
-                          Colors.amber.withOpacity(0.04),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'SMS Sync is Disabled',
-                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isPermanentlyDenied
-                                    ? 'SMS permission is permanently denied. Please enable it in App Settings to track expenses automatically.'
-                                    : 'Expenso needs SMS permission to automatically read and categorize bank alerts with zero manual entry.',
-                                style: const TextStyle(color: Colors.white70, fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () async {
-                            if (isPermanentlyDenied) {
-                              openAppSettings();
-                            } else {
-                              await ref.read(smsScannerProvider.notifier).requestSmsPermission();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amberAccent,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          child: Text(
-                            isPermanentlyDenied ? 'Settings' : 'Grant',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }(),
 
                 // 2. Month Selector
                 _buildMonthSelector(context, ref, selectedMonth),

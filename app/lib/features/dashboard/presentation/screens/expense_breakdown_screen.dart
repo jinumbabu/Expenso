@@ -388,6 +388,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
 
                                           return GestureDetector(
                                             key: txKey,
+                                            behavior: HitTestBehavior.opaque,
                                             onTap: () {
                                               if (_selectedSubExpenseId == tx.id) {
                                                 context.push('/expenses/edit/${tx.id}');
@@ -618,6 +619,7 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
                                         
                                         return GestureDetector(
                                           key: itemKey,
+                                          behavior: HitTestBehavior.opaque,
                                           onTap: () {
                                             if (_selectedCategoryId == item.id) {
                                               setState(() {

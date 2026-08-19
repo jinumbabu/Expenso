@@ -225,8 +225,44 @@ class SmsAgent {
   static final RegExp _balanceRegExp = RegExp(r'\b(?:bal|balance|avail\s*bal|avbl\s*bal|limit|avail\s*limit)\s*(?:is)?\s*(?:rs\.?|inr|₹|\$)?\s*([\d,]+\.?\d*)', caseSensitive: false);
 
   /// Classify SMS into one of the specific categories
-  String classifySms(String body) {
+  String classifySms(String body, [String? userName]) {
     final lowerBody = body.toLowerCase();
+
+    // 0. Self Transfer (Highest priority)
+    bool isSelf = false;
+    if (lowerBody.contains('transfer to self') ||
+        lowerBody.contains('self transfer') ||
+        lowerBody.contains('transfer to own') ||
+        lowerBody.contains('own account transfer') ||
+        lowerBody.contains('transferred to own account') ||
+        lowerBody.contains('transfer to my account') ||
+        (lowerBody.contains('transfer') && lowerBody.contains('own a/c'))) {
+      isSelf = true;
+    } else if (userName != null && userName.isNotEmpty && lowerBody.contains(userName.toLowerCase())) {
+      if (lowerBody.contains('sent') || 
+          lowerBody.contains('transfer') || 
+          lowerBody.contains('credited') || 
+          lowerBody.contains('debited') ||
+          lowerBody.contains('paid') ||
+          lowerBody.contains('received') ||
+          lowerBody.contains('to') ||
+          lowerBody.contains('from')) {
+        isSelf = true;
+      }
+    } else {
+      final banksPattern = r'(?:sbi|state bank|hdfc|icici|axis|kotak|pnb|punjab national|canara|union|federal|idfc|yes bank|rbl|hsbc|citi|paytm|airtel)';
+      final bankToBankRegex = RegExp(
+        '\\b$banksPattern\\s+(?:to|->|transfer to|sent to)\\s+$banksPattern\\b',
+        caseSensitive: false,
+      );
+      if (bankToBankRegex.hasMatch(body)) {
+        isSelf = true;
+      }
+    }
+
+    if (isSelf) {
+      return 'Internal Transfer';
+    }
     
     // 1. OTP Check
     if (lowerBody.contains('otp') ||
@@ -334,15 +370,7 @@ class SmsAgent {
     }
 
     // Internal Transfer / Transfer to self
-    if (lowerBody.contains('transfer to self') ||
-        lowerBody.contains('self transfer') ||
-        lowerBody.contains('transfer to own') ||
-        lowerBody.contains('own account transfer') ||
-        lowerBody.contains('transferred to own account') ||
-        (lowerBody.contains('transfer') && lowerBody.contains('own a/c')) ||
-        RegExp(r'\b(?:sbi|hdfc|icici|axis|kotak|pnb|canara|union|federal)\s+(?:to|->)\s+(?:sbi|hdfc|icici|axis|kotak|pnb|canara|union|federal)\b', caseSensitive: false).hasMatch(body)) {
-      return 'Internal Transfer';
-    }
+    // Handled at top priority
 
     // ATM Withdrawal
     if (lowerBody.contains('atm') || lowerBody.contains('cash withdrawal') || lowerBody.contains('cash dispensed') || lowerBody.contains('dispensed') || lowerBody.contains('withdrawn from atm') || lowerBody.contains('withdrew')) {
@@ -599,7 +627,16 @@ class SmsAgent {
     );
 
     // 2. Classify SMS
-    final category = classifySms(body);
+    String? userName;
+    if (userId != null) {
+      try {
+        final user = await (_db.select(_db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
+        userName = user?.displayName;
+      } catch (e) {
+        dev.log('SmsAgent: Failed to fetch user info: $e');
+      }
+    }
+    final category = classifySms(body, userName);
     dev.log('[Classification] Category: $category');
     final resolvedDate = _parseTransactionDate(body, smsDateTime);
 
@@ -739,6 +776,31 @@ class SmsAgent {
       resolvedConfidence = 0.88;
     } else if (category == 'Shopping' || category == 'Bills') {
       resolvedConfidence = 0.89;
+    }
+
+    if (transactionType == 'transfer') {
+      bool destFound = false;
+      if (userId != null && merchant.isNotEmpty) {
+        try {
+          final existingAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
+          for (var acc in existingAccounts) {
+            final cleanBank = (acc.bankName ?? '').toLowerCase();
+            final cleanName = acc.name.toLowerCase();
+            final mLower = merchant.toLowerCase();
+            if (cleanBank.isNotEmpty && (mLower.contains(cleanBank) || cleanBank.contains(mLower))) {
+              destFound = true;
+              break;
+            }
+            if (cleanName.contains(mLower) || mLower.contains(cleanName)) {
+              destFound = true;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+      if (!destFound) {
+        resolvedConfidence = 0.85;
+      }
     }
 
     // Save to ParsedSms Database table

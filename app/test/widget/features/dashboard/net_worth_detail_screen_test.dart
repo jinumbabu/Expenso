@@ -183,8 +183,8 @@ void main() {
 
       // 3. Verify small integrated donut chart (ReusableNetWorthRing) and legend labels are present
       expect(find.byType(ReusableNetWorthRing), findsOneWidget);
-      expect(find.text('Total Assets'), findsOneWidget);
-      expect(find.text('Total Liabilities'), findsOneWidget);
+      expect(find.text('Asset Share'), findsOneWidget);
+      expect(find.text('Liability Share'), findsOneWidget);
 
       // 4. Verify standalone large breakdown donut card is NOT present
       expect(find.text('NET WORTH BREAKDOWN'), findsNothing);

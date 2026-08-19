@@ -288,7 +288,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // 1. Verify card title
-      expect(find.text('NET WORTH'), findsOneWidget);
+      expect(find.text('SAVINGS'), findsOneWidget);
 
       // 2. Verify shared ReusableNetWorthRing is rendered inside Net Worth card
       expect(find.byType(ReusableNetWorthRing), findsOneWidget);
@@ -308,8 +308,8 @@ void main() {
 
       // Go back to dashboard
       testRouter.go('/dashboard');
-      await tester.pumpAndSettle();
-      expect(find.text('NET WORTH'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('SAVINGS'), findsOneWidget);
 
       // 5. Tap the Expenses title and verify navigation
       await tester.tap(find.text('Expenses').first);
@@ -318,7 +318,7 @@ void main() {
 
       // Go back
       testRouter.go('/dashboard');
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       // 6. Tap the Remaining percentage and verify navigation
       await tester.tap(find.text('0%'));

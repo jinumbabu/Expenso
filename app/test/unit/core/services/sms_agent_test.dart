@@ -99,5 +99,39 @@ void main() {
       final result = await smsAgent.processSms(body, testDate);
       expect(result, isNull);
     });
+
+    test('Parses self-transfer when username matches', () async {
+      const userId = 'user_123';
+      await database.into(database.users).insert(
+        User(
+          id: userId,
+          email: 'jinu@example.com',
+          googleId: 'google_id_123',
+          currency: 'INR',
+          displayName: 'JINU M BABU',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      const body = 'Sent Rs.100.00 From HDFC Bank A/C *3726 To JINU M BABU On 17/08/26 Ref 622962983009';
+      final result = await smsAgent.processSms(body, testDate, userId: userId);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(100.0));
+      expect(result.transactionType, equals('transfer'));
+      expect(result.category, equals('Internal Transfer'));
+      expect(result.referenceId, equals('622962983009'));
+    });
+
+    test('Parses self-transfer when bank-to-bank keywords are used', () async {
+      const body = 'Transferred Rs.500 from HDFC to SBI A/c XX1122 Ref 72384910';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(500.0));
+      expect(result.transactionType, equals('transfer'));
+      expect(result.category, equals('Internal Transfer'));
+    });
   });
 }

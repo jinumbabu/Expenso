@@ -309,7 +309,7 @@ void main() {
             authProvider.overrideWith((ref) => mockAuthNotifier),
             secureStorageProvider.overrideWithValue(mockSecureStorage),
             auditLoggerProvider.overrideWithValue(mockAuditLogger),
-            registeredAccountsProvider.overrideWith((ref) => AsyncValue.data(mockAccounts)),
+            registeredAccountsProvider.overrideWith((ref) => Future.value(mockAccounts)),
           ],
           child: const MaterialApp(
             home: PrivacySettingsScreen(),
@@ -327,8 +327,8 @@ void main() {
       expect(find.text('REGISTERED ACCOUNTS'), findsOneWidget);
 
       // 3. Verify display names and emails are rendered
-      expect(find.text('Privacy User'), findsOneWidget);
-      expect(find.text('privacy@expenso.ai'), findsOneWidget);
+      expect(find.text('Privacy User'), findsNWidgets(2));
+      expect(find.text('privacy@expenso.ai'), findsNWidgets(2));
       expect(find.text('HappinessHypothesis'), findsOneWidget);
       expect(find.text('happinesshypothesis1@gmail.com'), findsOneWidget);
 

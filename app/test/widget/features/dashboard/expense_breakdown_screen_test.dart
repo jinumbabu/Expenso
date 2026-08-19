@@ -149,14 +149,18 @@ void main() {
       expect(verticalListFinder, findsOneWidget);
 
       // 4. First tap highlights category item (updating selection, but does NOT enter detail mode)
-      await tester.tap(find.text('Food'));
+      final foodCard = find.ancestor(
+        of: find.text('Food'),
+        matching: find.byType(GestureDetector),
+      );
+      await tester.tap(foodCard);
       await tester.pumpAndSettle();
 
       // ReusableDonutChart should still be the parent one, and _isDetailMode is false
       expect(find.text('SUB-EXPENSES'), findsNothing);
 
       // 5. Second tap on highlighted category enters detail mode
-      await tester.tap(find.text('Food'));
+      await tester.tap(foodCard);
       await tester.pumpAndSettle();
 
       // Verify we entered detail mode: sub-expenses header is shown, McDonald's lunch transaction is shown
@@ -251,8 +255,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap on the 'Bills' card
-      await tester.tap(find.text('Bills'));
-      await tester.pumpAndSettle();
+      final billsCard = find.ancestor(
+        of: find.text('Bills'),
+        matching: find.byType(GestureDetector),
+      );
+      await tester.tap(billsCard);
+      await tester.pump(const Duration(milliseconds: 400));
 
       // Verify donut selection is updated to 'cat_bills'
       final donutFinder = find.byType(ReusableDonutChart);
@@ -285,10 +293,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. Double tap 'Food' to enter detail mode directly
-      await tester.tap(find.text('Food'));
-      await tester.pump();
-      await tester.tap(find.text('Food'));
-      await tester.pumpAndSettle();
+      final foodCard = find.ancestor(
+        of: find.text('Food'),
+        matching: find.byType(GestureDetector),
+      );
+      await tester.tap(foodCard);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(foodCard);
+      await tester.pump(const Duration(milliseconds: 400));
 
       // 2. Verify fixed detail layout structure (Column with fixed chart + scrollable list)
       expect(find.text('SUB-EXPENSES'), findsOneWidget);
@@ -307,8 +319,12 @@ void main() {
       expect(find.text('McDonalds'), findsOneWidget);
 
       // 4. Tap the McDonalds card and check donut center updates
-      await tester.tap(find.text('McDonalds'));
-      await tester.pumpAndSettle();
+      final mcDonaldsCard = find.ancestor(
+        of: find.text('McDonalds'),
+        matching: find.byType(GestureDetector),
+      );
+      await tester.tap(mcDonaldsCard);
+      await tester.pump(const Duration(milliseconds: 400));
 
       final donutFinder = find.byType(ReusableDonutChart);
       final ReusableDonutChart donut = tester.widget<ReusableDonutChart>(donutFinder);

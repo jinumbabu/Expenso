@@ -157,11 +157,11 @@ void main() {
       expect(find.text('Scan SMS'), findsOneWidget);
 
       // Verify Stats rendering
-      expect(find.text('SMS Scanned'), findsOneWidget);
+      expect(find.text('Scan'), findsOneWidget);
       expect(find.text('248'), findsOneWidget);
-      expect(find.text('Transactions'), findsOneWidget);
+      expect(find.text('Transaction'), findsOneWidget);
       expect(find.text('18'), findsOneWidget);
-      expect(find.text('Pending Review'), findsOneWidget);
+      expect(find.text('Pending'), findsOneWidget);
       expect(find.text('0'), findsOneWidget); // pending count (0 from drafts stream)
       expect(find.text('Saved'), findsOneWidget);
       expect(find.text('12'), findsOneWidget); // saved count from future override

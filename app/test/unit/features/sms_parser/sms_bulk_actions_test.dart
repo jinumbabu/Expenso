@@ -38,6 +38,14 @@ class FakeSecureStorageService extends Fake implements SecureStorageService {
   Future<DateTime?> getLastPermissionRequestTime() async => null;
   @override
   Future<void> saveLastPermissionRequestTime(DateTime time) async {}
+  @override
+  Future<bool?> getAutoScanNewSms() async => true;
+  @override
+  Future<bool?> getSmsNotificationsEnabled() async => true;
+  @override
+  Future<void> saveAutoScanNewSms(bool value) async {}
+  @override
+  Future<void> saveSmsNotificationsEnabled(bool value) async {}
 }
 
 void main() {

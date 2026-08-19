@@ -524,6 +524,29 @@ class SecureStorageService {
     return val == 'true';
   }
 
+  static const String _autoScanNewSmsKey = 'auto_scan_new_sms';
+  static const String _smsNotificationsEnabledKey = 'sms_notifications_enabled';
+
+  Future<void> saveAutoScanNewSms(bool value) async {
+    await _storage.write(key: _autoScanNewSmsKey, value: value.toString());
+  }
+
+  Future<bool?> getAutoScanNewSms() async {
+    final val = await _storage.read(key: _autoScanNewSmsKey);
+    if (val == null) return null;
+    return val == 'true';
+  }
+
+  Future<void> saveSmsNotificationsEnabled(bool value) async {
+    await _storage.write(key: _smsNotificationsEnabledKey, value: value.toString());
+  }
+
+  Future<bool?> getSmsNotificationsEnabled() async {
+    final val = await _storage.read(key: _smsNotificationsEnabledKey);
+    if (val == null) return null;
+    return val == 'true';
+  }
+
   Future<void> write(String key, String value) async {
     await _storage.write(key: key, value: value);
   }
