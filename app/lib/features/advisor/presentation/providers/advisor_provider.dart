@@ -99,6 +99,9 @@ class AdvisorNotifier extends StateNotifier<AdvisorState> {
 
   AdvisorNotifier(this._ref) : super(AdvisorState.initial()) {
     calculateFinancialOverview();
+    _ref.listen<FinancialSnapshot>(financialSnapshotProvider, (prev, next) {
+      calculateFinancialOverview();
+    });
   }
 
   Future<void> calculateFinancialOverview() async {
@@ -130,28 +133,21 @@ class AdvisorNotifier extends StateNotifier<AdvisorState> {
           tx.date.isAfter(startOfLastMonth.subtract(const Duration(seconds: 1))) &&
           tx.date.isBefore(endOfLastMonth.add(const Duration(seconds: 1)))).toList();
 
-      // Use shared calculation service
-      final currentFinancialData = FinancialCalculationService.calculate(
-        transactions: transactions,
-        selectedMonth: now,
-      );
+      // Use shared calculation service snapshot
+      final snapshot = _ref.read(financialSnapshotProvider);
       final lastFinancialData = FinancialCalculationService.calculate(
         transactions: transactions,
         selectedMonth: DateTime(now.year, now.month - 1, 1),
       );
 
       // 2. Sum totals
-      int currentIncome = currentFinancialData.monthlyIncome;
-      int currentExpense = currentFinancialData.monthlyExpenses;
+      int currentIncome = (snapshot.income * 100).round();
+      int currentExpense = (snapshot.expenses * 100).round();
       final currentCategorySpend = <String, int>{};
 
-      for (var tx in currentMonthTxs) {
-        if (FinancialCalculationService.isExpense(tx)) {
-          if (tx.categoryId != null) {
-            currentCategorySpend[tx.categoryId!] = (currentCategorySpend[tx.categoryId!] ?? 0) + tx.amount.toInt();
-          }
-        }
-      }
+      snapshot.categoryTotals.forEach((catId, amountRupees) {
+        currentCategorySpend[catId] = (amountRupees * 100).round();
+      });
 
       int lastMonthExpense = lastFinancialData.monthlyExpenses;
       final lastCategorySpend = <String, int>{};

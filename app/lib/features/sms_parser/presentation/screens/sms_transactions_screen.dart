@@ -167,6 +167,10 @@ class SmsTransactionsScreen extends ConsumerWidget {
 
   Widget _buildScannerControlCard(BuildContext context, WidgetRef ref, SmsScannerState scannerState) {
     final permissionGranted = scannerState.smsPermissionStatus.isGranted;
+    final autoDetectionActive = scannerState.autoImportEnabled && permissionGranted && scannerState.autoScanNewSms;
+    final lastScanFormatted = scannerState.lastSyncTime != null
+        ? DateFormat('MMM dd, hh:mm a').format(scannerState.lastSyncTime!)
+        : 'Never';
 
     return GlassCard(
       padding: const EdgeInsets.all(20),
@@ -175,132 +179,113 @@ class SmsTransactionsScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'SMS Transaction Scanner',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Automatically scan supported SMS messages for financial transactions.',
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+            'SMS TRANSACTION BACKGROUND MONITOR',
+            style: TextStyle(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
           const SizedBox(height: 16),
-          if (!permissionGranted) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.withOpacity(0.2)),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SMS Access Required',
-                    style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Expenso AI needs SMS access to detect financial transactions.',
-                    style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0066FF),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 46),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => ref.read(smsScannerProvider.notifier).requestSmsPermission(),
-              child: const Text('Allow SMS Access', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ] else ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      'SMS Access',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
+          // Status Item 1: SMS Access
+          _buildStatusRow(
+            'SMS ACCESS',
+            permissionGranted ? '✓ Enabled' : '⚠ Permission Required',
+            permissionGranted ? const Color(0xFF00FF88) : Colors.amberAccent,
+          ),
+          const SizedBox(height: 10),
+          // Status Item 2: Automatic Detection
+          _buildStatusRow(
+            'AUTOMATIC DETECTION',
+            autoDetectionActive ? '✓ Active' : '✗ Inactive',
+            autoDetectionActive ? const Color(0xFF00FF88) : Colors.white30,
+          ),
+          const SizedBox(height: 10),
+          // Status Item 3: Background Monitor
+          _buildStatusRow(
+            'BACKGROUND MONITOR',
+            permissionGranted ? '✓ Ready' : '⚠ Action Needed',
+            permissionGranted ? const Color(0xFF00FF88) : Colors.white30,
+          ),
+          const SizedBox(height: 10),
+          // Status Item 4: Last Scan
+          _buildStatusRow(
+            'LAST SCAN',
+            lastScanFormatted,
+            const Color(0xFF00E5FF),
+          ),
+          const SizedBox(height: 18),
+          const Divider(color: Colors.white10),
+          const SizedBox(height: 12),
+          const Text(
+            'SMS monitoring operates as a secure native background engine. Expenso local parser scans transaction alerts immediately on-device without requiring the UI to be open.',
+            style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              if (!permissionGranted)
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0066FF),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: ((scannerState.autoImportEnabled && permissionGranted)
-                            ? const Color(0xFF00FF88)
-                            : Colors.white24).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        (scannerState.autoImportEnabled && permissionGranted) ? '✓ Enabled' : '✗ Disabled',
-                        style: TextStyle(
-                          color: (scannerState.autoImportEnabled && permissionGranted)
-                              ? const Color(0xFF00FF88)
-                              : Colors.white54,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    onPressed: () => ref.read(smsScannerProvider.notifier).requestSmsPermission(),
+                    child: const Text('Allow SMS Access', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                )
+              else ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.05),
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white.withOpacity(0.08)),
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                  ],
-              ),
-              Switch(
-                value: scannerState.autoImportEnabled && scannerState.smsPermissionStatus.isGranted,
-                onChanged: (val) {
-                  if (!scannerState.smsPermissionStatus.isGranted && val) {
-                    ref.read(smsScannerProvider.notifier).requestSmsPermission();
-                  } else {
-                    ref.read(smsScannerProvider.notifier).toggleAutoImport(val);
-                  }
-                },
-                activeColor: const Color(0xFF00E5FF),
-              ),
+                    onPressed: scannerState.isScanning
+                        ? null
+                        : () => ref.read(smsScannerProvider.notifier).scanInbox(),
+                    icon: scannerState.isScanning
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.sync_alt, size: 14),
+                    label: Text(
+                      scannerState.isScanning ? 'Scanning...' : 'Scan SMS',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ]
             ],
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0066FF),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 46),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: scannerState.isScanning
-                ? null
-                : () async {
-                    if (!scannerState.smsPermissionStatus.isGranted) {
-                      await ref.read(smsScannerProvider.notifier).requestSmsPermission();
-                    } else {
-                      await ref.read(smsScannerProvider.notifier).scanInbox();
-                    }
-                  },
-            icon: scannerState.isScanning
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.sync_alt, size: 18),
-            label: Text(
-              scannerState.isScanning ? 'Scanning SMS...' : 'Scan SMS',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          ]
         ],
       ),
     );
   }
 
+  Widget _buildStatusRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+        ),
+        Text(
+          value,
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatsSummaryCard(SmsScannerState scannerState, int pendingCount, int savedCount) {
     return GlassCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       borderRadius: 20,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,12 +294,12 @@ class SmsTransactionsScreen extends ConsumerWidget {
             'SCAN STATUS',
             style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem('Scan', '${scannerState.scannedSmsCount}', color: const Color(0xFF00E5FF)),
-              _buildStatItem('Transaction', '${scannerState.detectedTransactionsCount}', color: const Color(0xFF00E5FF)),
+              _buildStatItem('Scanned', '${scannerState.scannedSmsCount}', color: const Color(0xFF00E5FF)),
+              _buildStatItem('Transactions', '${scannerState.detectedTransactionsCount}', color: const Color(0xFF00E5FF)),
               _buildStatItem('Pending', '$pendingCount', color: Colors.amber),
               _buildStatItem('Saved', '$savedCount', color: const Color(0xFF00FF88)),
             ],

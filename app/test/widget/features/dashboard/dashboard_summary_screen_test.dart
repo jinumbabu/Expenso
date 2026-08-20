@@ -256,12 +256,23 @@ void main() {
                 ),
               ),
             ),
-            dashboardFinancialDataProvider.overrideWithValue(
-              const FinancialData(
-                openingBalance: 1000,
-                monthlyIncome: 0,
-                monthlyExpenses: 8300, // ₹83.00
-                netWorth: 9000,
+            financialSnapshotProvider.overrideWithValue(
+              FinancialSnapshot(
+                income: 0.0,
+                expenses: 83.0,
+                netCashFlow: -83.0,
+                savings: -83.0,
+                carryForward: 10.0,
+                creditCardOutstanding: 10.0,
+                netWorth: 90.0,
+                savingsRate: 0.0,
+                expenseRate: 0.0,
+                incomeTransactionCount: 0,
+                expenseTransactionCount: 1,
+                categoryTotals: const {},
+                accountBalances: const {},
+                periodStart: DateTime.now(),
+                periodEnd: DateTime.now(),
               ),
             ),
             dismissedOpeningBalancePromptsProvider.overrideWith((ref) => {}),

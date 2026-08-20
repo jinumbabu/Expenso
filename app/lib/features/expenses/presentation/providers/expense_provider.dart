@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/financial_calculation_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../data/repositories/expense_repository_impl.dart';
@@ -1015,6 +1016,30 @@ class MerchantResolver {
     return 'Other';
   }
 }
+
+final dashboardMonthProvider = StateProvider<DateTime>((ref) => DateTime.now());
+
+final financialSnapshotProvider = Provider.autoDispose<FinancialSnapshot>((ref) {
+  final month = ref.watch(dashboardMonthProvider);
+  final txsAsync = ref.watch(expenseListNotifierProvider);
+  final accountsAsync = ref.watch(recalculatedAccountsProvider);
+
+  final txs = txsAsync.maybeWhen(
+    data: (list) => list,
+    orElse: () => <Transaction>[],
+  );
+
+  final accounts = accountsAsync.maybeWhen(
+    data: (list) => list,
+    orElse: () => <Account>[],
+  );
+
+  return FinancialCalculationService.calculateSnapshot(
+    transactions: txs,
+    accounts: accounts,
+    selectedMonth: month,
+  );
+});
 
 
 

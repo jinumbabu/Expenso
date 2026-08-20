@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:intl/intl.dart';
 import '../providers/sms_parser_provider.dart';
 import '../../../../shared/widgets/glass_card.dart';
 
@@ -194,10 +195,91 @@ class SmsTransactionSettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            _buildSectionTitle('DIAGNOSTICS & TELEMETRY'),
+            const SizedBox(height: 12),
+            GlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDiagnosticRow('SMS Permission', permissionGranted ? 'GRANTED' : 'DENIED', isOk: permissionGranted),
+                  _buildDiagnosticRow('Auto Detection', (scannerState.autoImportEnabled && scannerState.autoScanNewSms) ? 'ENABLED' : 'DISABLED', isOk: scannerState.autoImportEnabled && scannerState.autoScanNewSms),
+                  _buildDiagnosticRow('Background Receiver', scannerState.backgroundReceiverStatus, isOk: scannerState.backgroundReceiverStatus == 'READY'),
+                  _buildDiagnosticRow(
+                    'Last SMS Received', 
+                    scannerState.lastSyncTime != null 
+                        ? _formatDateTime(scannerState.lastSyncTime!) 
+                        : 'Never'
+                  ),
+                  _buildDiagnosticRow(
+                    'Last Processed', 
+                    scannerState.lastProcessedTime != null 
+                        ? _formatDateTime(scannerState.lastProcessedTime!) 
+                        : 'Never'
+                  ),
+                  _buildDiagnosticRow('Total Background SMS', '${scannerState.totalBackgroundSms}'),
+                  _buildDiagnosticRow('Transactions Created', '${scannerState.detectedTransactionsCount}'),
+                  _buildDiagnosticRow('Pending Transactions', '${scannerState.pendingCount}'),
+                  _buildDiagnosticRow('Duplicates Ignored', '${scannerState.duplicateCount}'),
+                  _buildDiagnosticRow('Ignored Messages', '${scannerState.ignoredCount}'),
+                  const Divider(color: Colors.white10, height: 24),
+                  const Text(
+                    'Last Processing Error:',
+                    style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Text(
+                      scannerState.lastError ?? 'None',
+                      style: TextStyle(
+                        color: scannerState.lastError != null ? Colors.redAccent : Colors.white38,
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildDiagnosticRow(String label, String value, {bool? isOk}) {
+    Color valColor = Colors.white70;
+    if (isOk != null) {
+      valColor = isOk ? const Color(0xFF00FF88) : Colors.amberAccent;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white30, fontSize: 12),
+          ),
+          Text(
+            value,
+            style: TextStyle(color: valColor, fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return DateFormat('MMM dd, yyyy • hh:mm a').format(dt);
   }
 
   Widget _buildSectionTitle(String title) {

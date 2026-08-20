@@ -22,7 +22,7 @@ class MainActivity: FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-        SmsReceiver.methodChannel = channel
+        SmsTransactionReceiver.methodChannel = channel
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SECURITY_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "setSecureScreen") {
@@ -55,7 +55,7 @@ class MainActivity: FlutterFragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        SmsReceiver.methodChannel = null
+        SmsTransactionReceiver.methodChannel = null
     }
 
     private fun isDeviceCharging(): Boolean {

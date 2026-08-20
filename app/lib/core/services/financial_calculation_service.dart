@@ -15,6 +15,64 @@ class FinancialData {
   });
 }
 
+class FinancialSnapshot {
+  final double income;
+  final double expenses;
+  final double netCashFlow;
+  final double savings;
+  final double carryForward;
+  final double creditCardOutstanding;
+  final double netWorth;
+  final double savingsRate;
+  final double expenseRate;
+  final int incomeTransactionCount;
+  final int expenseTransactionCount;
+  final Map<String, double> categoryTotals;
+  final Map<String, double> accountBalances;
+  final DateTime periodStart;
+  final DateTime periodEnd;
+
+  const FinancialSnapshot({
+    required this.income,
+    required this.expenses,
+    required this.netCashFlow,
+    required this.savings,
+    required this.carryForward,
+    required this.creditCardOutstanding,
+    required this.netWorth,
+    required this.savingsRate,
+    required this.expenseRate,
+    required this.incomeTransactionCount,
+    required this.expenseTransactionCount,
+    required this.categoryTotals,
+    required this.accountBalances,
+    required this.periodStart,
+    required this.periodEnd,
+  });
+
+  factory FinancialSnapshot.zero(DateTime selectedMonth) {
+    final start = DateTime(selectedMonth.year, selectedMonth.month, 1);
+    final end = DateTime(selectedMonth.year, selectedMonth.month + 1, 1).subtract(const Duration(milliseconds: 1));
+    return FinancialSnapshot(
+      income: 0.0,
+      expenses: 0.0,
+      netCashFlow: 0.0,
+      savings: 0.0,
+      carryForward: 0.0,
+      creditCardOutstanding: 0.0,
+      netWorth: 0.0,
+      savingsRate: 0.0,
+      expenseRate: 0.0,
+      incomeTransactionCount: 0,
+      expenseTransactionCount: 0,
+      categoryTotals: const {},
+      accountBalances: const {},
+      periodStart: start,
+      periodEnd: end,
+    );
+  }
+}
+
 class AccountSummary {
   final int totalAssets;
   final int totalLiabilities;
@@ -40,8 +98,22 @@ class AccountSummary {
 }
 
 class FinancialCalculationService {
+  /// Checks if a transaction is a Transfer.
+  static bool isTransfer(Transaction tx) {
+    final type = tx.type.toLowerCase();
+    return type == 'transfer' || 
+           type == 'credit_card_payment' || 
+           type == 'transfer_in' || 
+           type == 'transfer_out' ||
+           type == 'transfer_credit' || 
+           type == 'transfer_debit' ||
+           type == 'credit_card_payment_credit' ||
+           type == 'credit_card_payment_debit';
+  }
+
   /// Checks if a transaction is categorized as Income.
   static bool isIncome(Transaction tx) {
+    if (isTransfer(tx)) return false;
     final type = tx.type.toLowerCase();
     return type == 'income' || 
            type == 'salary' || 
@@ -57,6 +129,7 @@ class FinancialCalculationService {
 
   /// Checks if a transaction is categorized as Expense.
   static bool isExpense(Transaction tx) {
+    if (isTransfer(tx)) return false;
     final type = tx.type.toLowerCase();
     return type == 'expense' || 
            type == 'purchase' || 
@@ -146,6 +219,7 @@ class FinancialCalculationService {
     int currentExpense = 0;
 
     for (var tx in transactions) {
+      if (tx.deletedAt != null) continue;
       final date = tx.date;
       final isInc = isIncome(tx);
       final isExp = isExpense(tx);
@@ -173,6 +247,92 @@ class FinancialCalculationService {
       monthlyIncome: currentIncome,
       monthlyExpenses: currentExpense,
       netWorth: netWorth,
+    );
+  }
+
+  /// Calculates the centralized financial snapshot containing all necessary metrics.
+  static FinancialSnapshot calculateSnapshot({
+    required List<Transaction> transactions,
+    required List<Account> accounts,
+    required DateTime selectedMonth,
+  }) {
+    final startOfSelectedMonth = DateTime(selectedMonth.year, selectedMonth.month, 1);
+    final endOfSelectedMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1).subtract(const Duration(milliseconds: 1));
+
+    int openingIncome = 0;
+    int openingExpense = 0;
+    int currentIncome = 0;
+    int currentExpense = 0;
+    int incomeCount = 0;
+    int expenseCount = 0;
+
+    final Map<String, double> categoryTotals = {};
+
+    for (var tx in transactions) {
+      if (tx.deletedAt != null) continue;
+
+      final date = tx.date;
+      final isInc = isIncome(tx);
+      final isExp = isExpense(tx);
+
+      if (date.isBefore(startOfSelectedMonth)) {
+        if (isInc) {
+          openingIncome += tx.amount.toInt();
+        } else if (isExp) {
+          openingExpense += tx.amount.toInt();
+        }
+      } else if (date.isBefore(endOfSelectedMonth)) {
+        if (isInc) {
+          currentIncome += tx.amount.toInt();
+          incomeCount++;
+        } else if (isExp) {
+          currentExpense += tx.amount.toInt();
+          expenseCount++;
+          if (tx.categoryId != null) {
+            final amtRupees = double.parse((tx.amount / 100.0).toStringAsFixed(2));
+            categoryTotals[tx.categoryId!] = double.parse(((categoryTotals[tx.categoryId!] ?? 0.0) + amtRupees).toStringAsFixed(2));
+          }
+        }
+      }
+    }
+
+    final double incRupees = double.parse((currentIncome / 100.0).toStringAsFixed(2));
+    final double expRupees = double.parse((currentExpense / 100.0).toStringAsFixed(2));
+    final double carryForwardRupees = double.parse(((openingIncome - openingExpense) / 100.0).toStringAsFixed(2));
+    final double netCashFlowVal = double.parse((incRupees - expRupees).toStringAsFixed(2));
+    final double savingsVal = double.parse((incRupees - expRupees).toStringAsFixed(2)); // Realized cash surplus
+
+    // Account Summary (Assets, Liabilities, CC Outstanding)
+    final summary = calculateAccountSummary(accounts);
+    final double ccOutstandingRupees = double.parse((summary.ccOutstanding / 100.0).toStringAsFixed(2));
+    final double netWorthRupees = double.parse((summary.netAssets / 100.0).toStringAsFixed(2));
+
+    final Map<String, double> accountBalances = {};
+    for (var acc in accounts) {
+      if (acc.isActive != false) {
+        accountBalances[acc.id] = double.parse((acc.balance / 100.0).toStringAsFixed(2));
+      }
+    }
+
+    final double savingsRateVal = incRupees > 0 ? double.parse((savingsVal / incRupees).toStringAsFixed(4)) : 0.0;
+    final double expenseRateVal = incRupees > 0 ? double.parse((expRupees / incRupees).toStringAsFixed(4)) : 0.0;
+
+    return FinancialSnapshot(
+      income: incRupees,
+      expenses: expRupees,
+      netCashFlow: netCashFlowVal,
+      savings: savingsVal,
+      carryForward: carryForwardRupees,
+      creditCardOutstanding: ccOutstandingRupees,
+      netWorth: netWorthRupees,
+      savingsRate: savingsRateVal,
+      expenseRate: expenseRateVal,
+      incomeTransactionCount: incomeCount,
+      expenseTransactionCount: expenseCount,
+      categoryTotals: categoryTotals,
+      accountBalances: accountBalances,
+      periodStart: startOfSelectedMonth,
+      periodEnd: endOfSelectedMonth,
     );
   }
 

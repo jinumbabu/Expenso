@@ -56,7 +56,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                         return categoriesAsync.when(
                           data: (categories) {
                             final selectedMonth = ref.watch(dashboardMonthProvider);
-                            final financialData = ref.watch(dashboardFinancialDataProvider);
+                            final snapshot = ref.watch(financialSnapshotProvider);
 
                             final allAccounts = accountsAsync.maybeWhen(
                               data: (list) => list.where((a) => a.isActive == true).toList(),
@@ -119,7 +119,7 @@ class NetWorthDetailScreen extends ConsumerWidget {
                             final topRecent = recentTxs.take(5).toList();
 
                             // Calculated fields synchronized with Dashboard
-                            final currentMonthExpense = financialData.monthlyExpenses;
+                            final currentMonthExpense = (snapshot.expenses * 100).round();
                             final lastUpdated = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
 
                             final double totalForBreakdown = (summary.totalAssets + summary.totalLiabilities).toDouble();

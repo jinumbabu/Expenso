@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class AIModel {
   final String id;
   final String name;
@@ -153,6 +155,9 @@ class FinancialContext {
   final List<String> topSpendingCategories;
   final List<String> recentFinancialTrends;
   final String accountSummary;
+  final double creditCardOutstanding;
+  final double carryForward;
+  final String period;
 
   const FinancialContext({
     required this.currentBalance,
@@ -165,19 +170,37 @@ class FinancialContext {
     required this.topSpendingCategories,
     required this.recentFinancialTrends,
     required this.accountSummary,
+    required this.creditCardOutstanding,
+    required this.carryForward,
+    required this.period,
   });
 
   String toPromptString() {
     final buffer = StringBuffer();
     buffer.writeln('=== FINANCIAL SUMMARY CONTEXT (DE-IDENTIFIED) ===');
-    buffer.writeln('Current Balance: INR ${currentBalance.toStringAsFixed(2)}');
+    buffer.writeln('Period: $period');
+    buffer.writeln('Current Balance (Net Cash Flow): INR ${currentBalance.toStringAsFixed(2)}');
     buffer.writeln('Monthly Income: INR ${monthlyIncome.toStringAsFixed(2)}');
     buffer.writeln('Monthly Expenses: INR ${monthlyExpenses.toStringAsFixed(2)}');
     buffer.writeln('Savings: INR ${savings.toStringAsFixed(2)}');
+    buffer.writeln('Carry Forward: INR ${carryForward.toStringAsFixed(2)}');
+    buffer.writeln('Credit Card Outstanding: INR ${creditCardOutstanding.toStringAsFixed(2)}');
     buffer.writeln('Health Score (0-100): $healthScore');
     buffer.writeln('Budget Status: $budgetStatus');
     buffer.writeln('Upcoming Bills: $upcomingBills');
     buffer.writeln('Account Balances:\n$accountSummary');
+
+    // Structured JSON block for the AI to parse/reference
+    final Map<String, dynamic> structuredData = {
+      "period": period,
+      "income": double.parse(monthlyIncome.toStringAsFixed(2)),
+      "expenses": double.parse(monthlyExpenses.toStringAsFixed(2)),
+      "netCashFlow": double.parse(currentBalance.toStringAsFixed(2)),
+      "savings": double.parse(savings.toStringAsFixed(2)),
+      "creditCardOutstanding": double.parse(creditCardOutstanding.toStringAsFixed(2)),
+      "carryForward": double.parse(carryForward.toStringAsFixed(2)),
+    };
+    buffer.writeln('STRUCTURED_DATA_JSON: ${jsonEncode(structuredData)}');
     
     buffer.writeln('Top Spending Categories:');
     if (topSpendingCategories.isEmpty) {

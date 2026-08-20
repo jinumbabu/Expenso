@@ -88,22 +88,7 @@ final dashboardSubscriptionsProvider = Provider.autoDispose<AsyncValue<List<Subs
 final hasCheckedBackupRestoreProvider = StateProvider<bool>((ref) => false);
 final dismissedOpeningBalancePromptsProvider = StateProvider<Set<String>>((ref) => {});
 
-// Dashboard selected month provider
-final dashboardMonthProvider = StateProvider<DateTime>((ref) => DateTime.now());
-
-// Dashboard financial calculation provider
-final dashboardFinancialDataProvider = Provider.autoDispose<FinancialData>((ref) {
-  final month = ref.watch(dashboardMonthProvider);
-  final txsAsync = ref.watch(expenseListNotifierProvider);
-  final txs = txsAsync.maybeWhen(
-    data: (list) => list,
-    orElse: () => <Transaction>[],
-  );
-  return FinancialCalculationService.calculate(
-    transactions: txs,
-    selectedMonth: month,
-  );
-});
+// Dashboard summary screen content
 
 class DashboardSummaryScreen extends ConsumerWidget {
   const DashboardSummaryScreen({super.key});
@@ -217,16 +202,13 @@ class DashboardSummaryScreen extends ConsumerWidget {
     }
 
     final selectedMonth = ref.watch(dashboardMonthProvider);
-    final financialData = ref.watch(dashboardFinancialDataProvider);
+    final snapshot = ref.watch(financialSnapshotProvider);
 
-    final finalIncome = financialData.monthlyIncome;
-    final finalExpense = financialData.monthlyExpenses;
-    final finalOpeningBalance = financialData.openingBalance;
+    final finalIncome = (snapshot.income * 100).round();
+    final finalExpense = (snapshot.expenses * 100).round();
+    final finalOpeningBalance = (snapshot.carryForward * 100).round();
+    final finalNetWorth = (snapshot.netWorth * 100).round();
     final accountSummaryAsync = ref.watch(accountSummaryProvider);
-    final finalNetWorth = accountSummaryAsync.maybeWhen(
-      data: (summary) => summary.netAssets,
-      orElse: () => 0,
-    );
     final finalTotalAssets = accountSummaryAsync.maybeWhen(
       data: (summary) => summary.totalAssets,
       orElse: () => 0,

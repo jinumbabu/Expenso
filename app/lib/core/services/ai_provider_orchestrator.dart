@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
+import 'package:intl/intl.dart';
 
 import '../security/secure_storage_service.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/expenses/presentation/providers/expense_provider.dart';
 import '../../features/advisor/presentation/providers/advisor_provider.dart';
 import 'ai_models.dart';
 import 'ai_provider.dart';
@@ -660,11 +662,8 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
   Future<FinancialContext> compileFinancialContext(String userId) async {
     final db = _ref.read(databaseProvider);
     final advisorState = _ref.read(advisorProvider);
+    final snapshot = _ref.read(financialSnapshotProvider);
     final now = DateTime.now();
-    final startOfMonth = DateTime(now.year, now.month, 1);
-
-    final transactions = await db.transactionDao.getTransactionsForUser(userId);
-    final currentMonthTxs = transactions.where((tx) => tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth)).toList();
 
     final categories = await db.categoryDao.getCategoriesForUser(userId);
     final categoriesMap = {for (var c in categories) c.id: c};
@@ -681,13 +680,10 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
       }
     }
 
-    final financialData = FinancialCalculationService.calculate(
-      transactions: transactions,
-      selectedMonth: now,
-    );
-    int totalIncome = financialData.monthlyIncome;
-    int totalExpense = financialData.monthlyExpenses;
     final categorySpending = <String, int>{};
+    final transactions = await db.transactionDao.getTransactionsForUser(userId);
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final currentMonthTxs = transactions.where((tx) => tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth)).toList();
 
     for (var tx in currentMonthTxs) {
       if (FinancialCalculationService.isExpense(tx)) {
@@ -695,10 +691,6 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
         categorySpending[catName] = (categorySpending[catName] ?? 0) + tx.amount;
       }
     }
-
-    final double incomeVal = totalIncome / 100.0;
-    final double expenseVal = totalExpense / 100.0;
-    final double netVal = incomeVal - expenseVal;
 
     final budgetBuffer = StringBuffer();
     if (budgets.isEmpty) {
@@ -752,28 +744,33 @@ class AiProviderOrchestrator extends StateNotifier<AiProviderConfig> {
     final double lastMonthExpenseVal = lastMonthExpense / 100.0;
 
     final trends = <String>[];
-    if (expenseVal > lastMonthExpenseVal && lastMonthExpenseVal > 0) {
-      final diff = expenseVal - lastMonthExpenseVal;
+    if (snapshot.expenses > lastMonthExpenseVal && lastMonthExpenseVal > 0) {
+      final diff = snapshot.expenses - lastMonthExpenseVal;
       trends.add('Monthly expenses increased by ₹${diff.toStringAsFixed(2)} compared to last month.');
-    } else if (expenseVal < lastMonthExpenseVal && lastMonthExpenseVal > 0) {
-      final diff = lastMonthExpenseVal - expenseVal;
+    } else if (snapshot.expenses < lastMonthExpenseVal && lastMonthExpenseVal > 0) {
+      final diff = lastMonthExpenseVal - snapshot.expenses;
       trends.add('Frugal behavior: Monthly expenses decreased by ₹${diff.toStringAsFixed(2)} compared to last month.');
     }
-    if (incomeVal > 0 && expenseVal / incomeVal > 0.8) {
+    if (snapshot.income > 0 && snapshot.expenses / snapshot.income > 0.8) {
       trends.add('Caution: Spending accounts for over 80% of your active income this month.');
     }
 
+    final periodStr = DateFormat('MMMM yyyy').format(now);
+
     return FinancialContext(
-      currentBalance: netVal,
-      monthlyIncome: incomeVal,
-      monthlyExpenses: expenseVal,
-      savings: netVal,
+      currentBalance: snapshot.netCashFlow,
+      monthlyIncome: snapshot.income,
+      monthlyExpenses: snapshot.expenses,
+      savings: snapshot.savings,
       budgetStatus: budgetBuffer.toString(),
       upcomingBills: billBuffer.toString(),
       healthScore: advisorState.healthScore,
       topSpendingCategories: topCategories,
       recentFinancialTrends: trends,
       accountSummary: accountBuffer.toString().trim(),
+      creditCardOutstanding: snapshot.creditCardOutstanding,
+      carryForward: snapshot.carryForward,
+      period: periodStr,
     );
   }
 }

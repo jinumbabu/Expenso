@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import io.flutter.plugin.common.MethodChannel
+import android.util.Log
 
-class SmsReceiver : BroadcastReceiver() {
+class SmsTransactionReceiver : BroadcastReceiver() {
     companion object {
         var methodChannel: MethodChannel? = null
+        private const val TAG = "SmsTransactionReceiver"
     }
 
     override fun onReceive(context: Context?, intent: Intent?) {
@@ -19,14 +21,27 @@ class SmsReceiver : BroadcastReceiver() {
                 val sender = message.originatingAddress
                 val timestamp = message.timestampMillis
 
-                methodChannel?.let { channel ->
+                Log.d(TAG, "SMS received from $sender")
+
+                val channel = methodChannel
+                if (channel != null) {
+                    Log.d(TAG, "App UI is running. Forwarding to foreground channel.")
                     val data = mapOf(
                         "sender" to sender,
                         "body" to body,
                         "timestamp" to timestamp
                     )
-                    // MethodChannel invocations must happen on the platform's main UI thread
                     channel.invokeMethod("onSmsReceived", data)
+                } else {
+                    Log.d(TAG, "App UI is NOT running. Launching SmsBackgroundService.")
+                    if (context != null) {
+                        val serviceIntent = Intent(context, SmsBackgroundService::class.java).apply {
+                            putExtra("sender", sender)
+                            putExtra("body", body)
+                            putExtra("timestamp", timestamp)
+                        }
+                        SmsBackgroundService.enqueueWork(context, serviceIntent)
+                    }
                 }
             }
         }

@@ -23,6 +23,7 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../budgets/presentation/screens/budgets_screen.dart';
 import '../../../../core/security/audit_logger.dart';
+import '../../../../core/services/sms_background_processor.dart';
 
 final Provider<TransactionDraftDao> transactionDraftDaoProvider = Provider<TransactionDraftDao>((ref) {
   final db = ref.watch(databaseProvider);
@@ -64,6 +65,14 @@ class SmsScannerState {
   final bool isInboxAccessible;
   final int scannedSmsCount;
   final int detectedTransactionsCount;
+  final int totalBackgroundSms;
+  final int autoSavedCount;
+  final int duplicateCount;
+  final int ignoredCount;
+  final int pendingCount;
+  final DateTime? lastProcessedTime;
+  final String? lastError;
+  final String backgroundReceiverStatus;
 
   SmsScannerState({
     this.isScanning = false,
@@ -80,6 +89,14 @@ class SmsScannerState {
     this.isInboxAccessible = false,
     this.scannedSmsCount = 0,
     this.detectedTransactionsCount = 0,
+    this.totalBackgroundSms = 0,
+    this.autoSavedCount = 0,
+    this.duplicateCount = 0,
+    this.ignoredCount = 0,
+    this.pendingCount = 0,
+    this.lastProcessedTime,
+    this.lastError,
+    this.backgroundReceiverStatus = "READY",
   });
 
   SmsScannerState copyWith({
@@ -97,6 +114,14 @@ class SmsScannerState {
     bool? isInboxAccessible,
     int? scannedSmsCount,
     int? detectedTransactionsCount,
+    int? totalBackgroundSms,
+    int? autoSavedCount,
+    int? duplicateCount,
+    int? ignoredCount,
+    int? pendingCount,
+    DateTime? lastProcessedTime,
+    String? lastError,
+    String? backgroundReceiverStatus,
   }) {
     return SmsScannerState(
       isScanning: isScanning ?? this.isScanning,
@@ -113,6 +138,14 @@ class SmsScannerState {
       isInboxAccessible: isInboxAccessible ?? this.isInboxAccessible,
       scannedSmsCount: scannedSmsCount ?? this.scannedSmsCount,
       detectedTransactionsCount: detectedTransactionsCount ?? this.detectedTransactionsCount,
+      totalBackgroundSms: totalBackgroundSms ?? this.totalBackgroundSms,
+      autoSavedCount: autoSavedCount ?? this.autoSavedCount,
+      duplicateCount: duplicateCount ?? this.duplicateCount,
+      ignoredCount: ignoredCount ?? this.ignoredCount,
+      pendingCount: pendingCount ?? this.pendingCount,
+      lastProcessedTime: lastProcessedTime ?? this.lastProcessedTime,
+      lastError: lastError ?? this.lastError,
+      backgroundReceiverStatus: backgroundReceiverStatus ?? this.backgroundReceiverStatus,
     );
   }
 }
@@ -187,9 +220,31 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
       ).getSingleOrNull();
       final saved = savedResult?.read<int>('c') ?? 0;
 
+      // Load background stats from secure storage
+      final totalScannedStr = await _secureStorage.read('sms_stats_total_scanned') ?? '0';
+      final autoSavedStr = await _secureStorage.read('sms_stats_auto_saved_count') ?? '0';
+      final dupStr = await _secureStorage.read('sms_stats_duplicate_count') ?? '0';
+      final ignStr = await _secureStorage.read('sms_stats_ignored_count') ?? '0';
+      final pendStr = await _secureStorage.read('sms_stats_pending_count') ?? '0';
+      final lastProcStr = await _secureStorage.read('sms_stats_last_processed_time');
+      final lastErr = await _secureStorage.read('sms_stats_last_error');
+
+      DateTime? lastProc;
+      if (lastProcStr != null) {
+        lastProc = DateTime.tryParse(lastProcStr);
+      }
+
       state = state.copyWith(
         scannedSmsCount: scanned,
         detectedTransactionsCount: pending + saved,
+        totalBackgroundSms: int.tryParse(totalScannedStr) ?? 0,
+        autoSavedCount: int.tryParse(autoSavedStr) ?? 0,
+        duplicateCount: int.tryParse(dupStr) ?? 0,
+        ignoredCount: int.tryParse(ignStr) ?? 0,
+        pendingCount: int.tryParse(pendStr) ?? 0,
+        lastProcessedTime: lastProc,
+        lastError: lastErr,
+        backgroundReceiverStatus: "READY",
       );
     } catch (e) {
       dev.log("SmsScannerNotifier: Error loading stats: $e");
@@ -479,337 +534,22 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
       return;
     }
     try {
-      dev.log("SmsScannerNotifier: Processing incoming SMS: $body");
-      final result = await _smsAgent.processSms(body, date, userId: userId, sender: sender);
-      if (result != null) {
-        bool matched = false;
-
-        if (result.transactionType == 'transfer' || result.category == 'Internal Transfer') {
-          final lastFewDays = DateTime.now().subtract(const Duration(days: 3));
-          final existingTransactions = await (_db.select(_db.transactions)
-            ..where((t) => t.userId.equals(userId) & t.date.isBiggerOrEqualValue(lastFewDays) & t.deletedAt.isNull())
-          ).get();
-
-          final lowerBody = body.toLowerCase();
-          bool currentIsDebit = true;
-          if (lowerBody.contains('credited') || lowerBody.contains('received') || lowerBody.contains('deposited')) {
-            currentIsDebit = false;
-          }
-
-          Transaction? matchingTx;
-          for (var tx in existingTransactions) {
-            final isTxDebit = tx.type == 'expense' || tx.type == 'transfer_debit';
-            if (currentIsDebit != isTxDebit) {
-              final hasSameRef = result.referenceId != null && 
-                                 tx.referenceNumber != null && 
-                                 result.referenceId == tx.referenceNumber;
-              final sameAmount = (result.amount * 100).round() == tx.amount;
-              final closeTime = result.date.difference(tx.date).inMinutes.abs() <= 35;
-
-              if (hasSameRef && sameAmount && closeTime) {
-                matchingTx = tx;
-                break;
-              }
-            }
-          }
-
-          if (matchingTx != null) {
-            matched = true;
-            final accounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
-            final currentAccMatch = SmsAccountMatcher.matchAccount(
-              smsText: result.account,
-              existingAccounts: accounts,
-              cardOrAccount: result.accountNumber,
-              sender: sender,
-            );
-
-            var currentAcc = currentAccMatch.matchedAccount;
-            if (currentAcc == null) {
-              final type = currentAccMatch.accountType;
-              final name = currentAccMatch.displayTitle;
-              final isCC = type == 'credit_card';
-              final newId = const Uuid().v4();
-              final now = DateTime.now();
-              final newAcc = Account(
-                id: newId,
-                userId: userId,
-                name: name,
-                type: type,
-                balance: 0,
-                isDefault: false,
-                isEstimated: false,
-                createdAt: now,
-                updatedAt: now,
-                bankName: currentAccMatch.bankName,
-                currency: 'INR',
-                colorTheme: isCC ? '0xFFFF3B30' : '0xFF0066FF',
-                icon: isCC ? 'credit_card' : 'account_balance',
-                isActive: true,
-                last4Digits: currentAccMatch.last4,
-              );
-              await _db.into(_db.accounts).insert(newAcc);
-              currentAcc = newAcc;
-            }
-
-            final debitAccId = currentIsDebit ? currentAcc.id : matchingTx.accountId;
-            final creditAccId = currentIsDebit ? matchingTx.accountId : currentAcc.id;
-
-            if (debitAccId != null && creditAccId != null) {
-              final sourceName = currentIsDebit ? currentAccMatch.displayTitle : matchingTx.merchant ?? 'Account';
-              final destName = currentIsDebit ? matchingTx.merchant ?? 'Account' : currentAccMatch.displayTitle;
-
-              final updatedTx = matchingTx.copyWith(
-                type: 'transfer',
-                accountId: Value(debitAccId),
-                referenceNumber: Value(creditAccId),
-                description: Value('SMS Transfer: $sourceName to $destName'),
-                updatedAt: DateTime.now(),
-              );
-              await _db.transactionDao.updateTransaction(updatedTx);
-              await BalanceEngine(_db).reconcileOnEdit(matchingTx, updatedTx);
-
-              await _invalidateUi();
-
-              if (state.smsNotificationsEnabled) {
-                final formattedAmount = (result.amount).toStringAsFixed(2);
-                await _notificationService.sendProactiveAlert(
-                  userId,
-                  title: 'SMS Transfer Reconciled! ⇄',
-                  body: '$sourceName → $destName\n₹$formattedAmount',
-                  priority: 'high',
-                );
-              }
-            }
-          }
-
-          if (!matched) {
-            final existingDrafts = await _db.transactionDraftDao.getDraftsForUser(userId);
-            TransactionDraft? matchingDraft;
-            for (var draft in existingDrafts) {
-              final isDraftDebit = draft.type == 'expense' || draft.category == 'Internal Transfer' || (draft.smsBody != null && (draft.smsBody!.toLowerCase().contains('sent') || draft.smsBody!.toLowerCase().contains('debited')));
-              if (currentIsDebit != isDraftDebit) {
-                final hasSameRef = result.referenceId != null &&
-                                   draft.smsBody != null &&
-                                   draft.smsBody!.contains(result.referenceId!);
-                final sameAmount = draft.amount == (result.amount * 100).round();
-                final closeTime = result.date.difference(draft.date).inMinutes.abs() <= 35;
-
-                if (hasSameRef && sameAmount && closeTime) {
-                  matchingDraft = draft;
-                  break;
-                }
-              }
-            }
-
-            if (matchingDraft != null) {
-              matched = true;
-              final accounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
-              final currentAccMatch = SmsAccountMatcher.matchAccount(
-                smsText: result.account,
-                existingAccounts: accounts,
-                cardOrAccount: result.accountNumber,
-                sender: sender,
-              );
-              final currentAcc = currentAccMatch.matchedAccount;
-
-              final draftAccMatch = SmsAccountMatcher.matchAccount(
-                smsText: matchingDraft.smsBody ?? '',
-                existingAccounts: accounts,
-                cardOrAccount: matchingDraft.cardOrAccount,
-                sender: matchingDraft.smsSender,
-              );
-              final draftAcc = draftAccMatch.matchedAccount;
-
-              final debitAcc = currentIsDebit ? currentAcc : draftAcc;
-              final creditAcc = currentIsDebit ? draftAcc : currentAcc;
-
-              final sourceName = currentIsDebit ? currentAccMatch.displayTitle : draftAccMatch.displayTitle;
-              final destName = currentIsDebit ? draftAccMatch.displayTitle : currentAccMatch.displayTitle;
-
-              final metadata = {
-                'fromAccountId': debitAcc?.id,
-                'toAccountId': creditAcc?.id,
-                'fromAccountName': sourceName,
-                'toAccountName': destName,
-                'refNumber': result.referenceId,
-              };
-
-              final updatedDraft = matchingDraft.copyWith(
-                type: 'transfer',
-                category: const Value('Transfer'),
-                amount: (result.amount * 100).round(),
-                merchant: Value(destName),
-                description: Value('SMS Transfer: $sourceName to $destName'),
-                cardOrAccount: Value(debitAcc?.last4Digits ?? matchingDraft.cardOrAccount),
-                confidenceScore: const Value(0.85),
-                supportingSms: Value(jsonEncode(metadata)),
-              );
-
-              await _db.update(_db.transactionDrafts).replace(updatedDraft);
-
-              _ref.invalidate(transactionDraftsStreamProvider);
-              await _invalidateUi();
-
-              if (state.smsNotificationsEnabled) {
-                final formattedAmount = (result.amount).toStringAsFixed(2);
-                await _notificationService.sendProactiveAlert(
-                  userId,
-                  title: 'Pending SMS Transfer ⇄',
-                  body: '$sourceName → $destName\n₹$formattedAmount',
-                  priority: 'normal',
-                );
-              }
-            }
-          }
-        }
-
-        if (matched) {
-          return;
-        }
-
-        // Resolve Category and Payment Method IDs
-        final categoryId = result.categoryOverrideId ?? await _resolveCategoryId(result.merchant, result.transactionType, userId, classifiedCategory: result.category);
-        final paymentMethodId = await _resolvePaymentMethodId(result.paymentMode ?? 'UPI', userId);
-
-        if (result.confidence < 0.90) {
-          final draft = TransactionDraft(
-            id: const Uuid().v4(),
-            userId: userId,
-            amount: (result.amount * 100).round(),
-            type: result.transactionType,
-            currency: 'INR',
-            merchant: result.merchant,
-            description: 'SMS Alert: ${result.account}',
-            date: result.date,
-            smsSender: sender,
-            cardOrAccount: result.accountNumber,
-            smsBody: body,
-            originalSmsId: null,
-            createdAt: DateTime.now(),
-            categoryId: categoryId,
-            category: result.category,
-            confidenceScore: result.confidence,
-          );
-          await _db.transactionDraftDao.insertDraft(draft);
-
+      dev.log("SmsScannerNotifier: Delegating incoming SMS to SmsBackgroundProcessor");
+      await SmsBackgroundProcessor.processIncomingSms(
+        sender: sender,
+        body: body,
+        date: date,
+        userId: userId,
+        db: _db,
+        smsAgent: _smsAgent,
+        ledgerAgent: _ledgerAgent,
+        notificationService: _notificationService,
+        secureStorage: _secureStorage,
+        onUiInvalidate: () {
           _ref.invalidate(transactionDraftsStreamProvider);
-          await _invalidateUi();
-
-          if (state.smsNotificationsEnabled) {
-            final isTransfer = result.transactionType == 'transfer';
-            final formattedAmount = (result.amount).toStringAsFixed(2);
-            await _notificationService.sendProactiveAlert(
-              userId,
-              title: isTransfer ? 'Pending SMS Transfer ⇄' : 'New transaction to review! 📝',
-              body: isTransfer 
-                  ? '${result.account} → ${result.merchant ?? 'Unknown'}\n₹$formattedAmount' 
-                  : 'Uncertain transaction: ₹$formattedAmount via ${result.account}. Please review and approve.',
-              priority: 'normal',
-            );
-          }
-          return;
-        }
-
-        final tx = Transaction(
-          id: const Uuid().v4(),
-          userId: userId,
-          accountId: null, // Link to account resolved by LedgerAgent
-          categoryId: categoryId,
-          paymentMethodId: paymentMethodId,
-          type: result.transactionType,
-          amount: (result.amount * 100).round(),
-          currency: 'INR',
-          description: 'SMS Alert: ${result.account}',
-          merchant: result.merchant,
-          date: result.date,
-          source: 'sms',
-          confidenceScore: result.confidence,
-          isRecurring: false,
-          syncStatus: 'pending',
-          transactionType: result.category,
-          accountType: result.accountType,
-          billStatus: result.billStatus,
-          dueDate: result.dueDate,
-          referenceNumber: result.referenceId,
-          aiClassification: result.category,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-
-        final reconciliationResult = await _ledgerAgent.reconcileTransaction(
-          tx, 
-          confidence: result.confidence,
-          importedBalance: result.balance != null ? (result.balance! * 100).round() : null,
-        );
-
-        if (reconciliationResult.status == ReconciliationStatus.matchingManual) {
-          final draft = TransactionDraft(
-            id: const Uuid().v4(),
-            userId: userId,
-            amount: (result.amount * 100).round(),
-            type: result.transactionType,
-            currency: 'INR',
-            merchant: result.merchant,
-            description: 'SMS Alert: ${result.account}',
-            date: result.date,
-            smsSender: sender,
-            cardOrAccount: result.accountNumber,
-            smsBody: body,
-            originalSmsId: null,
-            createdAt: DateTime.now(),
-            categoryId: categoryId,
-            category: result.category,
-            confidenceScore: result.confidence,
-            matchingTransactionId: reconciliationResult.matchingManualId,
-          );
-          await _db.transactionDraftDao.insertDraft(draft);
-
-          _ref.invalidate(transactionDraftsStreamProvider);
-          await _invalidateUi();
-
-          if (state.smsNotificationsEnabled) {
-            await _notificationService.sendProactiveAlert(
-              userId,
-              title: 'Matching Manual Entry Found 🔗',
-              body: 'An SMS matches your manual entry: ₹${result.amount} at ${result.merchant}. Please review and link them.',
-              priority: 'normal',
-            );
-          }
-          return;
-        }
-
-        await _invalidateUi();
-
-        if (reconciliationResult.status == ReconciliationStatus.inserted) {
-          final formattedAmount = (result.amount).toStringAsFixed(2);
-          final isTransfer = result.transactionType == 'transfer';
-          if (state.smsNotificationsEnabled) {
-            await _notificationService.sendProactiveAlert(
-              userId,
-              title: isTransfer ? 'Transfer Imported! ⇄' : 'Transaction Imported! 💸',
-              body: isTransfer 
-                  ? 'Transfer of ₹$formattedAmount imported.'
-                  : '${result.transactionType == 'expense' ? 'Spent' : 'Received'} ₹$formattedAmount at ${result.merchant} via ${result.account}.',
-              priority: 'high',
-            );
-          }
-        }
-      } else {
-        if (_isTransactionKeywordsMatch(body)) {
-          final unrecognized = UnrecognizedMessage(
-            id: const Uuid().v4(),
-            userId: userId,
-            sender: sender,
-            body: body,
-            date: date,
-            failureReason: 'Failed to extract banking/amount details',
-            createdAt: DateTime.now(),
-          );
-          await _db.unrecognizedMessageDao.insertUnrecognizedMessage(unrecognized);
-          _ref.invalidate(unrecognizedMessagesStreamProvider);
-          await _invalidateUi();
-        }
-      }
+          _invalidateUi();
+        },
+      );
     } catch (e) {
       dev.log("SmsScannerNotifier: Error handling incoming SMS: $e");
     }

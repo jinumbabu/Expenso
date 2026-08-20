@@ -2400,11 +2400,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Prepend premium FinancialStatusCard if parsed parameters exist
-                    if (showSummary) ...[
-                      FinancialStatusCard(report: report),
-                    ],
-
                     if (cleanContent.isNotEmpty)
                       MarkdownBody(
                         data: cleanContent,
@@ -2437,49 +2432,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            // 📊 Financial Summary Toggle Button
-                            if (!report.isEmpty)
-                              InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    if (_showSummaryMessageIds.contains(message.id)) {
-                                      _showSummaryMessageIds.remove(message.id);
-                                    } else {
-                                      _showSummaryMessageIds.add(message.id);
-                                    }
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                                  decoration: BoxDecoration(
-                                    color: showSummary
-                                        ? const Color(0xFF00E5FF).withOpacity(0.12)
-                                        : const Color(0xFF00E5FF).withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: showSummary
-                                          ? const Color(0xFF00E5FF).withOpacity(0.3)
-                                          : const Color(0xFF00E5FF).withOpacity(0.15),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.bar_chart_rounded, color: Color(0xFF00E5FF), size: 14),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        showSummary ? 'Hide Summary' : '📊 Financial Summary',
-                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            
                             // More Details Button
                             InkWell(
-                              onTap: () => _showMoreDetailsBottomSheet(context, report),
+                              onTap: () => context.push('/advisor'),
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
