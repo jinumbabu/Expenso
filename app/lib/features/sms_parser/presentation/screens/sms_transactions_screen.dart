@@ -167,10 +167,46 @@ class SmsTransactionsScreen extends ConsumerWidget {
 
   Widget _buildScannerControlCard(BuildContext context, WidgetRef ref, SmsScannerState scannerState) {
     final permissionGranted = scannerState.smsPermissionStatus.isGranted;
-    final autoDetectionActive = scannerState.autoImportEnabled && permissionGranted && scannerState.autoScanNewSms;
     final lastScanFormatted = scannerState.lastSyncTime != null
         ? DateFormat('MMM dd, hh:mm a').format(scannerState.lastSyncTime!)
         : 'Never';
+
+    // Resolve States
+    String accessText;
+    Color accessColor;
+    if (permissionGranted) {
+      accessText = '✓ Enabled';
+      accessColor = const Color(0xFF00FF88);
+    } else {
+      accessText = '⚠ Permission Required';
+      accessColor = Colors.amberAccent;
+    }
+
+    String detectionText;
+    Color detectionColor;
+    if (!permissionGranted) {
+      detectionText = '✕ Inactive';
+      detectionColor = Colors.white30;
+    } else if (!scannerState.autoImportEnabled || !scannerState.autoScanNewSms) {
+      detectionText = '✕ Disabled';
+      detectionColor = Colors.white30;
+    } else {
+      detectionText = '✓ Active';
+      detectionColor = const Color(0xFF00FF88);
+    }
+
+    String monitorText;
+    Color monitorColor;
+    if (!permissionGranted) {
+      monitorText = '⚠ Action Needed';
+      monitorColor = Colors.amberAccent;
+    } else if (!scannerState.autoImportEnabled || !scannerState.autoScanNewSms) {
+      monitorText = '✕ Disabled';
+      monitorColor = Colors.white30;
+    } else {
+      monitorText = '✓ Ready';
+      monitorColor = const Color(0xFF00FF88);
+    }
 
     return GlassCard(
       padding: const EdgeInsets.all(20),
@@ -183,33 +219,13 @@ class SmsTransactionsScreen extends ConsumerWidget {
             style: TextStyle(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
           const SizedBox(height: 16),
-          // Status Item 1: SMS Access
-          _buildStatusRow(
-            'SMS ACCESS',
-            permissionGranted ? '✓ Enabled' : '⚠ Permission Required',
-            permissionGranted ? const Color(0xFF00FF88) : Colors.amberAccent,
-          ),
+          _buildStatusRow('SMS ACCESS', accessText, accessColor),
           const SizedBox(height: 10),
-          // Status Item 2: Automatic Detection
-          _buildStatusRow(
-            'AUTOMATIC DETECTION',
-            autoDetectionActive ? '✓ Active' : '✗ Inactive',
-            autoDetectionActive ? const Color(0xFF00FF88) : Colors.white30,
-          ),
+          _buildStatusRow('AUTOMATIC DETECTION', detectionText, detectionColor),
           const SizedBox(height: 10),
-          // Status Item 3: Background Monitor
-          _buildStatusRow(
-            'BACKGROUND MONITOR',
-            permissionGranted ? '✓ Ready' : '⚠ Action Needed',
-            permissionGranted ? const Color(0xFF00FF88) : Colors.white30,
-          ),
+          _buildStatusRow('BACKGROUND MONITOR', monitorText, monitorColor),
           const SizedBox(height: 10),
-          // Status Item 4: Last Scan
-          _buildStatusRow(
-            'LAST SCAN',
-            lastScanFormatted,
-            const Color(0xFF00E5FF),
-          ),
+          _buildStatusRow('LAST SCAN', lastScanFormatted, const Color(0xFF00E5FF)),
           const SizedBox(height: 18),
           const Divider(color: Colors.white10),
           const SizedBox(height: 12),
@@ -233,7 +249,23 @@ class SmsTransactionsScreen extends ConsumerWidget {
                     child: const Text('Allow SMS Access', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 )
-              else ...[
+              else if (!scannerState.autoImportEnabled || !scannerState.autoScanNewSms)
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0066FF),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      ref.read(smsScannerProvider.notifier).toggleAutoImport(true);
+                      ref.read(smsScannerProvider.notifier).toggleAutoScanNewSms(true);
+                    },
+                    child: const Text('Enable SMS Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                )
+              else
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -259,7 +291,6 @@ class SmsTransactionsScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-              ]
             ],
           ),
         ],
