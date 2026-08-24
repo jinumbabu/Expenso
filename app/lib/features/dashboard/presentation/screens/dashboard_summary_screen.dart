@@ -103,6 +103,12 @@ class DashboardSummaryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final advisor = ref.watch(advisorProvider);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final double gapA = screenHeight < 700 ? 12 : (screenHeight < 850 ? 16 : 24);
+    final double gapB = screenHeight < 700 ? 10 : (screenHeight < 850 ? 14 : 16);
+    final double gapC = screenHeight < 700 ? 12 : (screenHeight < 850 ? 16 : 20);
+    final double gapD = screenHeight < 700 ? 12 : (screenHeight < 850 ? 16 : 20);
+    final double gapE = screenHeight < 700 ? 14 : (screenHeight < 850 ? 18 : 24);
 
     final accountsVal = ref.watch(recalculatedAccountsProvider).value ?? [];
     final unpromptedAccounts = accountsVal.where((a) =>
@@ -271,23 +277,21 @@ class DashboardSummaryScreen extends ConsumerWidget {
             color: const Color(0xFF0066FF),
             backgroundColor: const Color(0xFF0A0A0A),
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+              padding: EdgeInsets.fromLTRB(20.0, 10.0, 20.0, screenHeight < 700 ? 80.0 : 100.0),
               children: [
                 // 1. Redesigned Header
                 _buildHeader(context, ref, auth, advisor, unreadCount),
-                const SizedBox(height: 24),
+                SizedBox(height: gapA),
 
                 // Opening Balance Suggestion Banner
                 if (accountsToPrompt.isNotEmpty) ...[
                   _buildOpeningBalanceSuggestionBanner(context, ref, accountsToPrompt.first),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                 ],
-
-
 
                 // 2. Month Selector
                 _buildMonthSelector(context, ref, selectedMonth),
-                const SizedBox(height: 16),
+                SizedBox(height: gapB),
 
                 // 3. Net Worth Card
                 _buildNetWorthCard(
@@ -301,19 +305,18 @@ class DashboardSummaryScreen extends ConsumerWidget {
                   finalCcOutstanding,
                   isPrivate,
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: gapC),
 
                 // 3. AI Quick Add
                 const _AiQuickAddWidget(),
-                const SizedBox(height: 24),
+                SizedBox(height: gapD),
 
                 // 4. Feature Grid
                 _buildFeatureGrid(context),
-                const SizedBox(height: 28),
+                SizedBox(height: gapE),
 
                 // 5. Upcoming Bills
                 _buildUpcomingBillsSection(context),
-                const SizedBox(height: 24), // Clean bottom clearance above navigation bar
               ],
             ),
           ),
@@ -488,6 +491,16 @@ class DashboardSummaryScreen extends ConsumerWidget {
     final todayDay = DateTime.now().day;
     final userName = auth.user?.displayName ?? 'Jinu';
 
+    final healthScore = advisor.healthScore.clamp(0, 100);
+    Color healthColor = const Color(0xFF00E5FF);
+    if (healthScore < 40) {
+      healthColor = const Color(0xFFFF3B30);
+    } else if (healthScore < 60) {
+      healthColor = Colors.orangeAccent;
+    } else if (healthScore < 80) {
+      healthColor = const Color(0xFF0066FF);
+    }
+
     return Row(
       children: [
         Expanded(
@@ -546,13 +559,14 @@ class DashboardSummaryScreen extends ConsumerWidget {
               onTap: () => context.push('/calendar'),
             ),
             const SizedBox(width: 8),
-            // Health Score Ring (ECG Wave)
+            // Health Score Ring (ECG Wave) - Static, styled red for low score (e.g. 30)
             GestureDetector(
               onTap: () => context.push('/advisor'),
               child: EcgPulseRing(
-                healthScore: advisor.healthScore,
+                healthScore: healthScore,
                 size: 34,
-                ringColor: const Color(0xFF0066FF),
+                ringColor: healthColor,
+                isAnimated: false,
               ),
             ),
             const SizedBox(width: 8),

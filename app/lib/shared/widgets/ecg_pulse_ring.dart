@@ -5,12 +5,14 @@ class EcgPulseRing extends StatefulWidget {
   final int healthScore;
   final double size;
   final Color ringColor;
+  final bool isAnimated;
 
   const EcgPulseRing({
     super.key,
     required this.healthScore,
     this.size = 56.0,
     this.ringColor = const Color(0xFF0066FF),
+    this.isAnimated = true,
   });
 
   @override
@@ -26,7 +28,10 @@ class _EcgPulseRingState extends State<EcgPulseRing> with SingleTickerProviderSt
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
-    )..repeat();
+    );
+    if (widget.isAnimated) {
+      _controller.repeat();
+    }
   }
 
   @override
@@ -50,7 +55,7 @@ class _EcgPulseRingState extends State<EcgPulseRing> with SingleTickerProviderSt
               Positioned.fill(
                 child: CircularProgressIndicator(
                   value: clampedScore / 100.0,
-                  strokeWidth: 3.5,
+                  strokeWidth: widget.size > 40 ? 3.5 : 2.2,
                   backgroundColor: Colors.white10,
                   color: widget.ringColor,
                 ),
@@ -59,7 +64,7 @@ class _EcgPulseRingState extends State<EcgPulseRing> with SingleTickerProviderSt
               Positioned.fill(
                 child: CustomPaint(
                   painter: EcgPainter(
-                    animationValue: _controller.value,
+                    animationValue: widget.isAnimated ? _controller.value : 0.0,
                     pulseColor: widget.ringColor.withOpacity(0.5),
                   ),
                 ),
