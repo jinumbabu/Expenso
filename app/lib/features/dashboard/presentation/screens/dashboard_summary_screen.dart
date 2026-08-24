@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -516,31 +517,8 @@ class DashboardSummaryScreen extends ConsumerWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Notifications with badge
-            _buildHeaderIconButton(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.notifications_none_outlined, color: Colors.white, size: 20),
-                  if (unreadCount > 0)
-                    Positioned(
-                      top: -2,
-                      right: -2,
-                      child: Container(
-                        padding: const EdgeInsets.all(2.5),
-                        decoration: const BoxDecoration(color: Color(0xFF0066FF), shape: BoxShape.circle),
-                        constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
-                        child: Text(
-                          '$unreadCount',
-                          style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              onTap: () => context.push('/notifications'),
-            ),
+            // Notifications with badge / SMS scan animation
+            NotificationBellWithSmsStatus(unreadCount: unreadCount),
             const SizedBox(width: 8),
             // Calendar showing today's date
             _buildHeaderIconButton(
@@ -3751,4 +3729,286 @@ void _showEnterOpeningBalanceDialog(BuildContext context, WidgetRef ref, Account
       );
     },
   );
+}
+
+// Visual status animation states for Dashboard Notification Bell
+enum DashboardSmsIndicatorState {
+  bell,
+  smsScanning,
+}
+
+class NotificationBellWithSmsStatus extends ConsumerStatefulWidget {
+  final int unreadCount;
+
+  const NotificationBellWithSmsStatus({
+    super.key,
+    required this.unreadCount,
+  });
+
+  @override
+  ConsumerState<NotificationBellWithSmsStatus> createState() =>
+      _NotificationBellWithSmsStatusState();
+}
+
+class _NotificationBellWithSmsStatusState
+    extends ConsumerState<NotificationBellWithSmsStatus>
+    with WidgetsBindingObserver {
+  DashboardSmsIndicatorState _indicatorState = DashboardSmsIndicatorState.bell;
+  Timer? _cycleTimer;
+  Timer? _smsTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Start cycle after the widget is fully built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startCycle();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopCycle();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startCycle();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _stopCycle();
+    }
+  }
+
+  void _startCycle() {
+    _stopCycle();
+    
+    // Trigger initial scan animation check
+    _startSmsAnimation();
+
+    // Start repeating 60-second timer cycle
+    _cycleTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
+      _startSmsAnimation();
+    });
+  }
+
+  void _stopCycle() {
+    _cycleTimer?.cancel();
+    _cycleTimer = null;
+    _smsTimer?.cancel();
+    _smsTimer = null;
+  }
+
+  void _startSmsAnimation() {
+    if (!mounted) return;
+    
+    final scannerState = ref.read(smsScannerProvider);
+    final bool isMonitoringActive = scannerState.smsPermissionStatus == PermissionStatus.granted &&
+                                    scannerState.autoImportEnabled &&
+                                    scannerState.errorMessage == null;
+
+    if (!isMonitoringActive) {
+      if (_indicatorState != DashboardSmsIndicatorState.bell) {
+        setState(() {
+          _indicatorState = DashboardSmsIndicatorState.bell;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _indicatorState = DashboardSmsIndicatorState.smsScanning;
+    });
+
+    _smsTimer?.cancel();
+    _smsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _indicatorState = DashboardSmsIndicatorState.bell;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scannerState = ref.watch(smsScannerProvider);
+    final lastScanTime = scannerState.lastSyncTime;
+
+    final isScanningActive = _indicatorState == DashboardSmsIndicatorState.smsScanning;
+
+    // Display formatted actual last scan timestamp
+    final lastScanFormatted = lastScanTime != null
+        ? DateFormat('MMM dd, hh:mm a').format(lastScanTime)
+        : 'Never';
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        GestureDetector(
+          onTap: () {
+            if (isScanningActive) {
+              context.push('/sms-transactions');
+            } else {
+              context.push('/notifications');
+            }
+          },
+          child: Container(
+            height: 34,
+            width: 34,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, animation) {
+                  return ScaleTransition(scale: animation, child: child);
+                },
+                child: isScanningActive
+                    ? const AnimatedSmsIcon(
+                        key: ValueKey('sms_icon'),
+                        size: 20,
+                        color: Color(0xFF00E5FF),
+                      )
+                    : Stack(
+                        key: const ValueKey('bell_icon'),
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.notifications_none_outlined,
+                              color: Colors.white, size: 20),
+                          if (widget.unreadCount > 0)
+                            Positioned(
+                              top: -2,
+                              right: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(2.5),
+                                decoration: const BoxDecoration(
+                                    color: Color(0xFF0066FF), shape: BoxShape.circle),
+                                constraints: const BoxConstraints(
+                                    minWidth: 12, minHeight: 12),
+                                child: Text(
+                                  '${widget.unreadCount}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 7,
+                                      fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ),
+        if (isScanningActive)
+          Positioned(
+            top: 38,
+            child: Material(
+              color: Colors.transparent,
+              child: Text(
+                'Last scan:\n$lastScanFormatted',
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 7,
+                  height: 1.1,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class AnimatedSmsIcon extends StatefulWidget {
+  final double size;
+  final Color color;
+
+  const AnimatedSmsIcon({
+    super.key,
+    required this.size,
+    required this.color,
+  });
+
+  @override
+  State<AnimatedSmsIcon> createState() => _AnimatedSmsIconState();
+}
+
+class _AnimatedSmsIconState extends State<AnimatedSmsIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final val = _controller.value;
+        // Frame index (0, 1, or 2)
+        final activeIndex = (val * 3).floor().clamp(0, 2);
+
+        return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Message outline bubble
+              Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: widget.color,
+                size: widget.size,
+              ),
+              // Three sequentially animated dots inside
+              Positioned(
+                top: widget.size * 0.33,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (index) {
+                    final bool isActive = index == activeIndex;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 1.0),
+                      width: widget.size * 0.12,
+                      height: widget.size * 0.12,
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? widget.color
+                            : widget.color.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
