@@ -383,7 +383,7 @@ final accountSummaryProvider = Provider<AsyncValue<AccountSummary>>((ref) {
 final accountTransactionsProvider = Provider.family<AsyncValue<List<Transaction>>, String>((ref, accountId) {
   final txsAsync = ref.watch(expenseListNotifierProvider);
   return txsAsync.whenData((list) {
-    return list.where((tx) => tx.accountId == accountId || (tx.type == 'transfer' && tx.referenceNumber == accountId)).toList();
+    return list.where((tx) => tx.accountId == accountId || (FinancialCalculationService.isTransfer(tx) && tx.referenceNumber == accountId)).toList();
   });
 });
 

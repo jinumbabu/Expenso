@@ -23,7 +23,11 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../budgets/presentation/screens/budgets_screen.dart';
 import '../../../../core/security/audit_logger.dart';
-import '../../../../core/services/sms_background_processor.dart';
+import '../../../../core/services/sms/sms_transaction_pipeline.dart';
+import '../../../../core/services/sms/sms_permission_manager.dart';
+import '../../../../core/services/sms/sms_monitor_state.dart';
+import '../../../../core/services/sms/sms_service_bootstrap.dart';
+import '../../../../core/services/sms/transfer_correlation_engine.dart';
 
 final Provider<TransactionDraftDao> transactionDraftDaoProvider = Provider<TransactionDraftDao>((ref) {
   final db = ref.watch(databaseProvider);
@@ -151,7 +155,7 @@ class SmsScannerState {
 }
 
 // SMS Scanner Notifier
-class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBindingObserver {
+class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
   final AppDatabase _db;
   final String? _userId;
   final SmsAgent _smsAgent;
@@ -162,6 +166,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
 
   final SmsQuery _smsQuery = SmsQuery();
   static const MethodChannel _channel = MethodChannel('com.expenso.ai.app/sms');
+  late final SmsPermissionManager _permissionManager;
 
   SmsScannerNotifier({
     required AppDatabase db,
@@ -179,28 +184,35 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
         _secureStorage = secureStorage,
         _ref = ref,
         super(SmsScannerState()) {
-    WidgetsBinding.instance.addObserver(this);
-    _initChannel();
+    AuditLogger? auditLogger;
+    try {
+      auditLogger = _ref.read(auditLoggerProvider);
+    } catch (_) {}
+    _permissionManager = SmsPermissionManager(auditLogger);
     _loadLastSyncTime();
     _loadStats();
     _runStartupSync();
+
+    // Listen to changes in the global smsMonitorStatusProvider
+    _ref.listen<SmsMonitorStatus>(
+      smsMonitorStatusProvider,
+      (previous, next) {
+        _updateFromMonitorStatus(next);
+      },
+      fireImmediately: true,
+    );
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      checkPermissions().then((_) {
-        if (this.state.smsPermissionStatus.isGranted && this.state.autoImportEnabled) {
-          scanInbox(silent: true);
-        }
-      });
-    }
+  void _updateFromMonitorStatus(SmsMonitorStatus status) {
+    state = state.copyWith(
+      smsPermissionStatus: status.smsPermissionStatus,
+      notificationPermissionStatus: status.notificationPermissionStatus,
+      autoImportEnabled: status.automaticDetectionActive,
+      isInboxAccessible: status.receiverAvailable,
+      lastProcessedTime: status.lastProcessedAt,
+      lastError: status.lastError,
+      backgroundReceiverStatus: status.backgroundMonitorReady == SmsBackgroundMonitorReadyState.ready ? "READY" : "ERROR",
+    );
   }
 
   Future<void> _loadStats() async {
@@ -286,70 +298,21 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
   }
 
   Future<void> checkPermissions() async {
-    PermissionStatus smsStatus = PermissionStatus.denied;
-    PermissionStatus notifStatus = PermissionStatus.denied;
-
-    try {
-      smsStatus = await Permission.sms.status;
-      notifStatus = await Permission.notification.status;
-    } catch (e) {
-      dev.log("SmsScannerNotifier: Error checking permissions status: $e");
-    }
-
-    final autoImport = await _secureStorage.getAutoImportEnabled();
-    final autoScan = await _secureStorage.getAutoScanNewSms() ?? true;
-    final smsNotifs = await _secureStorage.getSmsNotificationsEnabled() ?? true;
-    final lastReq = await _secureStorage.getLastPermissionRequestTime();
-    
-    bool inboxOk = false;
-    if (smsStatus.isGranted) {
-      try {
-        await _smsQuery.querySms(kinds: [SmsQueryKind.inbox], count: 1);
-        inboxOk = true;
-      } catch (e) {
-        dev.log("SmsScannerNotifier: Inbox test query failed: $e");
-      }
-    }
-
-    state = state.copyWith(
-      smsPermissionStatus: smsStatus,
-      notificationPermissionStatus: notifStatus,
-      autoImportEnabled: autoImport,
-      autoScanNewSms: autoScan,
-      smsNotificationsEnabled: smsNotifs,
-      lastPermissionRequestTime: lastReq,
-      isInboxAccessible: inboxOk,
-    );
+    await _ref.read(smsServiceBootstrapProvider).refresh();
   }
 
   Future<void> requestSmsPermission() async {
     final now = DateTime.now();
     await _secureStorage.saveLastPermissionRequestTime(now);
     
-    final auditLogger = _ref.read(auditLoggerProvider);
-    await auditLogger.logEvent(
-      userId: _userId,
-      eventType: 'sms_permission_request_attempt',
-      eventCategory: 'security',
-      description: 'Attempting to request SMS runtime permission.',
-    );
-
-    PermissionStatus status = PermissionStatus.denied;
-    try {
-      status = await Permission.sms.request();
-    } catch (e) {
-      dev.log("SmsScannerNotifier: Error requesting SMS permission: $e");
-    }
-
-    await auditLogger.logEvent(
-      userId: _userId,
-      eventType: 'sms_permission_updated',
-      eventCategory: 'security',
-      description: 'SMS permission request completed. New status: ${status.toString()}',
-      metadata: {'status': status.toString()},
-    );
+    final status = await _permissionManager.requestSmsPermission(_userId);
 
     await checkPermissions();
+
+    if (status.isPermanentlyDenied) {
+      await _permissionManager.openSettings();
+      await checkPermissions();
+    }
 
     if (status.isGranted && state.autoImportEnabled) {
       await scanInbox(silent: true);
@@ -360,67 +323,31 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
     final now = DateTime.now();
     await _secureStorage.saveLastPermissionRequestTime(now);
 
-    final auditLogger = _ref.read(auditLoggerProvider);
-    await auditLogger.logEvent(
-      userId: _userId,
-      eventType: 'notification_permission_request_attempt',
-      eventCategory: 'security',
-      description: 'Attempting to request Notification runtime permission.',
-    );
-
-    PermissionStatus status = PermissionStatus.denied;
-    try {
-      status = await Permission.notification.request();
-    } catch (e) {
-      dev.log("SmsScannerNotifier: Error requesting notification permission: $e");
-    }
-
-    await auditLogger.logEvent(
-      userId: _userId,
-      eventType: 'notification_permission_updated',
-      eventCategory: 'security',
-      description: 'Notification permission request completed. New status: ${status.toString()}',
-      metadata: {'status': status.toString()},
-    );
+    final status = await _permissionManager.requestNotificationPermission(_userId);
 
     await checkPermissions();
+
+    if (status.isPermanentlyDenied) {
+      await _permissionManager.openSettings();
+      await checkPermissions();
+    }
   }
 
   Future<void> requestAllPermissions() async {
     final now = DateTime.now();
     await _secureStorage.saveLastPermissionRequestTime(now);
 
-    final auditLogger = _ref.read(auditLoggerProvider);
-    await auditLogger.logEvent(
-      userId: _userId,
-      eventType: 'all_permissions_request_attempt',
-      eventCategory: 'security',
-      description: 'Attempting to request SMS and Notification runtime permissions.',
-    );
-
-    try {
-      final statuses = await [
-        Permission.sms,
-        Permission.notification,
-      ].request();
-
-      final smsStatus = statuses[Permission.sms] ?? PermissionStatus.denied;
-      final notifStatus = statuses[Permission.notification] ?? PermissionStatus.denied;
-
-      await auditLogger.logEvent(
-        userId: _userId,
-        eventType: 'permissions_updated',
-        eventCategory: 'security',
-        description: 'Runtime permissions requested. SMS: $smsStatus, Notification: $notifStatus',
-        metadata: {'smsStatus': smsStatus.toString(), 'notificationStatus': notifStatus.toString()},
-      );
-    } catch (e) {
-      dev.log("SmsScannerNotifier: Error requesting all permissions: $e");
-    }
+    final status = await _permissionManager.requestSmsPermission(_userId);
+    final notifStatus = await _permissionManager.requestNotificationPermission(_userId);
 
     await checkPermissions();
 
-    if (state.smsPermissionStatus.isGranted && state.autoImportEnabled) {
+    if (status.isPermanentlyDenied || notifStatus.isPermanentlyDenied) {
+      await _permissionManager.openSettings();
+      await checkPermissions();
+    }
+
+    if (status.isGranted && state.autoImportEnabled) {
       await scanInbox(silent: true);
     }
   }
@@ -504,24 +431,6 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
     return success;
   }
 
-  void _initChannel() {
-    _channel.setMethodCallHandler((call) async {
-      dev.log("SmsScannerNotifier: Method channel call received: ${call.method}");
-      if (call.method == 'onSmsReceived') {
-        final args = Map<String, dynamic>.from(call.arguments);
-        final String? sender = args['sender'];
-        final String? body = args['body'];
-        final int? timestamp = args['timestamp'];
-        if (body != null) {
-          final date = timestamp != null
-              ? DateTime.fromMillisecondsSinceEpoch(timestamp)
-              : DateTime.now();
-          await _handleIncomingSms(sender, body, date);
-        }
-      }
-    });
-  }
-
   Future<void> _handleIncomingSms(String? sender, String body, DateTime date) async {
     final userId = _userId;
     if (userId == null) return;
@@ -534,8 +443,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
       return;
     }
     try {
-      dev.log("SmsScannerNotifier: Delegating incoming SMS to SmsBackgroundProcessor");
-      await SmsBackgroundProcessor.processIncomingSms(
+      dev.log("SmsScannerNotifier: Delegating incoming SMS to SmsTransactionPipeline");
+      await SmsTransactionPipeline.processIncomingSms(
         sender: sender,
         body: body,
         date: date,
@@ -621,6 +530,9 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
       final lastSync = await _secureStorage.getLastSmsSyncTime();
       final DateTime fetchSince = lastSync ?? DateTime.now().subtract(const Duration(days: 30));
 
+      final correlationEngine = TransferCorrelationEngine(_db);
+      await correlationEngine.resolveOrphanedTransferDrafts(userId);
+
       final messages = await _smsQuery.querySms(
         kinds: [SmsQueryKind.inbox],
       );
@@ -637,13 +549,19 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> with WidgetsBind
       bool isSelfTransferPair(SmsAgentResult debit, SmsAgentResult credit, String? userName) {
         if ((debit.amount - credit.amount).abs() > 0.01) return false;
         if (debit.date.difference(credit.date).inMinutes.abs() > 35) return false;
-        
+        if (debit.account == credit.account) return false;
+
         final hasSameRef = debit.referenceId != null && 
                            credit.referenceId != null && 
+                           debit.referenceId!.isNotEmpty &&
+                           credit.referenceId!.isNotEmpty &&
                            debit.referenceId == credit.referenceId;
-        if (!hasSameRef) return false;
-        if (debit.account == credit.account) return false;
-        return true;
+        if (hasSameRef) return true;
+
+        final bodyA = (debit.merchant + " " + debit.account).toLowerCase();
+        final bodyB = (credit.merchant + " " + credit.account).toLowerCase();
+        final matchesUser = (userName != null && (bodyA.contains(userName.toLowerCase()) || bodyB.contains(userName.toLowerCase())));
+        return matchesUser || debit.category == 'Internal Transfer' || credit.category == 'Internal Transfer';
       }
 
       int addedCount = 0;

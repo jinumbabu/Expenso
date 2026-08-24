@@ -8,11 +8,41 @@ import 'package:app/core/services/ledger_agent.dart';
 import 'package:app/core/services/notification_service.dart';
 import 'package:app/core/security/secure_storage_service.dart';
 import 'package:app/features/sms_parser/presentation/providers/sms_parser_provider.dart';
+import 'package:app/core/services/sms/sms_service_bootstrap.dart';
+import 'package:app/core/services/sms/sms_monitor_state.dart';
+
+class FakeSmsServiceBootstrap extends Fake implements SmsServiceBootstrap {
+  @override
+  Future<void> refresh() async {}
+}
+
+class FakeProviderSubscription<T> extends Fake implements ProviderSubscription<T> {
+  @override
+  void close() {}
+}
 
 // Use Fake instead of Mockito to avoid implementation boilerplates
 class FakeRef extends Fake implements Ref {
   @override
   void invalidate(ProviderOrFamily provider) {}
+
+  @override
+  T read<T>(ProviderListenable<T> provider) {
+    if (T == SmsServiceBootstrap) {
+      return FakeSmsServiceBootstrap() as T;
+    }
+    throw StateError('read not mocked for $provider');
+  }
+
+  @override
+  ProviderSubscription<T> listen<T>(
+    ProviderListenable<T> provider,
+    void Function(T?, T) listener, {
+    void Function(Object, StackTrace)? onError,
+    bool fireImmediately = false,
+  }) {
+    return FakeProviderSubscription<T>() as ProviderSubscription<T>;
+  }
 }
 
 class FakeNotificationService extends Fake implements NotificationService {

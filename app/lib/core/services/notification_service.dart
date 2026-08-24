@@ -19,6 +19,7 @@ class NotificationService {
 
   void setDatabase(AppDatabase db) {
     _db = db;
+    Future.microtask(() => deduplicateExistingNotifications());
   }
 
   Future<void> init() async {
@@ -85,6 +86,7 @@ class NotificationService {
     required String title,
     required String body,
     required String priority, // 'low', 'medium', 'high', 'critical'
+    String? id,
   }) async {
     // 1. Show local platform notification
     final int notifId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
@@ -98,7 +100,7 @@ class NotificationService {
     if (_db != null) {
       try {
         final notif = AppNotification(
-          id: const Uuid().v4(),
+          id: id ?? const Uuid().v4(),
           userId: userId,
           title: title,
           body: body,
@@ -110,6 +112,42 @@ class NotificationService {
       } catch (e) {
         // Fail silently
       }
+    }
+  }
+
+  Future<void> deduplicateExistingNotifications() async {
+    if (_db == null) return;
+    try {
+      final allNotifs = await _db!.customSelect('SELECT * FROM app_notifications ORDER BY created_at ASC').get();
+      final seen = <String>{};
+      final idsToDelete = <String>[];
+
+      for (var row in allNotifs) {
+        final id = row.read<String>('id');
+        final userId = row.read<String>('user_id');
+        final title = row.read<String>('title');
+        final body = row.read<String>('body');
+        
+        if (title.contains('Budget Alert') || title.contains('Budget Exceeded')) {
+          final key = '$userId|$title|$body';
+          if (seen.contains(key)) {
+            idsToDelete.add(id);
+          } else {
+            seen.add(key);
+          }
+        }
+      }
+
+      if (idsToDelete.isNotEmpty) {
+        print('Deduplicating ${idsToDelete.length} duplicate budget alert notifications...');
+        await _db!.transaction(() async {
+          for (var id in idsToDelete) {
+            await _db!.notificationDao.deleteNotification(id);
+          }
+        });
+      }
+    } catch (e) {
+      print('Error deduplicating notifications: $e');
     }
   }
 

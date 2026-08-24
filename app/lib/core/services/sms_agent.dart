@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart';
 import 'dart:developer' as dev;
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import '../database/app_database.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import 'ai_provider_orchestrator.dart';
 import 'sms_account_matcher.dart';
+import 'expenso_transaction_intelligence_engine.dart';
 
 class SmsAgentResult {
   final double amount;
@@ -79,8 +81,11 @@ class BankTemplate {
 class SmsAgent {
   final AppDatabase _db;
   final Ref? _ref;
+  late final ExpensoTransactionIntelligenceEngine _intelligenceEngine;
 
-  SmsAgent(this._db, [this._ref]);
+  SmsAgent(this._db, [this._ref]) {
+    _intelligenceEngine = ExpensoTransactionIntelligenceEngine(_db);
+  }
 
   // Define templates for the banks
   static final List<BankTemplate> _bankTemplates = [
@@ -490,7 +495,7 @@ class SmsAgent {
       return 'Salary'; // Default income fallback
     }
 
-    if (lowerBody.contains('debited') || lowerBody.contains('spent') || lowerBody.contains('paid to') || lowerBody.contains('sent') || lowerBody.contains('transferred') || lowerBody.contains('transaction of') || lowerBody.contains('made using') || lowerBody.contains('purchase')) {
+    if (lowerBody.contains('debited') || lowerBody.contains('spent') || lowerBody.contains('paid') || lowerBody.contains('sent') || lowerBody.contains('transferred') || lowerBody.contains('transaction of') || lowerBody.contains('made using') || lowerBody.contains('purchase') || lowerBody.contains('payment')) {
       return 'Shopping'; // Default expense fallback
     }
 
@@ -572,11 +577,11 @@ class SmsAgent {
   }
 
   DateTime _parseTransactionDate(String body, DateTime defaultDate) {
-    // Matches dd/mm/yyyy or dd/mm/yy or dd-mm-yyyy or dd-mm-yy
-    final dateReg = RegExp(
+    // 1. First look for a 3-part date with slash or hyphen or dot: DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY, DD.MM.YY, DD.MM.YYYY
+    final dateReg3Part = RegExp(
       r'\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4}|\d{2})\b'
     );
-    final match = dateReg.firstMatch(body);
+    var match = dateReg3Part.firstMatch(body);
     if (match != null) {
       final day = int.tryParse(match.group(1)!) ?? defaultDate.day;
       final month = int.tryParse(match.group(2)!) ?? defaultDate.month;
@@ -588,6 +593,21 @@ class SmsAgent {
         return DateTime(year, month, day, defaultDate.hour, defaultDate.minute, defaultDate.second);
       } catch (_) {}
     }
+
+    // 2. If no 3-part date, look for a 2-part date: DD/MM or DD-MM (strictly NOT dot, to avoid matching decimal amounts like 98.00)
+    final dateReg2Part = RegExp(
+      r'\b(\d{1,2})[\/\-](\d{1,2})\b'
+    );
+    match = dateReg2Part.firstMatch(body);
+    if (match != null) {
+      final day = int.tryParse(match.group(1)!) ?? defaultDate.day;
+      final month = int.tryParse(match.group(2)!) ?? defaultDate.month;
+      final year = defaultDate.year;
+      try {
+        return DateTime(year, month, day, defaultDate.hour, defaultDate.minute, defaultDate.second);
+      } catch (_) {}
+    }
+
     return defaultDate;
   }
 
@@ -626,124 +646,27 @@ class SmsAgent {
       ),
     );
 
-    // 2. Classify SMS
-    String? userName;
-    if (userId != null) {
+    // 2. Fetch existing accounts for resolution
+    List<Account> existingAccounts = [];
+    if (userId != null && userId.isNotEmpty) {
       try {
-        final user = await (_db.select(_db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
-        userName = user?.displayName;
+        existingAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
       } catch (e) {
-        dev.log('SmsAgent: Failed to fetch user info: $e');
-      }
-    }
-    final category = classifySms(body, userName);
-    dev.log('[Classification] Category: $category');
-    final resolvedDate = _parseTransactionDate(body, smsDateTime);
-
-    // 3. Extract Fields
-    double? amount;
-    if (category == 'Credit Card Bill Generated' || category == 'Credit Card Bill Reminder') {
-      final totalDueRegExp = RegExp(r'(?:total\s+due|total\s+amt\s+due|total\s+amount\s+due|due\s+amount|due\s+amt)\s*(?:rs\.?|inr|₹|\$)?\s*([\d,]+\.?\d*)', caseSensitive: false);
-      final totalDueMatch = totalDueRegExp.firstMatch(body);
-      if (totalDueMatch != null) {
-        amount = double.tryParse(totalDueMatch.group(1)!.replaceAll(',', ''));
-      }
-    }
-    if (amount == null) {
-      final amtMatch = _genericAmountRegExp.firstMatch(body) ?? _fallbackAmountRegExp.firstMatch(body);
-      if (amtMatch != null) {
-        amount = double.tryParse(amtMatch.group(1)!.replaceAll(',', ''));
+        dev.log('SmsAgent: Failed to fetch accounts: $e');
       }
     }
 
-    final acctMatch = _genericAccountRegExp.firstMatch(body);
-    final accountNum = acctMatch?.group(1);
-
-    String? referenceId;
-    final refMatch = _genericUpiRefRegExp.firstMatch(body);
-    if (refMatch != null) {
-      referenceId = refMatch.group(1);
-    }
-
-    String? upiId;
-    final upiMatch = _genericUpiIdRegExp.firstMatch(body);
-    if (upiMatch != null) {
-      upiId = upiMatch.group(1);
-    }
-
-    double? balance;
-    final balMatch = _balanceRegExp.firstMatch(body);
-    if (balMatch != null) {
-      balance = double.tryParse(balMatch.group(1)!.replaceAll(',', ''));
-    }
-
-    final lowerBody = body.toLowerCase();
-    String? matchedBank = SmsAccountMatcher.extractBankName(body, sender: sender);
-
-    String? cardName;
-    if (lowerBody.contains('pixel go')) {
-      cardName = 'Pixel Go';
-    } else if (lowerBody.contains('simplyclick') || lowerBody.contains('simply click')) {
-      cardName = 'SimplyCLICK';
-    } else if (lowerBody.contains('coral')) {
-      cardName = 'Coral';
-    } else if (lowerBody.contains('amazon pay icici')) {
-      cardName = 'Amazon Pay ICICI';
-    }
-
-    final accountType = detectAccountType(body, category);
-
-    bool isDebit = true;
-    if (lowerBody.contains('credited') || lowerBody.contains('received') || lowerBody.contains('deposited') || category == 'Salary' || category == 'Refund' || category == 'Cashback') {
-      isDebit = false;
-    }
-
-    String? paymentMode = SmsAccountMatcher.detectPaymentMethod(
-      smsText: body,
-      accountType: accountType == 'Credit Card' ? 'credit_card' : (accountType == 'Wallet' ? 'wallet' : 'savings'),
+    // 3. Process via ExpensoTransactionIntelligenceEngine
+    final engineResult = await _intelligenceEngine.processSms(
+      body: body,
+      receivedAt: smsDateTime,
+      sender: sender,
+      userId: userId ?? '',
+      existingAccounts: existingAccounts,
     );
 
-    String merchant = _extractMerchant(cleanBody, isDebit ? 'expense' : 'income', category);
-    if (merchant.isEmpty || merchant == 'General Merchant') {
-      if (lowerBody.contains('atm') || lowerBody.contains('cash withdrawal')) {
-        merchant = 'ATM Cash Withdrawal';
-      } else {
-        merchant = isDebit ? 'Local Purchase' : 'Cash/Bank Deposit';
-      }
-    }
-
-    DateTime? dueDate = _parseDueDate(body, smsDateTime);
-    int? billAmt;
-    int? minDueAmt;
-    if (category == 'Credit Card Bill Generated' || category == 'Credit Card Bill Reminder') {
-      billAmt = amount != null ? (amount * 100).round() : null;
-      final minDueReg = RegExp(
-        r'(?:minimum\s+due|min\s+due|minimum\s+amount\s+due|min\s+amt\s+due)\s*(?:is)?\s*(?:rs\.?|inr|₹|\$)?\s*([\d,]+\.?\d*)', 
-        caseSensitive: false
-      );
-      final minDueMatch = minDueReg.firstMatch(body);
-      if (minDueMatch != null) {
-        final val = double.tryParse(minDueMatch.group(1)!.replaceAll(',', ''));
-        if (val != null) minDueAmt = (val * 100).round();
-      }
-    }
-
-    String transactionType = isDebit ? 'expense' : 'income';
-    if (category == 'Credit Card Bill Generated' || category == 'Credit Card Bill Reminder' || category == 'EMI Reminder') {
-      transactionType = 'upcoming_bill';
-    } else if (category == 'Credit Card Payment') {
-      transactionType = 'credit_card_payment';
-    } else if (category == 'Internal Transfer' || category == 'ATM Withdrawal') {
-      transactionType = 'transfer';
-    } else if (category == 'Refund') {
-      transactionType = 'refund';
-    } else if (category == 'Cashback') {
-      transactionType = 'cashback';
-    } else if (category == 'Loan Disbursement') {
-      transactionType = 'loan';
-    } else if (category == 'Investment') {
-      transactionType = 'investment';
-    }
+    final category = engineResult.category;
+    final ext = engineResult.extracted;
 
     // 4. Evaluate Ignore Rules (Requirement 12)
     final ignoreCategories = [
@@ -755,76 +678,70 @@ class SmsAgent {
       return null;
     }
 
-    if (amount == null || amount <= 0) {
+    if (ext.amount <= 0) {
       await _logRejection(body, 'No valid transaction amount found', sender);
       return null;
     }
 
     // Generate duplicate fingerprint hash
-    final String cleanBankForHash = matchedBank ?? '';
-    final String cleanAccForHash = accountNum ?? '';
-    final int cleanAmtForHash = (amount * 100).round();
-    final String cleanMerchantForHash = merchant;
-    final String keyForHash = "${referenceId ?? ''}_${cleanBankForHash}_${cleanAccForHash}_${cleanAmtForHash}_${cleanMerchantForHash}_${isDebit}_${resolvedDate.millisecondsSinceEpoch}_$transactionType";
+    final String cleanBankForHash = ext.bankName ?? '';
+    final String cleanAccForHash = ext.accountNumber ?? '';
+    final int cleanAmtForHash = ext.amountInCents;
+    final String cleanMerchantForHash = ext.merchant;
+    final String transactionType = _mapTransactionType(category, ext.isDebit);
+    
+    final String keyForHash = "${ext.referenceId ?? ''}_${cleanBankForHash}_${cleanAccForHash}_${cleanAmtForHash}_${cleanMerchantForHash}_${ext.isDebit}_${ext.date.millisecondsSinceEpoch}_$transactionType";
     final String duplicateHash = md5.convert(utf8.encode(keyForHash)).toString();
 
-    // Confidence scores
-    double resolvedConfidence = 0.95;
-    if (category == 'Unknown' || merchant == 'General Merchant' || merchant == 'Local Purchase') {
-      resolvedConfidence = 0.85;
-    } else if (matchedBank == 'Generic' || accountNum == null) {
-      resolvedConfidence = 0.88;
-    } else if (category == 'Shopping' || category == 'Bills') {
-      resolvedConfidence = 0.89;
-    }
-
-    if (transactionType == 'transfer') {
-      bool destFound = false;
-      if (userId != null && merchant.isNotEmpty) {
-        try {
-          final existingAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
-          for (var acc in existingAccounts) {
-            final cleanBank = (acc.bankName ?? '').toLowerCase();
-            final cleanName = acc.name.toLowerCase();
-            final mLower = merchant.toLowerCase();
-            if (cleanBank.isNotEmpty && (mLower.contains(cleanBank) || cleanBank.contains(mLower))) {
-              destFound = true;
-              break;
-            }
-            if (cleanName.contains(mLower) || mLower.contains(cleanName)) {
-              destFound = true;
-              break;
-            }
-          }
-        } catch (_) {}
-      }
-      if (!destFound) {
-        resolvedConfidence = 0.85;
-      }
-    }
+    debugPrint("SMS_RECEIVED");
+    debugPrint("sender=${sender ?? 'Unknown'}");
+    debugPrint("SMS_CLASSIFICATION");
+    debugPrint("financial=${!ignoreCategories.contains(category)}");
+    debugPrint("SMS_DIRECTION");
+    debugPrint(ext.isDebit ? 'debit' : 'credit');
+    debugPrint("SMS_AMOUNT");
+    debugPrint("${ext.amount}");
+    debugPrint("SMS_BANK");
+    debugPrint("${ext.bankName ?? 'Unknown'}");
+    debugPrint("SMS_ACCOUNT");
+    debugPrint("${ext.accountNumber ?? 'Unknown'}");
+    debugPrint("SMS_DATE");
+    debugPrint(ext.date.toIso8601String().substring(0, 10));
+    debugPrint("SMS_REFERENCE");
+    debugPrint("${ext.referenceId ?? 'Unknown'}");
 
     // Save to ParsedSms Database table
     final parsedId = const Uuid().v4();
+    final accountType = detectAccountType(body, category);
+    final cardName = _detectCardName(body);
+    final paymentMode = SmsAccountMatcher.detectPaymentMethod(
+      smsText: body,
+      accountType: accountType == 'Credit Card' ? 'credit_card' : (accountType == 'Wallet' ? 'wallet' : 'savings'),
+    );
+    final isReminderOrGenerated = category.endsWith('Reminder') || category.contains('Generated') || category == 'BILL_GENERATED' || category == 'BILL_REMINDER';
+    final dueDate = isReminderOrGenerated ? _parseDueDate(body, smsDateTime) : null;
+    final billStatus = category == 'Credit Card Payment' ? 'paid' : (isReminderOrGenerated ? 'pending' : null);
+
     await _db.into(_db.parsedSms).insert(
       ParsedSmsCompanion.insert(
         id: parsedId,
         smsId: Value(rawId),
         sender: Value(sender ?? 'Unknown'),
-        receivedAt: Value(resolvedDate),
-        bankName: Value(matchedBank),
+        receivedAt: Value(ext.date),
+        bankName: Value(ext.bankName),
         accountType: Value(accountType),
-        accountLast4: Value(accountNum),
+        accountLast4: Value(ext.accountNumber),
         cardType: Value(cardName),
-        merchant: Value(merchant),
-        amount: Value((amount * 100).round()),
-        isDebit: Value(isDebit),
-        availableBalance: Value(balance != null ? (balance * 100).round() : null),
-        referenceNumber: Value(referenceId),
-        upiId: Value(upiId),
+        merchant: Value(ext.merchant),
+        amount: Value(ext.amountInCents),
+        isDebit: Value(ext.isDebit),
+        availableBalance: const Value(null),
+        referenceNumber: Value(ext.referenceId),
+        upiId: const Value(null),
         paymentMethod: Value(paymentMode),
         purpose: const Value(null),
-        billAmount: Value(billAmt),
-        minDue: Value(minDueAmt),
+        billAmount: Value(isReminderOrGenerated ? ext.amountInCents : null),
+        minDue: Value(isReminderOrGenerated ? ext.amountInCents ~/ 20 : null),
         outstandingAmount: const Value(null),
         dueDate: Value(dueDate),
         statementDate: const Value(null),
@@ -832,37 +749,36 @@ class SmsAgent {
         category: Value(category),
         subcategory: const Value(null),
         transactionType: Value(transactionType),
-        confidenceScore: Value(resolvedConfidence),
+        confidenceScore: Value(engineResult.validation.confidence),
         duplicateHash: Value(duplicateHash),
         createdAt: DateTime.now(),
       ),
     );
 
-    // Unique Account name format: [Bank Name] [Account Type] ****[Last Four Digits]
-    final String cleanBank = matchedBank ?? "Bank";
-    final String cleanType = accountType;
-    final String cleanLast4 = accountNum != null ? "****$accountNum" : "****XXXX";
-    String accountName = "$cleanBank $cleanType $cleanLast4";
-    if (lowerBody.contains('pixel go')) {
-      accountName = "HDFC Pixel Go ${accountNum ?? '1234'}";
+    // Unique Account name format
+    final String cleanBank = ext.bankName ?? "Bank";
+    final String cleanLast4 = ext.accountNumber != null ? "****${ext.accountNumber}" : "****XXXX";
+    String accountName = "$cleanBank $accountType $cleanLast4";
+    if (body.toLowerCase().contains('pixel go')) {
+      accountName = "HDFC Pixel Go ${ext.accountNumber ?? '1234'}";
     }
 
     final result = SmsAgentResult(
-      amount: amount,
-      merchant: merchant,
+      amount: ext.amount,
+      merchant: ext.merchant,
       transactionType: transactionType,
-      date: resolvedDate,
+      date: ext.date,
       account: accountName,
-      bank: matchedBank,
-      accountNumber: accountNum,
-      balance: balance,
-      referenceId: referenceId,
-      upiId: upiId,
+      bank: ext.bankName,
+      accountNumber: ext.accountNumber,
+      balance: null,
+      referenceId: ext.referenceId,
+      upiId: null,
       paymentMode: paymentMode,
-      confidence: resolvedConfidence,
+      confidence: engineResult.validation.confidence,
       category: category,
       accountType: accountType,
-      billStatus: category == 'Credit Card Payment' ? 'paid' : (category.endsWith('Reminder') || category.contains('Generated') ? 'pending' : null),
+      billStatus: billStatus,
       dueDate: dueDate,
     );
 
@@ -873,8 +789,8 @@ class SmsAgent {
           id: const Uuid().v4(),
           agentName: 'SMS Transaction Agent',
           actionType: 'SMS_PARSED',
-          decisionDescription: 'Parsed SMS successfully. Category: $category, Bank: $matchedBank, Amount: ₹$amount, Type: $transactionType, Account: $accountName',
-          confidenceScore: resolvedConfidence,
+          decisionDescription: 'Parsed SMS successfully. Category: $category, Bank: ${ext.bankName}, Amount: ₹${ext.amount}, Type: $transactionType, Account: $accountName',
+          confidenceScore: engineResult.validation.confidence,
           timestamp: DateTime.now(),
         ),
       );
@@ -882,16 +798,48 @@ class SmsAgent {
       dev.log('SmsAgent: Failed to save agent log: $e');
     }
 
-    dev.log('[SMS Parsed] Amount: $amount, Type: $transactionType, Account: $accountNum, Merchant: $merchant, Date: $resolvedDate, Ref: $referenceId');
-
-    // AI Validation Gate (Requirement 9)
-    final isValid = await validateSmsWithAI(body, result);
-    if (!isValid) {
-      await _logRejection(body, 'AI Validation failed or returned low confidence', sender);
-      return null;
-    }
+    dev.log('[SMS Parsed] Amount: ${ext.amount}, Type: $transactionType, Account: ${ext.accountNumber}, Merchant: ${ext.merchant}, Date: ${ext.date}, Ref: ${ext.referenceId}');
 
     return result;
+  }
+
+  String _mapTransactionType(String category, bool isDebit) {
+    if (category == 'Credit Card Bill Generated' || category == 'Credit Card Bill Reminder' || category == 'EMI Reminder' || category == 'BILL_GENERATED' || category == 'BILL_REMINDER') {
+      return 'upcoming_bill';
+    }
+    if (category == 'Credit Card Payment') {
+      return 'credit_card_payment';
+    }
+    if (category == 'Internal Transfer' || category == 'ATM Withdrawal' || category == 'SELF_TRANSFER' || category == 'TRANSFER') {
+      return 'transfer';
+    }
+    if (category == 'Refund') {
+      return 'refund';
+    }
+    if (category == 'Cashback') {
+      return 'cashback';
+    }
+    if (category == 'Loan Disbursement') {
+      return 'loan';
+    }
+    if (category == 'Investment') {
+      return 'investment';
+    }
+    return isDebit ? 'expense' : 'income';
+  }
+
+  String? _detectCardName(String body) {
+    final lower = body.toLowerCase();
+    if (lower.contains('pixel go')) {
+      return 'Pixel Go';
+    } else if (lower.contains('simplyclick') || lower.contains('simply click')) {
+      return 'SimplyCLICK';
+    } else if (lower.contains('coral')) {
+      return 'Coral';
+    } else if (lower.contains('amazon pay icici')) {
+      return 'Amazon Pay ICICI';
+    }
+    return null;
   }
 
   Future<bool> _runLocalAiValidation(String body, String category, double amount, String type, DateTime date) async {

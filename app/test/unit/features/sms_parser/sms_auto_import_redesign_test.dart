@@ -655,5 +655,114 @@ void main() {
       expect(inserted.merchant, equals('R P G V Ranganatham Agenc'));
       expect(inserted.date, equals(DateTime(2026, 7, 17, testDate.hour, testDate.minute, testDate.second)));
     });
+
+    test('HDFC specific Sent Rs.98 format (TEST 1)', () async {
+      const sms = 'Sent Rs.98.00\n'
+          'From HDFC Bank A/C *3726\n'
+          'To JINU M BABU\n'
+          'On 20/08/26\n'
+          'Ref 623282588688\n'
+          'Not You?\n'
+          'Call 18002586161/SMS BLOCK\n'
+          'UPI to 7308080808';
+
+      final result = await smsAgent.processSms(sms, testDate, userId: userId, sender: 'VM-HDFCBK-T');
+
+      expect(result, isNotNull);
+      expect(result!.transactionType, equals('expense'));
+      expect(result.amount, equals(98.00));
+      expect(result.accountNumber, equals('3726'));
+      expect(result.bank, equals('HDFC'));
+      expect(result.referenceId, equals('623282588688'));
+      expect(result.date.year, equals(2026));
+      expect(result.date.month, equals(8));
+      expect(result.date.day, equals(20));
+      expect(result.confidence, greaterThanOrEqualTo(0.90));
+    });
+
+    test('HDFC Debited Rs.1,000 format (TEST 2)', () async {
+      const sms = 'Debited Rs.1,000 from HDFC Bank A/C *1234';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId);
+
+      expect(result, isNotNull);
+      expect(result!.transactionType, equals('expense'));
+      expect(result.amount, equals(1000.00));
+      expect(result.accountNumber, equals('1234'));
+    });
+
+    test('HDFC Received Rs.5,000 format (TEST 3)', () async {
+      const sms = 'Received Rs.5,000 in HDFC Bank A/C *1234';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId);
+
+      expect(result, isNotNull);
+      expect(result!.transactionType, equals('income'));
+      expect(result.amount, equals(5000.00));
+      expect(result.accountNumber, equals('1234'));
+    });
+
+    test('UPI payment of Rs.250 to merchant (TEST 4)', () async {
+      const sms = 'UPI payment of Rs.250 to merchant';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId);
+
+      expect(result, isNotNull);
+      expect(result!.transactionType, equals('expense'));
+      expect(result.amount, equals(250.00));
+    });
+
+    test('OTP SMS (TEST 5)', () async {
+      const sms = 'Your one-time password OTP is 482938 for payment of Rs 100.';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId);
+      expect(result, isNull);
+    });
+
+    test('Promotional SMS (TEST 6)', () async {
+      const sms = 'Get pre-approved personal loan offer up to Rs. 5 Lakhs now.';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId);
+      expect(result, isNull);
+    });
+
+    test('Regression: HDFC Sent Rs.98 format with precise banking structure', () async {
+      const sms = 'Sent Rs.98.00\nFrom HDFC Bank A/C *3726\nTo JINU M BABU\nOn 20/08/26\nRef 623282588688';
+      final result = await smsAgent.processSms(sms, testDate, userId: userId, sender: 'VM-HDFCBK-T');
+
+      expect(result, isNotNull);
+      expect(result!.transactionType, equals('expense'));
+      expect(result.amount, equals(98.00));
+      expect(result.accountNumber, equals('3726'));
+      expect(result.bank, equals('HDFC'));
+      expect(result.referenceId, equals('623282588688'));
+      expect(result.date.year, equals(2026));
+      expect(result.date.month, equals(8));
+      expect(result.date.day, equals(20));
+      expect(result.confidence, greaterThanOrEqualTo(0.90));
+    });
+
+    test('Regression: Precise duplicate and boundary merging check', () async {
+      const sms = 'Sent Rs.98.00\nFrom HDFC Bank A/C *3726\nTo JINU M BABU\nOn 20/08/26\nRef 623282588688';
+      
+      await database.into(database.transactions).insert(
+        Transaction(
+          id: const Uuid().v4(),
+          userId: userId,
+          amount: 9800,
+          currency: 'INR',
+          source: 'sms',
+          isRecurring: false,
+          syncStatus: 'pending',
+          date: testDate,
+          description: 'HDFC Bank transaction',
+          merchant: 'Jinu M Babu',
+          categoryId: 'cat_shopping',
+          type: 'expense',
+          referenceNumber: '623282588688',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      final duplicateResult = await smsAgent.processSms(sms, testDate, userId: userId, sender: 'VM-HDFCBK-T');
+      expect(duplicateResult, isNotNull);
+      expect(duplicateResult!.confidence, equals(0.50));
+    });
   });
 }

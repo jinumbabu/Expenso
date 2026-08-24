@@ -152,14 +152,14 @@ void main() {
       expect(find.text('SMS Transactions'), findsOneWidget);
 
       // Verify Scanner control card elements
-      expect(find.text('SMS Transaction Scanner'), findsOneWidget);
+      expect(find.text('SMS TRANSACTION BACKGROUND MONITOR'), findsOneWidget);
       expect(find.text('✓ Enabled'), findsOneWidget);
       expect(find.text('Scan SMS'), findsOneWidget);
 
       // Verify Stats rendering
-      expect(find.text('Scan'), findsOneWidget);
+      expect(find.text('Scanned'), findsOneWidget);
       expect(find.text('248'), findsOneWidget);
-      expect(find.text('Transaction'), findsOneWidget);
+      expect(find.text('Transactions'), findsOneWidget);
       expect(find.text('18'), findsOneWidget);
       expect(find.text('Pending'), findsOneWidget);
       expect(find.text('0'), findsOneWidget); // pending count (0 from drafts stream)
@@ -171,7 +171,7 @@ void main() {
       await tester.pump();
 
       // Verify scanning progress indicator or text
-      expect(find.text('Scanning SMS...'), findsOneWidget);
+      expect(find.text('Scanning...'), findsOneWidget);
 
       // Settle animation and scan async completion
       await tester.pump(const Duration(milliseconds: 20));

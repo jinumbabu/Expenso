@@ -1170,7 +1170,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                       labelStyle: TextStyle(color: currentType == null ? const Color(0xFF00E5FF) : Colors.white60),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Expanded(
                                     child: ChoiceChip(
                                       label: const Center(child: Text('Expense')),
@@ -1181,7 +1181,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                       labelStyle: TextStyle(color: currentType == 'expense' ? const Color(0xFFFF3B30) : Colors.white60),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Expanded(
                                     child: ChoiceChip(
                                       label: const Center(child: Text('Income')),
@@ -1190,6 +1190,17 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                       selectedColor: const Color(0xFF0066FF).withOpacity(0.15),
                                       backgroundColor: Colors.white.withOpacity(0.02),
                                       labelStyle: TextStyle(color: currentType == 'income' ? const Color(0xFF0066FF) : Colors.white60),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: ChoiceChip(
+                                      label: const Center(child: Text('Transfer')),
+                                      selected: currentType == 'transfer',
+                                      onSelected: (val) => ref.read(filterTypeProvider.notifier).state = val ? 'transfer' : null,
+                                      selectedColor: const Color(0xFFFFB703).withOpacity(0.15),
+                                      backgroundColor: Colors.white.withOpacity(0.02),
+                                      labelStyle: TextStyle(color: currentType == 'transfer' ? const Color(0xFFFFB703) : Colors.white60),
                                     ),
                                   ),
                                 ],

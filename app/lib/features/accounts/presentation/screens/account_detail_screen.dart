@@ -12,6 +12,7 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../providers/accounts_provider.dart';
 import '../providers/account_formatters.dart';
 import 'account_form_sheet.dart';
+import '../../../../core/services/financial_calculation_service.dart';
 
 class AccountDetailScreen extends ConsumerStatefulWidget {
   final String accountId;
@@ -188,8 +189,8 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
                         
                         for (var tx in txs) {
                           if (tx.date.isAfter(startOfMonth.subtract(const Duration(seconds: 1)))) {
-                            final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary' || tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
-                            final isDebit = tx.type == 'expense' || tx.type == 'credit_card_purchase' || tx.type == 'loan_emi' || tx.type == 'subscription' || tx.type == 'investment' || tx.type == 'cash_withdrawal' || tx.type == 'transfer_debit' || tx.type == 'credit_card_payment_debit';
+                            final isCredit = FinancialCalculationService.isCredit(tx, account.id);
+                            final isDebit = FinancialCalculationService.isDebit(tx, account.id);
                             
                             if (isCredit) {
                               income += tx.amount.toInt();
@@ -793,8 +794,8 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
 
     for (int i = activeTxs.length - 1; i >= 1; i--) {
       final tx = activeTxs[i];
-      final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary' || tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
-      final isDebit = tx.type == 'expense' || tx.type == 'credit_card_purchase' || tx.type == 'loan_emi' || tx.type == 'subscription' || tx.type == 'investment' || tx.type == 'cash_withdrawal' || tx.type == 'transfer_debit' || tx.type == 'credit_card_payment_debit';
+      final isCredit = FinancialCalculationService.isCredit(tx, account.id);
+      final isDebit = FinancialCalculationService.isDebit(tx, account.id);
 
       if (isCC) {
         if (isCredit) {
@@ -936,7 +937,7 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
   }
 
   Widget _buildTransactionItem(Transaction tx, Account account) {
-    final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary' || tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
+    final isCredit = FinancialCalculationService.isCredit(tx, account.id);
     final amountColor = isCredit ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30);
 
     return InkWell(

@@ -10,7 +10,8 @@ import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'firebase_options.dart';
 import 'core/routes/app_router.dart';
 import 'core/services/notification_service.dart';
-import 'core/services/sms_background_processor.dart';
+import 'core/services/sms/sms_transaction_pipeline.dart';
+import 'core/services/sms/sms_service_bootstrap.dart';
 import 'core/services/sms_agent.dart';
 import 'core/services/ledger_agent.dart';
 import 'core/database/app_database.dart';
@@ -57,6 +58,9 @@ class ExpensoApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Eagerly initialize SMS monitoring bootstrap service on application launch
+    ref.watch(smsServiceBootstrapProvider);
+
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
@@ -132,7 +136,7 @@ void backgroundSmsCallback() {
               final ledgerAgent = container.read(ledgerAgentProvider);
               final notificationService = container.read(notificationServiceProvider);
 
-              await SmsBackgroundProcessor.processIncomingSms(
+              await SmsTransactionPipeline.processIncomingSms(
                 sender: sender,
                 body: body,
                 date: date,

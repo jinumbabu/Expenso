@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/budget_period_helper.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../data/repositories/budget_repository_impl.dart';
@@ -121,23 +122,23 @@ final Provider<AsyncValue<List<BudgetStatus>>> budgetStatusListProvider =
             data: (categories) {
               final categoriesMap = {for (var c in categories) c.id: c};
 
-              // Filter transactions to get current month expenses
               final now = DateTime.now();
-              final startOfMonth = DateTime(now.year, now.month, 1);
-
-              final currentMonthExpenses = txs.where((tx) =>
-                tx.type == 'expense' &&
-                (tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth))
-              ).toList();
 
               final list = budgets.map((budget) {
+                final range = getBudgetPeriodRange(budget, now);
+                final periodExpenses = txs.where((tx) =>
+                  tx.type == 'expense' &&
+                  (tx.date.isAfter(range.start) || tx.date.isAtSameMomentAs(range.start)) &&
+                  (tx.date.isBefore(range.end) || tx.date.isAtSameMomentAs(range.end))
+                ).toList();
+
                 int spent = 0;
                 if (budget.categoryId == null) {
-                  // Overall budget: sum all current month expenses
-                  spent = currentMonthExpenses.fold(0, (sum, tx) => sum + tx.amount);
+                  // Overall budget: sum all period expenses
+                  spent = periodExpenses.fold(0, (sum, tx) => sum + tx.amount);
                 } else {
-                  // Category budget: sum matching current month expenses
-                  spent = currentMonthExpenses
+                  // Category budget: sum matching period expenses
+                  spent = periodExpenses
                       .where((tx) => tx.categoryId == budget.categoryId)
                       .fold(0, (sum, tx) => sum + tx.amount);
                 }

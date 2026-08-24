@@ -108,7 +108,18 @@ class FinancialCalculationService {
            type == 'transfer_credit' || 
            type == 'transfer_debit' ||
            type == 'credit_card_payment_credit' ||
-           type == 'credit_card_payment_debit';
+           type == 'credit_card_payment_debit' ||
+           type == 'cash_withdrawal' ||
+           type == 'cash_deposit';
+  }
+
+  /// Checks if a transaction is a Single-Row Transfer (stores both source and destination account IDs).
+  static bool isSingleRowTransfer(Transaction tx) {
+    final type = tx.type.toLowerCase();
+    return type == 'transfer' || 
+           type == 'credit_card_payment' || 
+           type == 'cash_withdrawal' || 
+           type == 'cash_deposit';
   }
 
   /// Checks if a transaction is categorized as Income.
@@ -121,7 +132,6 @@ class FinancialCalculationService {
            type == 'cashback' || 
            type == 'interest' || 
            type == 'deposit' || 
-           type == 'cash_deposit' ||
            type == 'reward' || 
            type == 'dividend' || 
            type == 'reversal';
@@ -150,27 +160,36 @@ class FinancialCalculationService {
   /// Checks if a transaction is a Credit (increases asset balance or reduces credit card outstanding).
   static bool isCredit(Transaction tx, String accountId) {
     final type = tx.type.toLowerCase();
-    final isSource = tx.accountId == accountId;
-    final isDest = tx.referenceNumber == accountId;
 
-    if (isSource) {
+    if (isTransfer(tx)) {
+      // 1. Explicit credit subtypes (always credit on its accountId)
+      if (type == 'transfer_credit' || 
+          type == 'transfer_in' || 
+          type == 'credit_card_payment_credit') {
+        return tx.accountId == accountId;
+      }
+      
+      // 2. Explicit debit subtypes (never credit on its accountId)
+      if (type == 'transfer_debit' || 
+          type == 'transfer_out' || 
+          type == 'credit_card_payment_debit') {
+        return false;
+      }
+
+      // 3. Generic single-row transfers: credit on destination account
+      return tx.referenceNumber == accountId;
+    }
+
+    if (tx.accountId == accountId) {
       return type == 'income' || 
              type == 'salary' || 
              type == 'refund' || 
              type == 'cashback' || 
              type == 'interest' || 
-             type == 'transfer_in' || 
-             type == 'cash_deposit' ||
              type == 'deposit' || 
              type == 'reward' || 
              type == 'dividend' || 
-             type == 'reversal' ||
-             type == 'transfer_credit' || 
-             type == 'credit_card_payment_credit';
-    } else if (isDest) {
-      return type == 'transfer' || 
-             type == 'credit_card_payment' || 
-             type == 'transfer_in';
+             type == 'reversal';
     }
     return false;
   }
@@ -178,13 +197,30 @@ class FinancialCalculationService {
   /// Checks if a transaction is a Debit (decreases asset balance or increases credit card outstanding).
   static bool isDebit(Transaction tx, String accountId) {
     final type = tx.type.toLowerCase();
-    final isSource = tx.accountId == accountId;
 
-    if (isSource) {
+    if (isTransfer(tx)) {
+      // 1. Explicit debit subtypes (always debit on its accountId)
+      if (type == 'transfer_debit' || 
+          type == 'transfer_out' || 
+          type == 'credit_card_payment_debit') {
+        return tx.accountId == accountId;
+      }
+
+      // 2. Explicit credit subtypes (never debit on its accountId)
+      if (type == 'transfer_credit' || 
+          type == 'transfer_in' || 
+          type == 'credit_card_payment_credit') {
+        return false;
+      }
+
+      // 3. Generic single-row transfers: debit on source account
+      return tx.accountId == accountId;
+    }
+
+    if (tx.accountId == accountId) {
       return type == 'expense' || 
              type == 'purchase' || 
              type == 'withdrawal' || 
-             type == 'transfer_out' || 
              type == 'atm' || 
              type == 'fees' || 
              type == 'investment' || 
@@ -195,11 +231,7 @@ class FinancialCalculationService {
              type == 'debit_card_purchase' || 
              type == 'recharge' || 
              type == 'insurance' || 
-             type == 'tax' ||
-             type == 'transfer_debit' || 
-             type == 'credit_card_payment_debit' ||
-             type == 'transfer' || 
-             type == 'credit_card_payment';
+             type == 'tax';
     }
     return false;
   }

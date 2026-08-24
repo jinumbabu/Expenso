@@ -5,6 +5,8 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/financial_calculation_service.dart';
+import '../../../../core/services/budget_period_helper.dart';
+import '../../../../core/security/secure_storage_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../data/repositories/expense_repository_impl.dart';
@@ -167,7 +169,8 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       _ref.invalidate(accountsProvider);
       await loadTransactions();
       if (_userId != null) {
-        _checkBudgetAlerts(_userId);
+        final categoryIds = tx.type == 'expense' ? {tx.categoryId} : <String?>{};
+        _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
       }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
@@ -193,6 +196,8 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       state = const AsyncValue.loading();
       
       final repo = _ref.read(expenseRepositoryProvider);
+      final oldTx = await repo.getTransactionById(tx.id);
+
       if (tx.type == 'transfer_debit' || tx.type == 'transfer_credit') {
         final otherSide = await getOtherSideOfTransfer(tx);
         if (otherSide != null) {
@@ -231,7 +236,14 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       _ref.invalidate(accountsProvider);
       await loadTransactions();
       if (_userId != null) {
-        _checkBudgetAlerts(_userId);
+        final categoryIds = <String?>{};
+        if (oldTx != null && oldTx.type == 'expense') {
+          categoryIds.add(oldTx.categoryId);
+        }
+        if (tx.type == 'expense') {
+          categoryIds.add(tx.categoryId);
+        }
+        _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
       }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
@@ -254,9 +266,15 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
         await _deleteTransaction.execute(id);
       }
 
-      
       _ref.invalidate(accountsProvider);
       await loadTransactions();
+      if (_userId != null) {
+        final categoryIds = <String?>{};
+        if (tx != null && tx.type == 'expense') {
+          categoryIds.add(tx.categoryId);
+        }
+        _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
+      }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
@@ -309,14 +327,14 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       await loadTransactions();
       
       if (_userId != null) {
-        _checkBudgetAlerts(_userId);
+        _checkBudgetAlerts(_userId, affectedCategoryIds: {expenseTx.categoryId});
       }
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
   }
 
-  Future<void> _checkBudgetAlerts(String userId) async {
+  Future<void> _checkBudgetAlerts(String userId, {Set<String?>? affectedCategoryIds}) async {
     try {
       final budgetRepo = _ref.read(budgetRepositoryProvider);
       final budgets = await budgetRepo.getBudgetsForUser(userId);
@@ -325,48 +343,114 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       final db = _ref.read(databaseProvider);
       final txs = await db.transactionDao.getTransactionsForUser(userId);
       final now = DateTime.now();
-      final startOfMonth = DateTime(now.year, now.month, 1);
-
-      final currentMonthExpenses = txs.where((tx) =>
-        tx.type == 'expense' &&
-        (tx.date.isAfter(startOfMonth) || tx.date.isAtSameMomentAs(startOfMonth))
-      ).toList();
+      final secureStorage = _ref.read(secureStorageProvider);
+      final notificationService = _ref.read(notificationServiceProvider);
 
       for (var budget in budgets) {
+        if (affectedCategoryIds != null && 
+            budget.categoryId != null && 
+            !affectedCategoryIds.contains(budget.categoryId)) {
+          continue;
+        }
+
+        final range = getBudgetPeriodRange(budget, now);
+        final periodExpenses = txs.where((tx) =>
+          tx.type == 'expense' &&
+          (tx.date.isAfter(range.start) || tx.date.isAtSameMomentAs(range.start)) &&
+          (tx.date.isBefore(range.end) || tx.date.isAtSameMomentAs(range.end))
+        ).toList();
+
         int spent = 0;
         if (budget.categoryId == null) {
-          spent = currentMonthExpenses.fold(0, (sum, tx) => sum + tx.amount);
+          spent = periodExpenses.fold(0, (sum, tx) => sum + tx.amount);
         } else {
-          spent = currentMonthExpenses
+          spent = periodExpenses
               .where((tx) => tx.categoryId == budget.categoryId)
               .fold(0, (sum, tx) => sum + tx.amount);
         }
 
         final double percent = budget.amount == 0 ? 0.0 : spent / budget.amount;
-        final notificationService = _ref.read(notificationServiceProvider);
+        final categoryName = budget.categoryId != null 
+            ? (await db.categoryDao.getCategoryById(budget.categoryId!))?.name ?? 'Category'
+            : 'Overall';
 
-        if (spent > budget.amount) {
-          final categoryName = budget.categoryId != null 
-              ? (await db.categoryDao.getCategoryById(budget.categoryId!))?.name ?? 'Category'
-              : 'Overall';
+        for (final threshold in [80, 100]) {
+          final double thresholdFraction = threshold / 100.0;
+          final bool isCrossed = percent >= thresholdFraction;
           
-          await notificationService.sendProactiveAlert(
-            userId,
-            title: 'Budget Exceeded! ⚠️',
-            body: 'You have spent ₹${(spent / 100.0).toStringAsFixed(2)} exceeding your $categoryName budget of ₹${(budget.amount / 100.0).toStringAsFixed(2)}.',
-            priority: 'critical',
-          );
-        } else if (percent >= 0.80) {
-          final categoryName = budget.categoryId != null 
-              ? (await db.categoryDao.getCategoryById(budget.categoryId!))?.name ?? 'Category'
-              : 'Overall';
+          final String periodKey = range.start.toIso8601String().substring(0, 10);
+          final String alertKey = 'budget_alert_triggered:${budget.id}:$periodKey:$threshold';
+          final String notificationId = 'BUDGET_ALERT:${budget.id}:$periodKey:$threshold';
 
-          await notificationService.sendProactiveAlert(
-            userId,
-            title: 'Budget Alert ⚠️',
-            body: 'You have used ${(percent * 100).toStringAsFixed(0)}% of your $categoryName budget (₹${(spent / 100.0).toStringAsFixed(2)} / ₹${(budget.amount / 100.0).toStringAsFixed(2)}).',
-            priority: 'high',
-          );
+          if (isCrossed) {
+            final alreadyTriggered = (await secureStorage.read(alertKey)) == 'true';
+            final existsInDb = (await db.notificationDao.getNotificationById(notificationId)) != null;
+            final bool shouldTrigger = !alreadyTriggered && !existsInDb;
+
+            debugPrint('''
+Budget Alert Check:
+budgetId: ${budget.id}
+budgetName: $categoryName
+period: $periodKey
+spent: $spent
+limit: ${budget.amount}
+usage: ${(percent * 100).toStringAsFixed(2)}%
+threshold: $threshold%
+shouldTrigger: $shouldTrigger
+alreadyTriggered: ${alreadyTriggered || existsInDb}
+''');
+
+            if (shouldTrigger) {
+              await secureStorage.write(alertKey, 'true');
+
+              final String title = threshold == 100 ? 'Budget Exceeded! ⚠️' : 'Budget Alert ⚠️';
+              final String body = threshold == 100 
+                  ? 'You have spent ₹${(spent / 100.0).toStringAsFixed(2)} exceeding your $categoryName budget of ₹${(budget.amount / 100.0).toStringAsFixed(2)}.'
+                  : 'You have used ${(percent * 100).toStringAsFixed(0)}% of your $categoryName budget (₹${(spent / 100.0).toStringAsFixed(2)} / ₹${(budget.amount / 100.0).toStringAsFixed(2)}).';
+              final String priority = threshold == 100 ? 'critical' : 'high';
+
+              await notificationService.sendProactiveAlert(
+                userId,
+                id: notificationId,
+                title: title,
+                body: body,
+                priority: priority,
+              );
+
+              debugPrint('''
+Budget Alert Created:
+budgetId: ${budget.id}
+threshold: $threshold%
+period: $periodKey
+''');
+            } else {
+              debugPrint('''
+Budget Alert Skipped:
+budgetId: ${budget.id}
+threshold: $threshold%
+period: $periodKey
+reason: already_triggered
+''');
+            }
+          } else {
+            final alreadyTriggered = (await secureStorage.read(alertKey)) == 'true';
+            if (alreadyTriggered) {
+              await secureStorage.delete(alertKey);
+            }
+
+            debugPrint('''
+Budget Alert Check:
+budgetId: ${budget.id}
+budgetName: $categoryName
+period: $periodKey
+spent: $spent
+limit: ${budget.amount}
+usage: ${(percent * 100).toStringAsFixed(2)}%
+threshold: $threshold%
+shouldTrigger: false
+alreadyTriggered: false
+''');
+          }
         }
       }
     } catch (e) {
@@ -540,7 +624,13 @@ final Provider<List<Transaction>> filteredTransactionsProvider = Provider<List<T
         if (categoryId != null && tx.categoryId != categoryId) return false;
 
         // Type Filter
-        if (type != null && tx.type != type) return false;
+        if (type != null) {
+          if (type == 'transfer') {
+            if (!FinancialCalculationService.isTransfer(tx)) return false;
+          } else {
+            if (tx.type != type) return false;
+          }
+        }
 
         // Payment Method Filter
         if (pmId != null && tx.paymentMethodId != pmId) return false;

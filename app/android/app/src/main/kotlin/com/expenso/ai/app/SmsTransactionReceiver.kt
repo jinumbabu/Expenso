@@ -23,25 +23,14 @@ class SmsTransactionReceiver : BroadcastReceiver() {
 
                 Log.d(TAG, "SMS received from $sender")
 
-                val channel = methodChannel
-                if (channel != null) {
-                    Log.d(TAG, "App UI is running. Forwarding to foreground channel.")
-                    val data = mapOf(
-                        "sender" to sender,
-                        "body" to body,
-                        "timestamp" to timestamp
-                    )
-                    channel.invokeMethod("onSmsReceived", data)
-                } else {
-                    Log.d(TAG, "App UI is NOT running. Launching SmsBackgroundService.")
-                    if (context != null) {
-                        val serviceIntent = Intent(context, SmsBackgroundService::class.java).apply {
-                            putExtra("sender", sender)
-                            putExtra("body", body)
-                            putExtra("timestamp", timestamp)
-                        }
-                        SmsBackgroundService.enqueueWork(context, serviceIntent)
+                Log.d(TAG, "SMS received from $sender. Launching SmsBackgroundService.")
+                if (context != null) {
+                    val serviceIntent = Intent(context, SmsBackgroundService::class.java).apply {
+                        putExtra("sender", sender)
+                        putExtra("body", body)
+                        putExtra("timestamp", timestamp)
                     }
+                    SmsBackgroundService.enqueueWork(context, serviceIntent)
                 }
             }
         }

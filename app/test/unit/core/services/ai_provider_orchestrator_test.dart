@@ -112,6 +112,9 @@ void main() {
         topSpendingCategories: [],
         recentFinancialTrends: [],
         accountSummary: 'SBI Savings: ₹5,000.00\nHDFC Credit Card: -₹500.00',
+        creditCardOutstanding: 500.0,
+        carryForward: 0.0,
+        period: 'June 2026',
       );
 
       final response = await provider.chat('What is my balance?', context);
@@ -133,10 +136,13 @@ void main() {
         topSpendingCategories: ['Food: ₹120.00'],
         recentFinancialTrends: ['Spending increased'],
         accountSummary: 'SBI Savings: ₹5,000.00\nHDFC Credit Card: -₹500.00',
+        creditCardOutstanding: 500.0,
+        carryForward: 0.0,
+        period: 'June 2026',
       );
 
       final prompt = context.toPromptString();
-      expect(prompt, contains('Current Balance: INR 5000.00'));
+      expect(prompt, contains('Current Balance (Net Cash Flow): INR 5000.00'));
       expect(prompt, contains('Health Score (0-100): 85'));
       expect(prompt, contains('Food: ₹120.00'));
       expect(prompt, contains('Spending increased'));

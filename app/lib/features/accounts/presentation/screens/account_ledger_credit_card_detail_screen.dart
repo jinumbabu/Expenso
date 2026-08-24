@@ -12,6 +12,7 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../providers/accounts_provider.dart';
 import '../providers/account_formatters.dart';
 import 'account_form_sheet.dart';
+import '../../../../core/services/financial_calculation_service.dart';
 
 class AccountLedgerCreditCardDetailScreen extends ConsumerStatefulWidget {
   final String accountId;
@@ -715,8 +716,8 @@ class _AccountLedgerCreditCardDetailScreenState extends ConsumerState<AccountLed
 
     for (int i = activeTxs.length - 1; i >= 1; i--) {
       final tx = activeTxs[i];
-      final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary' || tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
-      final isDebit = tx.type == 'expense' || tx.type == 'credit_card_purchase' || tx.type == 'loan_emi' || tx.type == 'subscription' || tx.type == 'investment' || tx.type == 'cash_withdrawal' || tx.type == 'transfer_debit' || tx.type == 'credit_card_payment_debit';
+      final isCredit = FinancialCalculationService.isCredit(tx, account.id);
+      final isDebit = FinancialCalculationService.isDebit(tx, account.id);
 
       if (isCredit) {
         tempBalance += tx.amount.toInt();
@@ -883,7 +884,7 @@ class _AccountLedgerCreditCardDetailScreenState extends ConsumerState<AccountLed
   }
 
   Widget _buildTransactionItem(Transaction tx, Account account) {
-    final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary' || tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
+    final isCredit = FinancialCalculationService.isCredit(tx, account.id);
     final amountColor = isCredit ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30);
     
     return InkWell(
@@ -946,7 +947,7 @@ class _AccountLedgerCreditCardDetailScreenState extends ConsumerState<AccountLed
     showDialog(
       context: context,
       builder: (context) {
-        final isCredit = tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback' || tx.type == 'reward' || tx.type == 'salary';
+        final isCredit = FinancialCalculationService.isCredit(tx, widget.accountId);
         final amountColor = isCredit ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30);
         return AlertDialog(
           backgroundColor: const Color(0xFF0F1A1C),
