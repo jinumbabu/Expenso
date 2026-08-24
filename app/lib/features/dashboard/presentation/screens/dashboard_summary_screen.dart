@@ -564,7 +564,7 @@ class DashboardSummaryScreen extends ConsumerWidget {
               onTap: () => context.push('/advisor'),
               child: EcgPulseRing(
                 healthScore: healthScore,
-                size: 34,
+                size: 28,
                 ringColor: healthColor,
                 isAnimated: false,
               ),

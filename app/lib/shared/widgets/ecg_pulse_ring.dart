@@ -60,22 +60,23 @@ class _EcgPulseRingState extends State<EcgPulseRing> with SingleTickerProviderSt
                   color: widget.ringColor,
                 ),
               ),
-              // Inner ECG pulse animation
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: EcgPainter(
-                    animationValue: widget.isAnimated ? _controller.value : 0.0,
-                    pulseColor: widget.ringColor.withOpacity(0.5),
+              // Inner ECG pulse animation - only rendered when animated
+              if (widget.isAnimated)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: EcgPainter(
+                      animationValue: _controller.value,
+                      pulseColor: widget.ringColor.withOpacity(0.5),
+                    ),
                   ),
                 ),
-              ),
               // Center score text
               Center(
                 child: Text(
                   '$clampedScore',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: widget.size * 0.32,
+                    fontSize: widget.size > 40 ? widget.size * 0.32 : widget.size * 0.40,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
