@@ -907,35 +907,64 @@ class DashboardSummaryScreen extends ConsumerWidget {
       borderColor = const Color(0xFFFF3B30).withOpacity(0.08);
     }
 
+    String displayValue = value;
+    if (title == 'Income' && !value.startsWith('+')) {
+      displayValue = '+$value';
+    } else if (title == 'Expenses' && !value.startsWith('-')) {
+      displayValue = '-$value';
+    } else if (title == 'Carry Forward') {
+      if (isPositive && !value.startsWith('+')) {
+        displayValue = '+$value';
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 12),
-          ),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white38, fontSize: 9.5)),
-                const SizedBox(height: 1),
-                PrivacyText(
-                  rawValue: value,
-                  style: TextStyle(color: valueColor, fontSize: 11.5, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(3.5),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.12),
+                  shape: BoxShape.circle,
                 ),
-              ],
+                child: Icon(icon, color: iconColor, size: 10.5),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: PrivacyText(
+              rawValue: displayValue,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
