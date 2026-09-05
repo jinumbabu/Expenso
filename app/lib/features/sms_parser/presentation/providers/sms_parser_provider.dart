@@ -18,6 +18,7 @@ import '../../../../core/services/ledger_agent.dart';
 import '../../../../core/services/parser_agent.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/sms_account_matcher.dart';
+import '../../../../core/services/expenso_transaction_intelligence_engine.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
@@ -189,8 +190,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
       auditLogger = _ref.read(auditLoggerProvider);
     } catch (_) {}
     _permissionManager = SmsPermissionManager(auditLogger);
-    _loadLastSyncTime();
-    _loadStats();
+    loadLastSyncTime();
+    loadStats();
     _runStartupSync();
 
     // Listen to changes in the global smsMonitorStatusProvider
@@ -210,12 +211,13 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
       autoImportEnabled: status.automaticDetectionActive,
       isInboxAccessible: status.receiverAvailable,
       lastProcessedTime: status.lastProcessedAt,
+      lastSyncTime: status.lastProcessedAt,
       lastError: status.lastError,
       backgroundReceiverStatus: status.backgroundMonitorReady == SmsBackgroundMonitorReadyState.ready ? "READY" : "ERROR",
     );
   }
 
-  Future<void> _loadStats() async {
+  Future<void> loadStats() async {
     final userId = _userId;
     if (userId == null) return;
 
@@ -238,13 +240,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
       final dupStr = await _secureStorage.read('sms_stats_duplicate_count') ?? '0';
       final ignStr = await _secureStorage.read('sms_stats_ignored_count') ?? '0';
       final pendStr = await _secureStorage.read('sms_stats_pending_count') ?? '0';
-      final lastProcStr = await _secureStorage.read('sms_stats_last_processed_time');
+      final lastProc = await _secureStorage.getLastSmsSyncTime();
       final lastErr = await _secureStorage.read('sms_stats_last_error');
-
-      DateTime? lastProc;
-      if (lastProcStr != null) {
-        lastProc = DateTime.tryParse(lastProcStr);
-      }
 
       state = state.copyWith(
         scannedSmsCount: scanned,
@@ -255,6 +252,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         ignoredCount: int.tryParse(ignStr) ?? 0,
         pendingCount: int.tryParse(pendStr) ?? 0,
         lastProcessedTime: lastProc,
+        lastSyncTime: lastProc,
         lastError: lastErr,
         backgroundReceiverStatus: "READY",
       );
@@ -263,10 +261,10 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
     }
   }
 
-  Future<void> _loadLastSyncTime() async {
+  Future<void> loadLastSyncTime() async {
     final lastTime = await _secureStorage.getLastSmsSyncTime();
     if (lastTime != null) {
-      state = state.copyWith(lastSyncTime: lastTime);
+      state = state.copyWith(lastSyncTime: lastTime, lastProcessedTime: lastTime);
     }
   }
 
@@ -474,6 +472,11 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
   }
 
   Future<void> scanInbox({bool silent = false}) async {
+    if (state.isScanning) {
+      dev.log("SmsScannerNotifier: Scan is already in progress. Aborting duplicate request.");
+      return;
+    }
+
     final userId = _userId;
     if (userId == null) {
       if (!silent) {
@@ -490,6 +493,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
     if (!silent) {
       state = state.copyWith(isScanning: true, errorMessage: null);
     }
+
+    dev.log("[SMS_MANUAL] Scan started");
 
     try {
       final permission = await Permission.sms.status;
@@ -567,6 +572,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
       int addedCount = 0;
       int unrecognizedCount = 0;
       int scannedCount = 0;
+      int duplicateCount = 0;
 
       final List<_ParsedMsg> candidates = [];
 
@@ -867,6 +873,10 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
           final existingDrafts = await _db.transactionDraftDao.getDraftsForUser(userId);
           final alreadyLogged = existingDrafts.any((d) => d.smsBody == cand.message.body);
           if (!alreadyLogged) {
+            final metadata = {
+              'refNumber': result.referenceId,
+              'toAccountId': null,
+            };
             final draft = TransactionDraft(
               id: const Uuid().v4(),
               userId: userId,
@@ -884,6 +894,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
               categoryId: categoryId,
               category: result.category,
               confidenceScore: result.confidence,
+              supportingSms: jsonEncode(metadata),
             );
             await _db.transactionDraftDao.insertDraft(draft);
             unrecognizedCount++;
@@ -921,6 +932,10 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
             importedBalance: result.balance != null ? (result.balance! * 100).round() : null,
           );
           if (reconciliationResult.status == ReconciliationStatus.matchingManual) {
+            final metadata = {
+              'refNumber': result.referenceId,
+              'toAccountId': null,
+            };
             final draft = TransactionDraft(
               id: const Uuid().v4(),
               userId: userId,
@@ -939,11 +954,14 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
               category: result.category,
               confidenceScore: result.confidence,
               matchingTransactionId: reconciliationResult.matchingManualId,
+              supportingSms: jsonEncode(metadata),
             );
             await _db.transactionDraftDao.insertDraft(draft);
             unrecognizedCount++;
           } else if (reconciliationResult.status == ReconciliationStatus.inserted) {
             addedCount++;
+          } else if (reconciliationResult.status == ReconciliationStatus.merged) {
+            duplicateCount++;
           }
         }
       }
@@ -958,10 +976,30 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
 
       final now = DateTime.now();
       await _secureStorage.saveLastSmsSyncTime(now);
+      await _secureStorage.write('sms_stats_last_processed_time', now.toIso8601String());
+
+      final rawSmsRes = await _db.customSelect('SELECT COUNT(*) as c FROM raw_sms').getSingleOrNull();
+      final totalRawSms = rawSmsRes?.read<int>('c') ?? scannedCount;
+
+      final currentDrafts = await _db.transactionDraftDao.getDraftsForUser(userId);
+      final pendingCount = currentDrafts.length;
+
+      final savedResult = await _db.customSelect(
+        'SELECT COUNT(*) as c FROM transactions WHERE user_id = ? AND source = ? AND deleted_at IS NULL',
+        variables: [Variable<String>(userId), Variable<String>('sms')],
+      ).getSingleOrNull();
+      final savedTxCount = savedResult?.read<int>('c') ?? 0;
+
+      // Write scanning stats to secure storage (Requirement 14)
+      await _secureStorage.write('sms_stats_total_scanned', totalRawSms.toString());
+      await _secureStorage.write('sms_stats_auto_saved_count', addedCount.toString());
+      await _secureStorage.write('sms_stats_duplicate_count', duplicateCount.toString());
+      await _secureStorage.write('sms_stats_ignored_count', (totalRawSms - addedCount - pendingCount - duplicateCount).clamp(0, totalRawSms).toString());
+      await _secureStorage.write('sms_stats_pending_count', pendingCount.toString());
 
       await BalanceEngine(_db).validateAndSelfHeal();
 
-      if (addedCount > 0 || unrecognizedCount > 0) {
+      if (addedCount > 0 || unrecognizedCount > 0 || duplicateCount > 0) {
         _invalidateUi();
       }
 
@@ -969,10 +1007,17 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         isScanning: false,
         newTransactionsCount: addedCount,
         unrecognizedCount: unrecognizedCount,
-        scannedSmsCount: scannedCount,
-        detectedTransactionsCount: addedCount + unrecognizedCount,
+        scannedSmsCount: totalRawSms,
+        duplicateCount: duplicateCount,
+        pendingCount: pendingCount,
+        detectedTransactionsCount: pendingCount + savedTxCount,
         lastSyncTime: now,
+        lastProcessedTime: now,
       );
+
+      dev.log("[SMS_MANUAL] Scan completed successfully");
+      dev.log("[SMS_MANUAL] lastSuccessfulScanAt updated: ${now.toIso8601String()}");
+      dev.log("[SMS_MANUAL] UI state refreshed");
 
       if (addedCount > 0) {
         await _notificationService.sendProactiveAlert(
@@ -984,6 +1029,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
       }
     } catch (e) {
       dev.log("SmsScannerNotifier: Error scanning inbox: $e");
+      dev.log("[SMS_MANUAL] Scan failed: $e");
       if (!silent) {
         state = state.copyWith(isScanning: false, errorMessage: 'Error scanning inbox: $e');
       } else {
@@ -1028,6 +1074,9 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
           refNumber = metadata['refNumber'];
         } catch (_) {}
       }
+      if ((refNumber == null || refNumber.isEmpty) && draft.smsBody != null) {
+        refNumber = ReferenceIdExtractor.extract(draft.smsBody!, sender: draft.smsSender);
+      }
 
       if (fromAccountId == null) {
         final matchResult = SmsAccountMatcher.matchAccount(
@@ -1038,7 +1087,6 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         );
         fromAccountId = matchResult.matchedAccount?.id;
       }
-
       final transferCat = categories.firstWhere(
         (c) => c.name.toLowerCase().contains('transfer'),
         orElse: () => categories.firstWhere((c) => c.parentId == null),
@@ -1067,8 +1115,10 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         confidenceScore: draft.confidenceScore ?? 1.0,
         isRecurring: false,
         syncStatus: 'pending',
-        transactionType: 'Transfer',
-        referenceNumber: toAccountId,
+        transactionType: 'SELF_TRANSFER',
+        referenceNumber: refNumber,
+        billLink: toAccountId,
+        supportingSms: draft.supportingSms,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -1085,6 +1135,17 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         return false;
       }
     } else {
+      String? refNumber;
+      if (draft.supportingSms != null && draft.supportingSms!.startsWith('{')) {
+        try {
+          final Map<String, dynamic> metadata = jsonDecode(draft.supportingSms!);
+          refNumber = metadata['refNumber'];
+        } catch (_) {}
+      }
+      if ((refNumber == null || refNumber.isEmpty) && draft.smsBody != null) {
+        refNumber = ReferenceIdExtractor.extract(draft.smsBody!, sender: draft.smsSender);
+      }
+
       final catId = draft.categoryId ?? await _resolveCategoryId(
         draft.merchant ?? 'General Merchant', 
         draft.type, 
@@ -1124,6 +1185,8 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
         isRecurring: false,
         syncStatus: 'pending',
         transactionType: draft.category ?? draft.type,
+        referenceNumber: refNumber,
+        supportingSms: draft.supportingSms,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -1254,7 +1317,7 @@ class SmsScannerNotifier extends StateNotifier<SmsScannerState> {
     _ref.invalidate(transactionDraftsStreamProvider);
     _ref.invalidate(savedSmsTransactionsCountProvider);
     dev.log('[Dashboard Refresh] Status: Refreshed (Invalidated UI state providers)');
-    await _loadStats();
+    await loadStats();
   }
 
   Future<String?> _resolveCategoryId(String merchant, String type, String userId, {String? classifiedCategory}) async {

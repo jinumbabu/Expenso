@@ -99,7 +99,8 @@ class FakeNotificationService extends Fake implements NotificationService {
     String userId, {
     required String title,
     required String body,
-    String priority = 'normal',
+    required String priority,
+    String? id,
   }) async {}
 }
 class FakeSecureStorageService extends Fake implements SecureStorageService {
@@ -335,6 +336,107 @@ void main() {
       await tester.tap(find.text('0%'));
       await tester.pumpAndSettle();
       expect(find.text('Expense Breakdown Screen'), findsOneWidget);
+    });
+
+    testWidgets('Month selector keeps navigation arrows fixed and central container centered across all months', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final fakeNotifier = MockExpenseListNotifier(mockTxs);
+      final fakeBackup = FakeBackupNotifier();
+      final fakeSms = FakeSmsScannerNotifier();
+      final fakeVoice = FakeVoiceService();
+      final fakeAdvisor = FakeAdvisorNotifier();
+      final fakePrivacy = FakePrivacyModeNotifier();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(FakeDatabase()),
+            authProvider.overrideWith((ref) => mockAuth),
+            expenseListNotifierProvider.overrideWith((ref) => fakeNotifier),
+            categoriesProvider.overrideWith((ref) => []),
+            paymentMethodsProvider.overrideWith((ref) => []),
+            recalculatedAccountsProvider.overrideWithValue(const AsyncValue.data([])),
+            accountSummaryProvider.overrideWithValue(
+              AsyncValue.data(
+                AccountSummary(
+                  totalAssets: 10000,
+                  totalLiabilities: 1000,
+                  netAssets: 9000,
+                  cashBalance: 0,
+                  bankBalance: 10000,
+                  walletBalance: 0,
+                  ccOutstanding: 1000,
+                  investmentBalance: 0,
+                  loanOutstanding: 0,
+                ),
+              ),
+            ),
+            financialSnapshotProvider.overrideWithValue(
+              FinancialSnapshot(
+                income: 0.0,
+                expenses: 83.0,
+                netCashFlow: -83.0,
+                savings: -83.0,
+                carryForward: 10.0,
+                creditCardOutstanding: 10.0,
+                netWorth: 90.0,
+                savingsRate: 0.0,
+                expenseRate: 0.0,
+                incomeTransactionCount: 0,
+                expenseTransactionCount: 1,
+                categoryTotals: const {},
+                accountBalances: const {},
+                periodStart: DateTime.now(),
+                periodEnd: DateTime.now(),
+              ),
+            ),
+            dismissedOpeningBalancePromptsProvider.overrideWith((ref) => {}),
+            hasCheckedBackupRestoreProvider.overrideWith((ref) => true),
+            privacyModeProvider.overrideWith((ref) => fakePrivacy),
+            budgetStatusProviderList.overrideWithValue(const AsyncValue.data([])),
+            notificationsStreamProvider.overrideWith((ref) => const Stream.empty()),
+            transactionDraftsStreamProvider.overrideWith((ref) => const Stream.empty()),
+            databaseSubscriptionsStreamProvider.overrideWith((ref) => const Stream.empty()),
+            databasePendingBillsStreamProvider.overrideWith((ref) => const Stream.empty()),
+            smsScannerProvider.overrideWith((ref) => fakeSms),
+            voiceServiceProvider.overrideWith((ref) => fakeVoice),
+            advisorProvider.overrideWith((ref) => fakeAdvisor),
+            backupNotifierProvider.overrideWith((ref) => fakeBackup),
+          ],
+          child: const MaterialApp(
+            home: DashboardSummaryScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final leftArrowInitialX = tester.getCenter(find.byIcon(Icons.chevron_left).first).dx;
+      final rightArrowInitialX = tester.getCenter(find.byIcon(Icons.chevron_right).first).dx;
+
+      // Verify left and right arrows are symmetrically aligned relative to screen width
+      final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      expect((leftArrowInitialX - (screenWidth - rightArrowInitialX)).abs(), lessThan(1.0));
+
+      // Test all 12 months (including SEPTEMBER, AUGUST, NOVEMBER, DECEMBER)
+      for (int i = 0; i < 12; i++) {
+        final currentLeftX = tester.getCenter(find.byIcon(Icons.chevron_left).first).dx;
+        final currentRightX = tester.getCenter(find.byIcon(Icons.chevron_right).first).dx;
+
+        expect(currentLeftX, equals(leftArrowInitialX));
+        expect(currentRightX, equals(rightArrowInitialX));
+
+        await tester.tap(find.byIcon(Icons.chevron_right).first);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+      }
     });
   });
 }

@@ -177,7 +177,7 @@ class FinancialCalculationService {
       }
 
       // 3. Generic single-row transfers: credit on destination account
-      return tx.referenceNumber == accountId;
+      return tx.billLink == accountId;
     }
 
     if (tx.accountId == accountId) {
@@ -438,7 +438,7 @@ class FinancialCalculationService {
       if (tx.deletedAt != null) continue;
 
       final isSource = tx.accountId == account.id;
-      final isDest = tx.referenceNumber == account.id;
+      final isDest = tx.billLink == account.id;
       if (!isSource && !isDest) continue;
 
       if (hasVerified && !tx.date.isAfter(account.verifiedAt!)) {

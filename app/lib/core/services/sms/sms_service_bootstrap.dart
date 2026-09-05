@@ -15,6 +15,8 @@ import 'sms_monitor_state.dart';
 import 'sms_permission_manager.dart';
 import 'sms_background_manager.dart';
 import 'sms_transaction_pipeline.dart';
+import 'package:app/features/sms_parser/presentation/providers/sms_parser_provider.dart';
+
 
 final smsServiceBootstrapProvider = Provider<SmsServiceBootstrap>((ref) {
   final bootstrap = SmsServiceBootstrap(ref);
@@ -59,6 +61,16 @@ class SmsServiceBootstrap with WidgetsBindingObserver {
               ? DateTime.fromMillisecondsSinceEpoch(timestamp)
               : DateTime.now();
           await handleIncomingSms(sender, body, date);
+        }
+      } else if (call.method == 'onSmsProcessed') {
+        debugPrint("SmsServiceBootstrap: Background SMS processing completed. Refreshing state...");
+        await refresh();
+        try {
+          _ref.read(smsScannerProvider.notifier).loadStats();
+          _ref.read(smsScannerProvider.notifier).loadLastSyncTime();
+          _ref.invalidate(transactionDraftsStreamProvider);
+        } catch (e) {
+          debugPrint("SmsServiceBootstrap: Error updating smsScannerProvider on background update: $e");
         }
       }
     });
@@ -114,13 +126,8 @@ class SmsServiceBootstrap with WidgetsBindingObserver {
     final autoScan = await secureStorage.getAutoScanNewSms() ?? true;
     final receiverAvailable = await backgroundManager.checkReceiverAvailable();
 
-    final lastProcessedStr = await secureStorage.read('sms_stats_last_processed_time');
+    final lastProcessed = await secureStorage.getLastSmsSyncTime();
     final lastErr = await secureStorage.read('sms_stats_last_error');
-
-    DateTime? lastProcessed;
-    if (lastProcessedStr != null) {
-      lastProcessed = DateTime.tryParse(lastProcessedStr);
-    }
 
     SmsBackgroundMonitorReadyState monitorReadyState;
     if (!status.smsStatus.isGranted) {

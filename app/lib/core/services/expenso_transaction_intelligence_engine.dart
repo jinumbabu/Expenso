@@ -86,26 +86,42 @@ class FinancialSmsClassifier {
         lowerBody.contains('transfer to my account') ||
         (lowerBody.contains('transfer') && lowerBody.contains('own a/c'))) {
       isSelf = true;
-    } else if (userName != null && userName.isNotEmpty && lowerBody.contains(userName.toLowerCase())) {
-      if (lowerBody.contains('sent') || 
-          lowerBody.contains('transfer') || 
-          lowerBody.contains('credited') || 
-          lowerBody.contains('debited') ||
-          lowerBody.contains('paid') ||
-          lowerBody.contains('received') ||
-          lowerBody.contains('to') ||
-          lowerBody.contains('from')) {
-        isSelf = true;
-      }
     } else {
-      final banksPattern = r'(?:sbi|state bank|hdfc|icici|axis|kotak|pnb|punjab national|canara|union|federal|idfc|yes bank|rbl|hsbc|citi|paytm|airtel)';
-      final bankToBankRegex = RegExp(
-        '\\b$banksPattern\\s+(?:to|->|transfer to|sent to)\\s+$banksPattern\\b',
-        caseSensitive: false,
-      );
+      if (userName != null && userName.trim().isNotEmpty) {
+        final cleanUserName = userName.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+        final bodyNoSpace = lowerBody.replaceAll(RegExp(r'\s+'), '');
+        final nameParts = userName.toLowerCase().split(RegExp(r'\s+')).where((p) => p.length >= 3).toList();
+        
+        bool nameMatches = bodyNoSpace.contains(cleanUserName) || lowerBody.contains(userName.toLowerCase());
+        if (!nameMatches && nameParts.length >= 2) {
+          nameMatches = nameParts.every((part) => lowerBody.contains(part));
+        }
 
-      if (bankToBankRegex.hasMatch(body)) {
-        isSelf = true;
+        if (nameMatches) {
+          if (lowerBody.contains('sent') || 
+              lowerBody.contains('transfer') || 
+              lowerBody.contains('credited') || 
+              lowerBody.contains('debited') ||
+              lowerBody.contains('paid') ||
+              lowerBody.contains('received') ||
+              lowerBody.contains('to') ||
+              lowerBody.contains('from') ||
+              lowerBody.contains('vpa')) {
+            isSelf = true;
+          }
+        }
+      }
+      
+      if (!isSelf) {
+        final banksPattern = r'(?:sbi|state bank|hdfc|icici|axis|kotak|pnb|punjab national|canara|union|federal|idfc|yes bank|rbl|hsbc|citi|paytm|airtel)';
+        final bankToBankRegex = RegExp(
+          '\\b$banksPattern\\s+(?:to|->|transfer to|sent to)\\s+$banksPattern\\b',
+          caseSensitive: false,
+        );
+
+        if (bankToBankRegex.hasMatch(body)) {
+          isSelf = true;
+        }
       }
     }
 
@@ -339,8 +355,113 @@ class FinancialSmsClassifier {
   }
 }
 
-// 3. RuleBasedTransactionParser
+// 3. ReferenceIdExtractor
+class ReferenceIdExtractor {
+  static String? normalizeReferenceId(String? raw, {String? sender}) {
+    if (raw == null) return null;
+    var clean = raw.trim();
+    clean = clean.replaceAll(RegExp(r'^[^\w]+|[^\w]+$'), '');
+    
+    if (clean.contains('-')) {
+      final parts = clean.split('-');
+      if (parts[0].trim().length >= 6) {
+        clean = parts[0].trim();
+      }
+    }
+
+    if (clean.isEmpty) return null;
+
+    if (RegExp(r'^[a-zA-Z]+$').hasMatch(clean)) {
+      return null;
+    }
+
+    final digitsOnly = clean.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length >= 6 && digitsOnly.length <= 18) {
+      if (digitsOnly.startsWith('1800') || digitsOnly.startsWith('1860')) {
+        return null;
+      }
+      if (sender != null) {
+        final cleanSender = sender.replaceAll(RegExp(r'\D'), '');
+        if (cleanSender.isNotEmpty && (digitsOnly == cleanSender || cleanSender.contains(digitsOnly) || digitsOnly.contains(cleanSender))) {
+          return null;
+        }
+      }
+      return digitsOnly;
+    }
+
+    if (clean.length >= 8 && clean.length <= 22) {
+      return clean;
+    }
+
+    return null;
+  }
+
+  static String? extract(String body, {String? sender}) {
+    final refReg = RegExp(
+      r'(?:\(|\[|\b)(?:upi\s*reference|upi\s*ref|upi|ref\s*no|reference\s*no|transaction\s*ref|transaction\s*id|txn\s*ref|txn\s*id|utr\s*no|utr|rrn|ref|reference|imps|neft)\s*(?:no\.?)?\s*[:\-\/\=]?\s*([a-zA-Z0-9\-]+)',
+      caseSensitive: false,
+    );
+    final matches = refReg.allMatches(body);
+    for (final match in matches) {
+      final candidate = match.group(1);
+      final normalized = normalizeReferenceId(candidate, sender: sender);
+      if (normalized != null) return normalized;
+    }
+
+    final standaloneMatch = RegExp(r'\b(\d{12})\b').firstMatch(body);
+    if (standaloneMatch != null) {
+      final candidate = standaloneMatch.group(1);
+      final normalized = normalizeReferenceId(candidate, sender: sender);
+      if (normalized != null) return normalized;
+    }
+
+    return null;
+  }
+}
+
+// 4. RuleBasedTransactionParser
 class RuleBasedTransactionParser {
+  bool _isValidMerchant(String name, {String? sender}) {
+    final clean = name.trim().replaceAll(' ', '');
+    if (clean.isEmpty) return false;
+    
+    final digitsOnly = clean.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length >= 8) {
+      return false;
+    }
+    
+    if (sender != null && sender.isNotEmpty) {
+      final cleanSender = sender.toLowerCase().trim();
+      final lowerName = name.toLowerCase().trim();
+      if (lowerName == cleanSender || cleanSender.contains(lowerName) || lowerName.contains(cleanSender)) {
+        return false;
+      }
+    }
+
+    if (RegExp(r'\b\d{1,2}[-\/\.\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[a-zA-Z0-9]+)[-\/\.\s]\d{2,4}\b', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'\b\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}\b').hasMatch(name)) {
+      return false;
+    }
+
+    final lower = name.toLowerCase();
+    if (lower.contains('customer care') || 
+        lower.contains('helpline') || 
+        lower.contains('call') || 
+        lower.contains('contact') ||
+        lower.contains('support') ||
+        lower.contains('card ending') ||
+        lower.contains('a/c') ||
+        lower.contains('account')) {
+      return false;
+    }
+    
+    if (RegExp(r'^\d+$').hasMatch(clean)) {
+      return false;
+    }
+
+    return true;
+  }
+
   ExtractedTransaction parse(String body, DateTime date, String? sender, String category) {
     double? amount;
     if (category == 'Credit Card Bill Generated' || category == 'Credit Card Bill Reminder') {
@@ -364,11 +485,7 @@ class RuleBasedTransactionParser {
       accountNum = acctMatch.group(1);
     }
 
-    String? referenceId;
-    final refMatch = RegExp(r'\b(?:upi\s*ref|ref\s*no|txn|vpa|ref|rrn|transaction\s*id|txid|neft\s*ref|imps\s*ref|neft|imps)\s*(?:no\.?)?\s*:?\s*([a-z0-9]+)\b', caseSensitive: false).firstMatch(body);
-    if (refMatch != null) {
-      referenceId = refMatch.group(1);
-    }
+    final referenceId = ReferenceIdExtractor.extract(body, sender: sender);
 
     final bankName = SmsAccountMatcher.extractBankName(body, sender: sender);
 
@@ -390,7 +507,7 @@ class RuleBasedTransactionParser {
       referenceId: referenceId,
       isDebit: isDebit,
       date: _parseTransactionDate(body, date),
-      merchant: _extractMerchant(body, isDebit, category),
+      merchant: _extractMerchant(body, isDebit, category, sender: sender),
       confidence: 1.0,
     );
   }
@@ -421,59 +538,38 @@ class RuleBasedTransactionParser {
     return defaultDate;
   }
 
-  String _extractMerchant(String body, bool isDebit, String category) {
+  String _extractMerchant(String body, bool isDebit, String category, {String? sender}) {
     final lower = body.toLowerCase();
+    
+    // Define patterns for details extraction
+    final patterns = isDebit 
+        ? [
+            RegExp(r'\b(?:info|info:|towards)\s*[:\s]\s*([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bTo\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bon\s+\d{1,2}[-\/\.\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[a-zA-Z0-9]+)[-\/\.\s]\d{2,4}\s+on\s+([^,.]+?)(?:[\.,\s]+(?:avl\s+limit|available\s+limit|if\s+not|call|not\s+you|ref|vpa|using|rs\.?|inr|₹|usd|upi|on)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bspent\s+.*?\s+on\s+([^,.]+?)(?:[\.,\s]+(?:avl\s+limit|available\s+limit|if\s+not|call|not\s+you|ref|vpa|using|rs\.?|inr|₹|usd|upi|on)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bspent\s+at\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpaid\s+to\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bsent\s+to\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpurchase\s+at\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bat\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+          ]
+        : [
+            RegExp(r'\b(?:info|info:|towards)\s*[:\s]\s*([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\btransfer\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\breceived\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bcredited\s+.*?\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpayment\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bfrom\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+          ];
 
-    if (category == 'Internal Transfer') {
-      final transferReg = RegExp(r'\b(?:transfer\s+to|to|->)\s+([a-z0-9\s]+?)\b', caseSensitive: false);
-      final match = transferReg.firstMatch(body);
-      if (match != null) {
-        final dest = match.group(1)!.trim();
-        if (dest.isNotEmpty && dest.length < 30) {
-          return _cleanMerchantName(dest);
-        }
-      }
-    }
-
-    final keywords = isDebit 
-        ? ['paid to', 'spent at', 'towards', 'merchant', 'at', 'to']
-        : ['received from', 'refund from', 'by', 'from'];
-    for (var kw in keywords) {
-      final reg = RegExp('\\b${RegExp.escape(kw)}\\b', caseSensitive: false);
+    for (final reg in patterns) {
       final match = reg.firstMatch(body);
       if (match != null) {
-        final index = match.start;
-        var start = index + kw.length;
-        // Skip spaces
-        while (start < body.length && (body[start] == ' ' || body[start] == ':')) {
-          start++;
-        }
-        
-        // Match until a boundary word or character
-        var end = start;
-        while (end < body.length) {
-          final char = body[end];
-          final substring = body.substring(end).toLowerCase();
-          if (substring.startsWith(' on ') ||
-              substring.startsWith(' by ') ||
-              substring.startsWith(' using ') ||
-              substring.startsWith(' ref ') ||
-              substring.startsWith(' vpa ') ||
-              substring.startsWith(' rs') ||
-              substring.startsWith(' inr') ||
-              substring.startsWith(' ₹') ||
-              substring.startsWith(' txn') ||
-              char == '.' ||
-              char == ',' ||
-              char == ';') {
-            break;
-          }
-          end++;
-        }
-        
-        final candidate = body.substring(start, end).trim();
-        if (candidate.isNotEmpty && candidate.length < 40 && !candidate.toLowerCase().contains('account') && !candidate.toLowerCase().contains('credit card') && !candidate.toLowerCase().contains('card ending')) {
-          return _cleanMerchantName(candidate);
+        final candidate = match.group(1)!.trim();
+        final cleaned = _cleanMerchantName(candidate);
+        if (_isValidMerchant(cleaned, sender: sender)) {
+          return cleaned;
         }
       }
     }
@@ -491,6 +587,7 @@ class RuleBasedTransactionParser {
     if (cleaned.isEmpty) return 'General Merchant';
     return cleaned.split(' ').map((word) {
       if (word.isEmpty) return '';
+      if (word.toUpperCase() == 'ATM') return 'ATM';
       return word[0].toUpperCase() + (word.length > 1 ? word.substring(1).toLowerCase() : '');
     }).join(' ');
   }
@@ -617,6 +714,37 @@ class DuplicateDetector {
       if (duplicateByRef != null) {
         return duplicateByRef;
       }
+
+      final drafts = await (_db.select(_db.transactionDrafts)
+        ..where((d) => d.userId.equals(userId))
+      ).get();
+      for (final draft in drafts) {
+        String? draftRef;
+        if (draft.supportingSms != null && draft.supportingSms!.startsWith('{')) {
+          try {
+            final meta = jsonDecode(draft.supportingSms!);
+            draftRef = meta['refNumber'] as String?;
+          } catch (_) {}
+        }
+        if (draftRef == result.referenceId || (draft.smsBody != null && draft.smsBody!.contains(result.referenceId!))) {
+          return Transaction(
+            id: draft.id,
+            userId: userId,
+            accountId: accountId,
+            type: draft.type,
+            amount: draft.amount,
+            currency: draft.currency,
+            description: draft.description,
+            merchant: draft.merchant,
+            date: draft.date,
+            source: 'sms_draft',
+            isRecurring: false,
+            syncStatus: 'pending',
+            createdAt: draft.createdAt,
+            updatedAt: draft.createdAt,
+          );
+        }
+      }
     }
 
     final startOfDay = DateTime(result.date.year, result.date.month, result.date.day);
@@ -629,9 +757,15 @@ class DuplicateDetector {
                      t.deletedAt.isNull())
     ).get();
 
+    final userAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
+
     for (var ext in existingTxs) {
       if (ext.accountId != null && accountId != null && ext.accountId != accountId) {
-        continue;
+        final extAcc = userAccounts.where((a) => a.id == ext.accountId).firstOrNull;
+        final newAcc = userAccounts.where((a) => a.id == accountId).firstOrNull;
+        if (extAcc != null && newAcc != null && extAcc.last4Digits != null && newAcc.last4Digits != null && extAcc.last4Digits != newAcc.last4Digits) {
+          continue;
+        }
       }
       final bool isExtDateOnly = ext.date.hour == 0 && ext.date.minute == 0 && ext.date.second == 0;
       final bool isNewDateOnly = result.date.hour == 0 && result.date.minute == 0 && result.date.second == 0;
@@ -787,7 +921,7 @@ class ExpensoTransactionIntelligenceEngine {
     // 1. Normalization
     final normalized = _normalizer.normalize(body);
 
-    // 2. Classification
+    // 2. Fetch User Details for matching
     String? userName;
     if (userId.isNotEmpty) {
       try {
@@ -795,27 +929,54 @@ class ExpensoTransactionIntelligenceEngine {
         userName = user?.displayName;
       } catch (_) {}
     }
-    final category = _classifier.classify(normalized, userName);
 
-    // 3. Rule parser
-    final ruleResult = _ruleParser.parse(normalized, receivedAt, sender, category);
+    // 3. Rule parser & Reference ID extraction
+    final initialCategory = _classifier.classify(normalized, userName);
+    final ruleResult = _ruleParser.parse(normalized, receivedAt, sender, initialCategory);
 
-    // 4. AI parser (stubs/model abstraction)
+    // 4. Account resolution
+    final accountMatch = _accountResolver.resolve(normalized, existingAccounts, ruleResult, sender);
+
+    // 5. Self Transfer & Final Category Determination
+    String category = initialCategory;
+    bool isSelfTransfer = initialCategory == 'Internal Transfer';
+
+    if (!isSelfTransfer && ruleResult.referenceId != null && ruleResult.referenceId!.isNotEmpty) {
+      // Check if referenceId matches an existing transaction or draft between user accounts
+      final duplicateByRef = await _duplicateDetector.detect(userId, ruleResult, accountMatch.matchedAccount?.id);
+      if (duplicateByRef != null && (duplicateByRef.type == 'transfer' || duplicateByRef.transactionType == 'SELF_TRANSFER' || duplicateByRef.source == 'sms_draft')) {
+        isSelfTransfer = true;
+      }
+    }
+
+    if (isSelfTransfer) {
+      category = 'Internal Transfer';
+    }
+
+    final finalRuleResult = ExtractedTransaction(
+      amount: ruleResult.amount,
+      bankName: ruleResult.bankName,
+      accountNumber: ruleResult.accountNumber,
+      referenceId: ruleResult.referenceId,
+      isDebit: ruleResult.isDebit,
+      date: ruleResult.date,
+      merchant: isSelfTransfer ? 'Self Transfer' : ruleResult.merchant,
+      confidence: ruleResult.confidence,
+    );
+
+    // 6. AI parser (stubs/model abstraction)
     final aiResult = _aiParser.parse(normalized);
 
-    // 5. Result fusion
-    final fusedResult = _fusion.fuse(ruleResult, aiResult);
+    // 7. Result fusion
+    final fusedResult = _fusion.fuse(finalRuleResult, aiResult);
 
-    // 6. Evidence validation
+    // 8. Evidence validation
     final evidenceValid = _evidenceValidator.validateEvidence(body, fusedResult);
 
-    // 7. Account resolution
-    final accountMatch = _accountResolver.resolve(normalized, existingAccounts, fusedResult, sender);
-
-    // 8. Duplicate detection
+    // 9. Duplicate detection
     final duplicateResult = await _duplicateDetector.detect(userId, fusedResult, accountMatch.matchedAccount?.id);
 
-    // 9. Safety validation
+    // 10. Safety validation
     final validation = await _safetyValidator.validate(
       result: fusedResult,
       accountMatch: accountMatch,
@@ -825,7 +986,6 @@ class ExpensoTransactionIntelligenceEngine {
       evidenceValid: evidenceValid,
     );
 
-    // 10. Engine result ready for Saver
     return TransactionEngineResult(
       normalizedBody: normalized,
       category: category,

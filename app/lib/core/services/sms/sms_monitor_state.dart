@@ -57,12 +57,8 @@ class SmsMonitorStatusNotifier extends StateNotifier<SmsMonitorStatus> {
   }
 
   Future<void> _loadInitial() async {
-    final lastProcessedStr = await _secureStorage.read('sms_stats_last_processed_time');
+    final lastProcessed = await _secureStorage.getLastSmsSyncTime();
     final lastErr = await _secureStorage.read('sms_stats_last_error');
-    DateTime? lastProcessed;
-    if (lastProcessedStr != null) {
-      lastProcessed = DateTime.tryParse(lastProcessedStr);
-    }
     state = state.copyWith(
       lastProcessedAt: lastProcessed,
       lastError: lastErr,

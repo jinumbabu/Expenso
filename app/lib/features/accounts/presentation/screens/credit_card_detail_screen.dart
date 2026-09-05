@@ -1034,8 +1034,8 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
     final ccTxs = txs.where((tx) {
       if (tx.deletedAt != null) return false;
       return activeCardIds.contains(tx.accountId) || 
-             (tx.type == 'transfer' && activeCardIds.contains(tx.referenceNumber)) || 
-             (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.referenceNumber));
+             (tx.type == 'transfer' && activeCardIds.contains(tx.billLink)) || 
+             (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.billLink));
     }).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
 
@@ -1230,8 +1230,8 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
       if (tx.deletedAt != null) return false;
       
       final matchCard = activeCardIds.contains(tx.accountId) || 
-                        (tx.type == 'transfer' && activeCardIds.contains(tx.referenceNumber)) || 
-                        (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.referenceNumber));
+                        (tx.type == 'transfer' && activeCardIds.contains(tx.billLink)) || 
+                        (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.billLink));
       if (!matchCard) return false;
 
       if (!FinancialCalculationService.isExpense(tx)) return false;
@@ -1500,8 +1500,8 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
       if (tx.deletedAt != null) return false;
       
       final matchCard = activeCardIds.contains(tx.accountId) || 
-                        (tx.type == 'transfer' && activeCardIds.contains(tx.referenceNumber)) || 
-                        (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.referenceNumber));
+                        (tx.type == 'transfer' && activeCardIds.contains(tx.billLink)) || 
+                        (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.billLink));
       if (!matchCard) return false;
 
       if (!FinancialCalculationService.isExpense(tx)) return false;

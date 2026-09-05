@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/database/app_database.dart';
+import 'package:drift/drift.dart';
 import '../../../../core/database/dao/user_dao.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/auth_interceptor.dart';
@@ -19,15 +20,18 @@ import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/sync/firestore_sync_service.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/balance_engine.dart';
+import '../../../../core/services/expenso_transaction_intelligence_engine.dart';
 import '../../../dashboard/presentation/providers/hide_balance_provider.dart';
 import '../../../../core/services/settings_provider.dart';
+import '../../../../core/services/financial_calculation_service.dart';
+import '../../../../core/services/ledger_agent.dart';
 
 // Database Provider
 final Provider<AppDatabase> databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(() => db.close());
 
-  // Recalculate balances on startup to repair any out-of-sync balances
+  // Recalculate balances and run data corrections on startup
   Future.microtask(() async {
     try {
       final txCount = await db.customSelect('SELECT COUNT(*) as c FROM transactions').getSingle();
@@ -46,13 +50,281 @@ final Provider<AppDatabase> databaseProvider = Provider<AppDatabase>((ref) {
       print('  Registered Users: ${usersList.map((r) => "${r.read<String>('id')}:${r.read<String>('display_name')}").toList()}');
 
       await BalanceEngine(db).recalculateAllBalances();
+      
+      // Run SMS details correction migration
+      await _runSmsDetailsMigration(db);
+      
+      // Run duplicate reference ID repair migration
+      for (final row in usersList) {
+        final uid = row.read<String>('id');
+        await _runDuplicateReferenceRepair(db, uid);
+      }
     } catch (e) {
-      debugPrint('Error during startup balance recalculation: $e');
+      debugPrint('Error during startup database operations: $e');
     }
   });
 
   return db;
 });
+
+Future<void> _runSmsDetailsMigration(AppDatabase db) async {
+  try {
+    final badTxs = await (db.select(db.transactions)
+      ..where((t) => t.source.equals('sms') & t.deletedAt.isNull())
+    ).get();
+
+    for (var tx in badTxs) {
+      final merchant = tx.merchant ?? '';
+      final cleanMerchant = merchant.trim().replaceAll(' ', '').replaceAll('-', '');
+      final digitsOnly = cleanMerchant.replaceAll(RegExp(r'\D'), '');
+      
+      final isPhoneNumber = digitsOnly.length >= 8 && digitsOnly.length <= 15 && RegExp(r'^\d+$').hasMatch(cleanMerchant);
+      if (isPhoneNumber) {
+        String? originalBody;
+        String? originalSender;
+        
+        // 1. Try to find by reference number
+        if (tx.referenceNumber != null && tx.referenceNumber!.isNotEmpty) {
+          final parsed = await (db.select(db.parsedSms)
+            ..where((p) => p.referenceNumber.equals(tx.referenceNumber!))
+            ..limit(1)
+          ).getSingleOrNull();
+          if (parsed != null && parsed.smsId != null) {
+            final raw = await (db.select(db.rawSms)
+              ..where((r) => r.id.equals(parsed.smsId!))
+              ..limit(1)
+            ).getSingleOrNull();
+            if (raw != null) {
+              originalBody = raw.body;
+              originalSender = raw.sender;
+            }
+          }
+        }
+        
+        // 2. If not found, try by date and amount match
+        if (originalBody == null) {
+          final timeStart = tx.date.subtract(const Duration(minutes: 5));
+          final timeEnd = tx.date.add(const Duration(minutes: 5));
+          final parsed = await (db.select(db.parsedSms)
+            ..where((p) => p.amount.equals(tx.amount) & p.receivedAt.isBetweenValues(timeStart, timeEnd))
+            ..limit(1)
+          ).getSingleOrNull();
+          if (parsed != null && parsed.smsId != null) {
+            final raw = await (db.select(db.rawSms)
+              ..where((r) => r.id.equals(parsed.smsId!))
+              ..limit(1)
+            ).getSingleOrNull();
+            if (raw != null) {
+              originalBody = raw.body;
+              originalSender = raw.sender;
+            }
+          }
+        }
+        
+        // 3. Re-run improved parser on original SMS body
+        if (originalBody != null) {
+          final parser = RuleBasedTransactionParser();
+          final category = tx.transactionType ?? 'expense';
+          final extracted = parser.parse(originalBody, tx.date, originalSender, category);
+          
+          final newMerchant = extracted.merchant;
+          final newClean = newMerchant.trim().replaceAll(' ', '').replaceAll('-', '');
+          final newDigitsOnly = newClean.replaceAll(RegExp(r'\D'), '');
+          final newIsPhone = newDigitsOnly.length >= 8 && newDigitsOnly.length <= 15 && RegExp(r'^\d+$').hasMatch(newClean);
+          
+          if (newMerchant.isNotEmpty && 
+              newMerchant != 'Local Purchase' && 
+              newMerchant != 'Deposit' && 
+              !newIsPhone) {
+            
+            final updatedTx = tx.copyWith(
+              merchant: Value(newMerchant),
+              referenceNumber: Value(extracted.referenceId ?? tx.referenceNumber),
+              updatedAt: DateTime.now(),
+            );
+            await db.transactionDao.updateTransaction(updatedTx);
+            debugPrint('[MIGRATION] Successfully corrected SMS transaction details for ID: ${tx.id} from ${tx.merchant} to $newMerchant');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('[MIGRATION ERROR] Failed to run SMS details correction migration: $e');
+  }
+}
+
+Future<void> _runDuplicateReferenceRepair(AppDatabase db, String userId) async {
+  try {
+    debugPrint('[MIGRATION] Starting duplicate reference ID repair for user $userId...');
+    
+    // 1. Fetch all transactions with a reference number
+    final txs = await (db.select(db.transactions)
+      ..where((t) => t.userId.equals(userId) & t.referenceNumber.isNotNull() & t.deletedAt.isNull())
+    ).get();
+    
+    if (txs.isEmpty) return;
+    
+    // 2. Group by reference number
+    final Map<String, List<Transaction>> groups = {};
+    for (final tx in txs) {
+      final ref = tx.referenceNumber!.trim();
+      if (ref.isNotEmpty) {
+        groups.putIfAbsent(ref, () => []).add(tx);
+      }
+    }
+    
+    int repairedCount = 0;
+    
+    for (final ref in groups.keys) {
+      final group = groups[ref]!;
+      if (group.length < 2) continue;
+      
+      debugPrint('[MIGRATION] Found ${group.length} duplicates for reference ID: $ref. Merging...');
+      
+      // Sort them: prefer manual entries first, then by creation date
+      group.sort((a, b) {
+        if (a.source == 'manual' && b.source != 'manual') return -1;
+        if (b.source == 'manual' && a.source != 'manual') return 1;
+        return a.createdAt.compareTo(b.createdAt);
+      });
+      
+      var primary = group[0];
+      
+      for (int i = 1; i < group.length; i++) {
+        final secondary = group[i];
+        
+        final mergedDesc = _mergeStringsForMigration(primary.description, secondary.description);
+        final mergedMerchant = _mergeStringsForMigration(primary.merchant, secondary.merchant);
+        
+        List<String> smsList = [];
+        String? mergedRefNumber = primary.referenceNumber ?? secondary.referenceNumber;
+        String? mergedBillLink = primary.billLink ?? secondary.billLink;
+        
+        void decodeSms(String? supportingSms) {
+          if (supportingSms != null && supportingSms.isNotEmpty) {
+            try {
+              final parsed = jsonDecode(supportingSms);
+              if (parsed is Map) {
+                final list = parsed['smsList'] as List?;
+                if (list != null) {
+                  for (final s in list) {
+                    final str = s.toString();
+                    if (!smsList.contains(str)) smsList.add(str);
+                  }
+                }
+                if (mergedRefNumber == null) mergedRefNumber = parsed['refNumber'] as String?;
+                if (mergedBillLink == null) mergedBillLink = parsed['toAccountId'] as String?;
+              } else if (parsed is List) {
+                for (final s in parsed) {
+                  final str = s.toString();
+                  if (!smsList.contains(str)) smsList.add(str);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+        
+        decodeSms(primary.supportingSms);
+        decodeSms(secondary.supportingSms);
+        
+        if (primary.description != null && !smsList.contains(primary.description)) {
+          smsList.add(primary.description!);
+        }
+        if (secondary.description != null && !smsList.contains(secondary.description)) {
+          smsList.add(secondary.description!);
+        }
+        
+        // Self-transfer detection!
+        final accounts = await (db.select(db.accounts)..where((a) => a.userId.equals(userId))).get();
+        final accountIds = accounts.map((a) => a.id).toSet();
+        
+        String finalType = primary.type;
+        String? finalTxType = primary.transactionType;
+        String? finalAccountId = primary.accountId ?? secondary.accountId;
+        String? finalBillLink = mergedBillLink;
+        
+        final primaryIsCredit = FinancialCalculationService.isCredit(primary, primary.accountId ?? '');
+        final primaryIsDebit = FinancialCalculationService.isDebit(primary, primary.accountId ?? '');
+        final secondaryIsCredit = FinancialCalculationService.isCredit(secondary, secondary.accountId ?? '');
+        final secondaryIsDebit = FinancialCalculationService.isDebit(secondary, secondary.accountId ?? '');
+        
+        if (primary.accountId != secondary.accountId && 
+            primary.accountId != null && 
+            secondary.accountId != null &&
+            accountIds.contains(primary.accountId) && 
+            accountIds.contains(secondary.accountId)) {
+          
+          finalType = 'transfer';
+          finalTxType = 'SELF_TRANSFER';
+          
+          String? sourceAccId;
+          String? destAccId;
+          if (primaryIsDebit || secondaryIsCredit) {
+            sourceAccId = primary.accountId;
+            destAccId = secondary.accountId;
+          } else if (secondaryIsDebit || primaryIsCredit) {
+            sourceAccId = secondary.accountId;
+            destAccId = primary.accountId;
+          } else {
+            sourceAccId = primary.accountId;
+            destAccId = secondary.accountId;
+          }
+          finalAccountId = sourceAccId;
+          finalBillLink = destAccId;
+        }
+        
+        final supportingMetadata = {
+          'smsList': smsList,
+          'refNumber': mergedRefNumber,
+          'toAccountId': finalBillLink,
+        };
+        
+        final ledgerAgent = LedgerAgent(db);
+        final newFingerprint = ledgerAgent.generateFingerprint(
+          accountId: finalAccountId,
+          amount: primary.amount,
+          merchant: mergedMerchant ?? 'Merged Merchant',
+          date: primary.date,
+          referenceNumber: mergedRefNumber,
+        );
+        
+        primary = primary.copyWith(
+          accountId: Value(finalAccountId),
+          type: finalType,
+          transactionType: Value(finalTxType),
+          description: Value(mergedDesc),
+          merchant: Value(mergedMerchant),
+          categoryId: Value(primary.categoryId ?? secondary.categoryId),
+          paymentMethodId: Value(primary.paymentMethodId ?? secondary.paymentMethodId),
+          referenceNumber: Value(mergedRefNumber),
+          billLink: Value(finalBillLink),
+          fingerprint: Value(newFingerprint),
+          supportingSms: Value(jsonEncode(supportingMetadata)),
+          updatedAt: DateTime.now(),
+        );
+        
+        await db.transactionDao.updateTransaction(primary);
+        await db.transactionDao.hardDeleteTransaction(secondary.id);
+        repairedCount++;
+      }
+    }
+    
+    if (repairedCount > 0) {
+      debugPrint('[MIGRATION] Completed duplicate reference ID repair. Cleaned up $repairedCount transactions. Recalculating balances...');
+      await BalanceEngine(db).recalculateAllBalances();
+    }
+  } catch (e) {
+    debugPrint('[MIGRATION ERROR] Failed to run duplicate reference repair: $e');
+  }
+}
+
+String? _mergeStringsForMigration(String? a, String? b) {
+  if (a == null || a.isEmpty) return b;
+  if (b == null || b.isEmpty) return a;
+  if (a.toLowerCase().contains(b.toLowerCase())) return a;
+  if (b.toLowerCase().contains(a.toLowerCase())) return b;
+  return '$a / $b';
+}
 
 // UserDao Provider
 final Provider<UserDao> userDaoProvider = Provider<UserDao>((ref) {

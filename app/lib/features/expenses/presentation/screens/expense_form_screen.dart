@@ -5,22 +5,21 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/ledger_agent.dart';
+import '../../../../core/services/expenso_transaction_intelligence_engine.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/expense_provider.dart';
-import '../widgets/category_picker.dart';
 import '../widgets/payment_method_picker.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../sms_parser/presentation/providers/sms_parser_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../accounts/presentation/providers/account_formatters.dart';
 import '../../../../shared/widgets/privacy_text.dart';
-import '../../../dashboard/presentation/providers/privacy_provider.dart';
 import '../../../../core/services/category_intelligence.dart';
 import '../widgets/searchable_category_bottom_sheet.dart';
 import '../../../../core/services/balance_engine.dart';
+import '../../../accounts/presentation/screens/credit_card_payment_sheet.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
@@ -43,12 +42,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _merchantController = TextEditingController();
-  final _receiptController = TextEditingController();
-  final _billLinkController = TextEditingController();
+  final _referenceController = TextEditingController();
   final _tagsController = TextEditingController();
   final _categoryController = TextEditingController();
 
   String _transactionType = 'expense';
+  bool _isTypeSelectorExpanded = false;
   String? _selectedCategoryId;
   String? _selectedSubcategoryId;
   String? _selectedPaymentMethodId;
@@ -124,13 +123,16 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       final existingCategories = await db.categoryDao.getCategoriesForUser(userId);
 
       // Find or create parent
-      var parent = existingCategories.firstWhere(
-        (c) => c.name.toLowerCase() == parentName!.toLowerCase() && c.parentId == null,
-        orElse: () => null as dynamic,
+      final parent = existingCategories.cast<Category?>().firstWhere(
+        (c) => c != null && c.name.toLowerCase() == parentName!.toLowerCase() && c.parentId == null,
+        orElse: () => null,
       );
-      if (parent == null) {
+      Category parentCategory;
+      if (parent != null) {
+        parentCategory = parent;
+      } else {
         final newId = const Uuid().v4();
-        parent = Category(
+        parentCategory = Category(
           id: newId,
           userId: userId,
           name: parentName,
@@ -141,16 +143,16 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           createdAt: DateTime.now(),
           usageCount: 0,
         );
-        await db.categoryDao.insertCategory(parent);
+        await db.categoryDao.insertCategory(parentCategory);
         ref.invalidate(categoriesProvider);
       }
 
       Category? sub;
       if (subName != null) {
         // Find or create subcategory
-        sub = existingCategories.firstWhere(
-          (c) => c.name.toLowerCase() == subName!.toLowerCase() && c.parentId == parent!.id,
-          orElse: () => null as dynamic,
+        sub = existingCategories.cast<Category?>().firstWhere(
+          (c) => c != null && c.name.toLowerCase() == subName!.toLowerCase() && c.parentId == parentCategory.id,
+          orElse: () => null,
         );
         if (sub == null) {
           final newId = const Uuid().v4();
@@ -159,7 +161,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             userId: userId,
             name: subName,
             type: _transactionType,
-            parentId: parent.id,
+            parentId: parentCategory.id,
             icon: CategoryIntelligence.getIconKeyForName(subName),
             color: CategoryIntelligence.getColorHexForName(subName),
             isSystemDefault: false,
@@ -172,13 +174,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       }
 
       setState(() {
-        _selectedCategoryId = parent.id;
+        _selectedCategoryId = parentCategory.id;
         _selectedSubcategoryId = sub?.id;
         _confidenceScore = 0.95;
         if (sub != null) {
-          _categoryController.text = '${parent.name} > ${sub.name}';
+          _categoryController.text = '${parentCategory.name} > ${sub.name}';
         } else {
-          _categoryController.text = parent.name;
+          _categoryController.text = parentCategory.name;
         }
       });
     }
@@ -210,6 +212,18 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _confidenceScore = draft.confidenceScore;
           _draftCategory = draft.category;
           _matchingTransactionId = draft.matchingTransactionId;
+          
+          String? refNum;
+          if (draft.supportingSms != null && draft.supportingSms!.isNotEmpty) {
+            try {
+              final meta = jsonDecode(draft.supportingSms!) as Map<String, dynamic>;
+              refNum = meta['refNumber'] as String?;
+            } catch (_) {}
+          }
+          if ((refNum == null || refNum.isEmpty) && draft.smsBody != null) {
+            refNum = ReferenceIdExtractor.extract(draft.smsBody!, sender: draft.smsSender);
+          }
+          _referenceController.text = refNum ?? '';
         });
         await _autoDetectAccountAndPaymentMethod(draft);
       }
@@ -392,11 +406,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           final db = ref.read(databaseProvider);
           if (tx.type == 'transfer_debit') {
             final list = await (db.select(db.transactions)
-              ..where((t) => t.referenceNumber.equals(tx.id) & t.type.equals('transfer_credit'))
+              ..where((t) => t.billLink.equals(tx.id) & t.type.equals('transfer_credit'))
             ).get();
             if (list.isNotEmpty) otherSide = list.first;
-          } else if (tx.type == 'transfer_credit' && tx.referenceNumber != null) {
-            otherSide = await repo.getTransactionById(tx.referenceNumber!);
+          } else if (tx.type == 'transfer_credit' && tx.billLink != null) {
+            otherSide = await repo.getTransactionById(tx.billLink!);
           }
         }
 
@@ -428,8 +442,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _selectedAccountId = tx.accountId;
           _selectedDate = tx.date;
           _hasCustomTime = diff.inSeconds > 10;
-          _receiptController.text = tx.receiptUrl ?? '';
-          _billLinkController.text = tx.billLink ?? '';
+          var refNum = tx.referenceNumber;
+          if ((refNum == null || refNum.isEmpty) && tx.description != null) {
+            refNum = ReferenceIdExtractor.extract(tx.description!);
+          }
+          _referenceController.text = refNum ?? '';
           _tagsController.text = tx.tags ?? '';
           _categoryController.text = categoryText;
           _confidenceScore = tx.confidenceScore;
@@ -458,8 +475,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     _amountController.dispose();
     _descriptionController.dispose();
     _merchantController.dispose();
-    _receiptController.dispose();
-    _billLinkController.dispose();
+    _referenceController.dispose();
     _tagsController.dispose();
     _categoryController.dispose();
     super.dispose();
@@ -580,7 +596,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     String? subName;
     if (_selectedSubcategoryId != null) {
       final categories = ref.read(categoriesProvider).value ?? [];
-      subName = categories.firstWhere((c) => c.id == _selectedSubcategoryId, orElse: () => null as dynamic)?.name;
+      final match = categories.cast<Category?>().firstWhere((c) => c != null && c.id == _selectedSubcategoryId, orElse: () => null);
+      subName = match?.name;
       if (subName == null) {
         final db = ref.read(databaseProvider);
         final cat = await db.categoryDao.getCategoryById(_selectedSubcategoryId!);
@@ -591,7 +608,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     String? catName;
     if (_selectedCategoryId != null) {
       final categories = ref.read(categoriesProvider).value ?? [];
-      catName = categories.firstWhere((c) => c.id == _selectedCategoryId, orElse: () => null as dynamic)?.name;
+      final match = categories.cast<Category?>().firstWhere((c) => c != null && c.id == _selectedCategoryId, orElse: () => null);
+      catName = match?.name;
       if (catName == null) {
         final db = ref.read(databaseProvider);
         final cat = await db.categoryDao.getCategoryById(_selectedCategoryId!);
@@ -674,17 +692,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         subName = parts[1].trim();
       }
 
-      final matchedParent = existingCategories.firstWhere(
-        (c) => c.name.toLowerCase() == parentName.toLowerCase() && c.parentId == null,
-        orElse: () => null as dynamic,
+      final matchedParent = existingCategories.cast<Category?>().firstWhere(
+        (c) => c != null && c.name.toLowerCase() == parentName.toLowerCase() && c.parentId == null,
+        orElse: () => null,
       );
 
       if (matchedParent != null) {
         _selectedCategoryId = matchedParent.id;
         if (subName != null) {
-          final matchedSub = existingCategories.firstWhere(
-            (c) => c.name.toLowerCase() == subName!.toLowerCase() && c.parentId == matchedParent.id,
-            orElse: () => null as dynamic,
+          final matchedSub = existingCategories.cast<Category?>().firstWhere(
+            (c) => c != null && c.name.toLowerCase() == subName!.toLowerCase() && c.parentId == matchedParent.id,
+            orElse: () => null,
           );
           if (matchedSub != null) {
             _selectedSubcategoryId = matchedSub.id;
@@ -701,6 +719,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       }
 
       if (_selectedPaymentMethodId == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a payment method')),
         );
@@ -761,6 +780,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             );
 
             await notifier.editTransaction(updatedDebit);
+            await notifier.editTransaction(updatedCredit);
           }
         }
       } else {
@@ -783,8 +803,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           syncStatus: 'pending',
           createdAt: _isEditMode ? _existingTransaction!.createdAt : now,
           updatedAt: now,
-          receiptUrl: _receiptController.text.isNotEmpty ? _receiptController.text : null,
-          billLink: _billLinkController.text.isNotEmpty ? _billLinkController.text : null,
+          receiptUrl: null,
+          billLink: null,
+          referenceNumber: _referenceController.text.isNotEmpty ? _referenceController.text : null,
           tags: _tagsController.text.isNotEmpty ? _tagsController.text : null,
         );
 
@@ -810,7 +831,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           }
         }
 
-        if (matchedPendingBill != null && mounted) {
+        final billToMatch = matchedPendingBill;
+        if (billToMatch != null && mounted) {
           final confirmPayBill = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
@@ -821,7 +843,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ),
               title: const Text('Match Upcoming Bill', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
               content: Text(
-                'This expense matches your upcoming "${matchedPendingBill!.merchant ?? matchedPendingBill!.description ?? 'Bill'}" (₹${(matchedPendingBill!.amount / 100.0).toStringAsFixed(2)}). Would you like to mark that bill as paid?',
+                'This expense matches your upcoming "${billToMatch.merchant ?? billToMatch.description ?? 'Bill'}" (₹${(billToMatch.amount / 100.0).toStringAsFixed(2)}). Would you like to mark that bill as paid?',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
               actions: [
@@ -844,7 +866,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
           if (confirmPayBill == true) {
             final db = ref.read(databaseProvider);
-            final updatedBill = matchedPendingBill!.copyWith(
+            final updatedBill = billToMatch.copyWith(
               billStatus: const Value('paid'),
               accountId: Value(_selectedAccountId),
               paymentMethodId: Value(_selectedPaymentMethodId),
@@ -868,7 +890,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             }
 
             final mergedDesc = mergeStrings(manualTx.description, transaction.description);
-            final mergedMerchant = mergeStrings(manualTx.merchant, transaction.merchant) ?? 'Merged Merchant';
+            final mergedMerchant = mergeStrings(manualTx.merchant, transaction.merchant);
 
             List<String> smsList = [];
             if (manualTx.supportingSms != null && manualTx.supportingSms!.isNotEmpty) {
@@ -1034,26 +1056,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         return Icons.monetization_on_outlined;
       default:
         return Icons.account_balance_outlined;
-    }
-  }
-
-  Color _getAccountColor(String? colorStr, String type) {
-    if (colorStr != null && colorStr.isNotEmpty) {
-      try {
-        return Color(int.parse(colorStr));
-      } catch (_) {}
-    }
-    switch (type.toLowerCase()) {
-      case 'credit_card':
-      case 'loan':
-        return const Color(0xFFFF3B30);
-      case 'cash':
-        return const Color(0xFF00E5FF);
-      case 'wallet':
-      case 'upi_wallet':
-        return const Color(0xFFFFB703);
-      default:
-        return const Color(0xFF0066FF);
     }
   }
 
@@ -1358,36 +1360,94 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                     physics: const BouncingScrollPhysics(),
                     children: [
-                      if (!_isTransfer) ...[
-                        // Segmented Income/Expense Selector
-                        Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.02),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withOpacity(0.05)),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildTypeButton(
-                                  label: 'Expense',
-                                  type: 'expense',
-                                  activeColor: const Color(0xFFFF3B30),
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildTypeButton(
-                                  label: 'Income',
-                                  type: 'income',
-                                  activeColor: const Color(0xFF00E5FF),
-                                ),
-                              ),
-                            ],
-                          ),
+                      // Segmented Income/Expense/Transfer/PayCard Selector
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.02),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.05)),
                         ),
-                        const SizedBox(height: 32),
-                      ],
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 44,
+                                  child: _buildTypeButton(
+                                    label: 'Expense',
+                                    type: 'expense',
+                                    activeColor: const Color(0xFFFF3B30),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  flex: 44,
+                                  child: _buildTypeButton(
+                                    label: 'Income',
+                                    type: 'income',
+                                    activeColor: const Color(0xFF00E5FF),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  flex: 12,
+                                  child: _buildArrowButton(),
+                                ),
+                              ],
+                            ),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                              child: _isTypeSelectorExpanded
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 50,
+                                            child: _buildTypeButton(
+                                              label: 'Transfer',
+                                              type: 'transfer_debit',
+                                              activeColor: const Color(0xFF0066FF),
+                                              onTapOverride: () {
+                                                setState(() {
+                                                  _transactionType = 'transfer_debit';
+                                                  _isTypeSelectorExpanded = false;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            flex: 50,
+                                            child: _buildTypeButton(
+                                              label: 'Pay Card',
+                                              type: 'pay_card',
+                                              activeColor: const Color(0xFFFF3B30),
+                                              onTapOverride: () {
+                                                setState(() {
+                                                  _isTypeSelectorExpanded = false;
+                                                });
+                                                showModalBottomSheet(
+                                                  context: context,
+                                                  isScrollControlled: true,
+                                                  backgroundColor: Colors.transparent,
+                                                  builder: (context) => const CreditCardPaymentSheet(),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
 
                       // Giant Amount Field
                       Center(
@@ -1658,7 +1718,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                                           if (userId != null) {
                                             final catKey = 'merchant_category_override:$cleanMerchant';
                                             final typeKey = 'merchant_type_override:$cleanMerchant';
-
+                                            final messenger = ScaffoldMessenger.of(context);
                                             await db.into(db.aiMemories).insertOnConflictUpdate(
                                               AiMemoriesCompanion.insert(
                                                 id: const Uuid().v4(),
@@ -1681,7 +1741,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                                             );
 
                                             if (mounted) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
+                                              messenger.showSnackBar(
                                                 SnackBar(
                                                   content: Text('Expenso will always categorize "$cleanMerchant" as "${_categoryController.text}"!'),
                                                   backgroundColor: const Color(0xFF0F1A1C),
@@ -1950,44 +2010,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Receipt Section
+                      // Reference Section
                       const Text(
-                        'RECEIPT',
-                        style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _receiptController,
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
-                              decoration: _buildInputDecoration(
-                                hintText: 'Receipt (URL or Image Path)',
-                                icon: Icons.receipt_long,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.camera_alt, color: Color(0xFF0066FF)),
-                            onPressed: _pickReceiptImage,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Bill Link Section
-                      const Text(
-                        'BILL LINK',
+                        'REFERENCE',
                         style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
-                        controller: _billLinkController,
+                        controller: _referenceController,
                         style: const TextStyle(color: Colors.white, fontSize: 14),
                         decoration: _buildInputDecoration(
-                          hintText: 'Bill URL or PDF path',
+                          hintText: 'Reference number',
                           icon: Icons.link,
                         ),
                       ),
@@ -2129,16 +2162,23 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     required String label,
     required String type,
     required Color activeColor,
+    VoidCallback? onTapOverride,
   }) {
     final isSelected = _transactionType == type;
 
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _transactionType = type;
-          _selectedCategoryId = null;
-        });
+        if (onTapOverride != null) {
+          onTapOverride();
+        } else {
+          setState(() {
+            _transactionType = type;
+            _selectedCategoryId = null;
+            _isTypeSelectorExpanded = false;
+          });
+        }
       },
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         alignment: Alignment.center,
@@ -2155,8 +2195,42 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           label,
           style: TextStyle(
             color: isSelected ? Colors.white : Colors.white60,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 15,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+            fontSize: 14.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArrowButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isTypeSelectorExpanded = !_isTypeSelectorExpanded;
+        });
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: _isTypeSelectorExpanded ? Colors.white.withOpacity(0.06) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isTypeSelectorExpanded ? Colors.white.withOpacity(0.15) : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: AnimatedRotation(
+          turns: _isTypeSelectorExpanded ? 0.5 : 0.0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Colors.white70,
+            size: 20,
           ),
         ),
       ),
@@ -2182,54 +2256,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     );
   }
 
-  Future<void> _pickReceiptImage() async {
-    final picker = ImagePicker();
-    final confirm = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: const Color(0xFF050505),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined, color: Colors.white70),
-              title: const Text('Camera', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: Colors.white70),
-              title: const Text('Gallery', style: TextStyle(color: Colors.white)),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
-
-    if (confirm != null) {
-      try {
-        final image = await picker.pickImage(source: confirm);
-        if (image != null && mounted) {
-          setState(() {
-            _receiptController.text = image.path;
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to pick image: $e')),
-          );
-        }
-      }
-    }
-  }
 
   Future<void> _pickDateOnly() async {
     final pickedDate = await showDatePicker(
@@ -2329,8 +2355,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         syncStatus: 'pending',
         createdAt: now,
         updatedAt: now,
-        receiptUrl: _receiptController.text.isNotEmpty ? _receiptController.text : null,
-        billLink: _billLinkController.text.isNotEmpty ? _billLinkController.text : null,
+        receiptUrl: null,
+        billLink: null,
+        referenceNumber: _referenceController.text.isNotEmpty ? _referenceController.text : null,
         tags: _tagsController.text.isNotEmpty ? _tagsController.text : null,
         isRecurring: _isEditMode ? _existingTransaction!.isRecurring : false,
       );

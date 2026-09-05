@@ -37,8 +37,8 @@ class BalanceEngine {
     if (tx.accountId != null) {
       await recalculateAllBalances(accountId: tx.accountId);
     }
-    if (tx.referenceNumber != null) {
-      await recalculateAllBalances(accountId: tx.referenceNumber);
+    if (tx.billLink != null) {
+      await recalculateAllBalances(accountId: tx.billLink);
     }
   }
 
@@ -47,8 +47,8 @@ class BalanceEngine {
     if (tx.accountId != null) {
       await recalculateAllBalances(accountId: tx.accountId);
     }
-    if (tx.referenceNumber != null) {
-      await recalculateAllBalances(accountId: tx.referenceNumber);
+    if (tx.billLink != null) {
+      await recalculateAllBalances(accountId: tx.billLink);
     }
   }
 
@@ -56,9 +56,9 @@ class BalanceEngine {
   Future<void> reconcileOnEdit(Transaction oldTx, Transaction newTx) async {
     final affectedAccounts = <String>{};
     if (oldTx.accountId != null) affectedAccounts.add(oldTx.accountId!);
-    if (oldTx.referenceNumber != null) affectedAccounts.add(oldTx.referenceNumber!);
+    if (oldTx.billLink != null) affectedAccounts.add(oldTx.billLink!);
     if (newTx.accountId != null) affectedAccounts.add(newTx.accountId!);
-    if (newTx.referenceNumber != null) affectedAccounts.add(newTx.referenceNumber!);
+    if (newTx.billLink != null) affectedAccounts.add(newTx.billLink!);
 
     for (var accId in affectedAccounts) {
       await recalculateAllBalances(accountId: accId);
@@ -86,7 +86,7 @@ class BalanceEngine {
       }
 
       final txs = await (_db.select(_db.transactions)
-        ..where((t) => (t.accountId.equals(account.id) | t.referenceNumber.equals(account.id)) & t.deletedAt.isNull())
+        ..where((t) => (t.accountId.equals(account.id) | t.billLink.equals(account.id)) & t.deletedAt.isNull())
       ).get();
 
       final updated = FinancialCalculationService.calculateSingleAccountBalance(account, txs);
@@ -111,7 +111,7 @@ class BalanceEngine {
     
     for (var acc in accounts) {
       final txs = await (_db.select(_db.transactions)
-        ..where((t) => (t.accountId.equals(acc.id) | t.referenceNumber.equals(acc.id)) & t.deletedAt.isNull())
+        ..where((t) => (t.accountId.equals(acc.id) | t.billLink.equals(acc.id)) & t.deletedAt.isNull())
       ).get();
 
       final updatedAcc = FinancialCalculationService.calculateSingleAccountBalance(acc, txs);

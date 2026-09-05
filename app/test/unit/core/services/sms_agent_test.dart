@@ -133,5 +133,62 @@ void main() {
       expect(result.transactionType, equals('transfer'));
       expect(result.category, equals('Internal Transfer'));
     });
+
+    test('Parses ICICI Card Expense (Peevi Enterpris) correctly', () async {
+      const body = 'Dear Customer, your ICICI Bank Credit Card xx1122 has been spent Rs. 550.00 on Peevi Enterpris on 21-Jun-26. Avl Limit: INR 45,000.00.';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(550.0));
+      expect(result.transactionType, equals('expense'));
+      expect(result.account, contains('ICICI'));
+      expect(result.account, contains('1122'));
+      expect(result.merchant, equals('Peevi Enterpris'));
+    });
+
+    test('Parses ICICI Card Expense (Kerala State Be) correctly', () async {
+      const body = 'Dear Customer, your ICICI Bank Credit Card xx9999 has been spent Rs. 1,200.00 on Kerala State Be on 21-Jun-26. Avl Limit: INR 12,000.00.';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(1200.0));
+      expect(result.transactionType, equals('expense'));
+      expect(result.account, contains('ICICI'));
+      expect(result.account, contains('9999'));
+      expect(result.merchant, equals('Kerala State Be'));
+    });
+
+    test('Parses HDFC UPI Expense (Jms Karummbu Paal) correctly', () async {
+      const body = 'Paid Rs 40.00 from HDFC Bank A/c XX3726 To Jms Karummbu Paal on 21-Jun-26. UPI Ref: 622962983010.';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(40.0));
+      expect(result.transactionType, equals('expense'));
+      expect(result.merchant, equals('Jms Karummbu Paal'));
+      expect(result.referenceId, equals('622962983010'));
+    });
+
+    test('Parses SBI Income (Jinu M Babu) correctly', () async {
+      const body = 'SBI: Account XX1234 credited Rs 5,000.00 on 21-Jun-26 by transfer from Jinu M Babu. UPI Ref: 123456789012.';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(5000.0));
+      expect(result.transactionType, equals('income'));
+      expect(result.merchant, equals('Jinu M Babu'));
+      expect(result.referenceId, equals('123456789012'));
+    });
+
+    test('Parses SBI Income with different reference and card details (Jinu M Babu) correctly', () async {
+      const body = 'SBI: Account XX5678 credited Rs 12,500.00 on 21-Jun-26 by transfer from Jinu M Babu. UPI Ref: 987654321098.';
+      final result = await smsAgent.processSms(body, testDate);
+
+      expect(result, isNotNull);
+      expect(result!.amount, equals(12500.0));
+      expect(result.transactionType, equals('income'));
+      expect(result.merchant, equals('Jinu M Babu'));
+      expect(result.referenceId, equals('987654321098'));
+    });
   });
 }

@@ -26,6 +26,7 @@ class SmsTransactionPipeline {
     Function()? onUiInvalidate,
   }) async {
     final cleanBody = body.replaceAll('\n', ' ').trim();
+    debugPrint("[SMS_MONITOR] Scan started");
     debugPrint("SmsTransactionPipeline: Processing incoming SMS: $cleanBody");
 
     // Persist stats increment for scanned SMS
@@ -60,6 +61,21 @@ class SmsTransactionPipeline {
                                result.transactionType == 'cash_deposit' ||
                                result.category == 'Internal Transfer' ||
                                result.category == 'ATM Withdrawal';
+
+        if (result.isDuplicate && !isTransferType) {
+          debugPrint("SMS_DUPLICATE");
+          debugPrint("true");
+          debugPrint("SMS_ACCOUNT_MATCH");
+          debugPrint("${result.account}");
+          debugPrint("SMS_TRANSACTION_SAVE");
+          debugPrint("skipped");
+
+          try {
+            final dupStr = await secureStorage.read('sms_stats_duplicate_count') ?? '0';
+            await secureStorage.write('sms_stats_duplicate_count', (int.parse(dupStr) + 1).toString());
+          } catch (_) {}
+          return;
+        }
 
         if (isTransferType) {
           final correlationResult = await correlationEngine.correlate(result, userId, sender);
@@ -292,6 +308,10 @@ class SmsTransactionPipeline {
             await secureStorage.write('sms_stats_transactions_detected', (int.parse(txDetStr) + 1).toString());
           } catch (_) {}
 
+          final metadata = {
+            'refNumber': result.referenceId,
+            'toAccountId': null,
+          };
           final draft = TransactionDraft(
             id: const Uuid().v4(),
             userId: userId,
@@ -309,6 +329,7 @@ class SmsTransactionPipeline {
             categoryId: categoryId,
             category: result.category,
             confidenceScore: result.confidence,
+            supportingSms: jsonEncode(metadata),
           );
           await db.transactionDraftDao.insertDraft(draft);
 
@@ -379,6 +400,10 @@ class SmsTransactionPipeline {
             await secureStorage.write('sms_stats_transactions_detected', (int.parse(txDetStr) + 1).toString());
           } catch (_) {}
 
+          final metadata = {
+            'refNumber': result.referenceId,
+            'toAccountId': null,
+          };
           final draft = TransactionDraft(
             id: const Uuid().v4(),
             userId: userId,
@@ -397,6 +422,7 @@ class SmsTransactionPipeline {
             category: result.category,
             confidenceScore: result.confidence,
             matchingTransactionId: reconciliationResult.matchingManualId,
+            supportingSms: jsonEncode(metadata),
           );
           await db.transactionDraftDao.insertDraft(draft);
 
@@ -475,8 +501,17 @@ class SmsTransactionPipeline {
           if (onUiInvalidate != null) onUiInvalidate();
         }
       }
+
+      final now = DateTime.now();
+      await secureStorage.saveLastSmsSyncTime(now);
+      await secureStorage.write('sms_stats_last_processed_time', now.toIso8601String());
+      debugPrint("[SMS_MONITOR] Scan completed successfully");
+      debugPrint("[SMS_MONITOR] lastSuccessfulScanAt = ${now.toIso8601String()}");
+      debugPrint("[SMS_MONITOR] State notification dispatched");
     } catch (e) {
       debugPrint("SmsTransactionPipeline: Error handling incoming SMS: $e");
+      debugPrint("[SMS_MONITOR] Scan failed");
+      debugPrint("[SMS_MONITOR] lastSuccessfulScanAt NOT updated");
       try {
         await secureStorage.write('sms_stats_last_error', e.toString());
       } catch (_) {}

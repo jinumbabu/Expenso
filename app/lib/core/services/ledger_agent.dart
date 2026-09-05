@@ -11,6 +11,7 @@ import 'balance_engine.dart';
 import 'notification_service.dart';
 import 'sms_account_matcher.dart';
 import 'financial_calculation_service.dart';
+import 'expenso_transaction_intelligence_engine.dart';
 
 enum ReconciliationStatus { inserted, updated, merged, skipped, matchingManual }
 
@@ -59,12 +60,12 @@ class LedgerAgent {
       final balanceResult = await _reconcileAccountBalance(newTx, confidence);
       final accountId = balanceResult['accountId'] as String;
       final finalType = balanceResult['type'] as String;
-      final referenceNumber = balanceResult['referenceNumber'] as String?;
+      final billLink = balanceResult['billLink'] as String?;
       
       var txWithAccount = newTx.copyWith(
         accountId: Value(accountId),
         type: finalType,
-        referenceNumber: Value(referenceNumber ?? newTx.referenceNumber),
+        billLink: Value(billLink ?? newTx.billLink),
       );
 
       // Fetch the account to get the type and name
@@ -217,73 +218,82 @@ Payment Method: $paymentMethod
         }
       }
 
+      Transaction? duplicateTx;
+
       // 4. Traditional Duplicate Transaction detection (for non-bill transactions, backwards compatibility)
       // Global reference number check (Requirement 11)
       if (txWithAccount.referenceNumber != null && txWithAccount.referenceNumber!.isNotEmpty) {
-        final duplicateByRef = await (_db.select(_db.transactions)
+        duplicateTx = await (_db.select(_db.transactions)
           ..where((t) => t.userId.equals(txWithAccount.userId) & 
                          t.referenceNumber.equals(txWithAccount.referenceNumber!) & 
                          t.deletedAt.isNull())
           ..limit(1)
         ).getSingleOrNull();
-
-        if (duplicateByRef != null) {
+        if (duplicateTx != null) {
           dev.log('[Duplicate Check] Duplicate detected globally by reference number: ${txWithAccount.referenceNumber}');
-          return ReconciliationResult(status: ReconciliationStatus.merged, transactionId: duplicateByRef.id);
         }
       }
 
-      final existingWithFingerprint = await (_db.select(_db.transactions)
-        ..where((t) => t.userId.equals(txWithAccount.userId) & t.fingerprint.equals(fingerprint) & t.deletedAt.isNull())
-        ..limit(1)
-      ).getSingleOrNull();
+      if (duplicateTx == null) {
+        final existingWithFingerprint = await (_db.select(_db.transactions)
+          ..where((t) => t.userId.equals(txWithAccount.userId) & t.fingerprint.equals(fingerprint) & t.deletedAt.isNull())
+          ..limit(1)
+        ).getSingleOrNull();
 
-      if (existingWithFingerprint != null) {
-        dev.log('[Duplicate Check] Duplicate Status: Duplicate detected by fingerprint. Merging with existing transaction: ${existingWithFingerprint.id}');
-        return ReconciliationResult(status: ReconciliationStatus.merged, transactionId: existingWithFingerprint.id);
+        if (existingWithFingerprint != null) {
+          dev.log('[Duplicate Check] Duplicate Status: Duplicate detected by fingerprint. Merging with existing transaction: ${existingWithFingerprint.id}');
+          duplicateTx = existingWithFingerprint;
+        }
       }
 
-      Transaction? duplicateTx;
-      final startOfDay = DateTime(txWithAccount.date.year, txWithAccount.date.month, txWithAccount.date.day);
-      final endOfDay = startOfDay.add(const Duration(hours: 23, minutes: 59, seconds: 59));
-      
-      final existingTxs = await (_db.select(_db.transactions)
-        ..where((t) => t.userId.equals(txWithAccount.userId) & 
-                       t.amount.equals(txWithAccount.amount.toInt()) &
-                       t.date.isBetweenValues(startOfDay, endOfDay) &
-                       t.deletedAt.isNull())
-      ).get();
-
-      for (var ext in existingTxs) {
-        // REQUIREMENT: Transactions from different accounts MUST NEVER be treated as duplicates!
-        if (ext.accountId != null && txWithAccount.accountId != null && ext.accountId != txWithAccount.accountId) {
-          continue;
-        }
-
-        final bool isExtDateOnly = ext.date.hour == 0 && ext.date.minute == 0 && ext.date.second == 0;
-        final bool isNewDateOnly = txWithAccount.date.hour == 0 && txWithAccount.date.minute == 0 && txWithAccount.date.second == 0;
+      if (duplicateTx == null) {
+        final startOfDay = DateTime(txWithAccount.date.year, txWithAccount.date.month, txWithAccount.date.day);
+        final endOfDay = startOfDay.add(const Duration(hours: 23, minutes: 59, seconds: 59));
         
-        final bool timeWindowMatches = (isExtDateOnly || isNewDateOnly || ext.source == 'manual' || txWithAccount.source == 'manual')
-            ? true // same day match
-            : ext.date.difference(txWithAccount.date).inMinutes.abs() <= 35;
-            
-        if (!timeWindowMatches) continue;
+        final existingTxs = await (_db.select(_db.transactions)
+          ..where((t) => t.userId.equals(txWithAccount.userId) & 
+                         t.amount.equals(txWithAccount.amount.toInt()) &
+                         t.date.isBetweenValues(startOfDay, endOfDay) &
+                         t.deletedAt.isNull())
+        ).get();
 
-        final extMerchant = (ext.merchant ?? '').toLowerCase().trim();
-        final newMerchant = (txWithAccount.merchant ?? '').toLowerCase().trim();
-        final merchantMatches = extMerchant == newMerchant ||
-                                extMerchant.contains(newMerchant) ||
-                                newMerchant.contains(extMerchant) ||
-                                (extMerchant.isEmpty && newMerchant.isEmpty);
-        if (!merchantMatches) continue;
+        final userAccounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(txWithAccount.userId))).get();
 
-        final extRef = (ext.referenceNumber ?? '').trim().toLowerCase();
-        final newRef = (txWithAccount.referenceNumber ?? '').trim().toLowerCase();
-        final refMatches = extRef == newRef || extRef.isEmpty || newRef.isEmpty;
-        if (!refMatches) continue;
+        for (var ext in existingTxs) {
+          // REQUIREMENT: Transactions from different accounts MUST NEVER be treated as duplicates!
+          if (ext.accountId != null && txWithAccount.accountId != null && ext.accountId != txWithAccount.accountId) {
+            final extAcc = userAccounts.where((a) => a.id == ext.accountId).firstOrNull;
+            final newAcc = userAccounts.where((a) => a.id == txWithAccount.accountId).firstOrNull;
+            if (extAcc != null && newAcc != null && extAcc.last4Digits != null && newAcc.last4Digits != null && extAcc.last4Digits != newAcc.last4Digits) {
+              continue;
+            }
+          }
 
-        duplicateTx = ext;
-        break;
+          final bool isExtDateOnly = ext.date.hour == 0 && ext.date.minute == 0 && ext.date.second == 0;
+          final bool isNewDateOnly = txWithAccount.date.hour == 0 && txWithAccount.date.minute == 0 && txWithAccount.date.second == 0;
+          
+          final bool timeWindowMatches = (isExtDateOnly || isNewDateOnly || ext.source == 'manual' || txWithAccount.source == 'manual')
+              ? true // same day match
+              : ext.date.difference(txWithAccount.date).inMinutes.abs() <= 35;
+              
+          if (!timeWindowMatches) continue;
+
+          final extMerchant = (ext.merchant ?? '').toLowerCase().trim();
+          final newMerchant = (txWithAccount.merchant ?? '').toLowerCase().trim();
+          final merchantMatches = extMerchant == newMerchant ||
+                                  extMerchant.contains(newMerchant) ||
+                                  newMerchant.contains(extMerchant) ||
+                                  (extMerchant.isEmpty && newMerchant.isEmpty);
+          if (!merchantMatches) continue;
+
+          final extRef = (ext.referenceNumber ?? '').trim().toLowerCase();
+          final newRef = (txWithAccount.referenceNumber ?? '').trim().toLowerCase();
+          final refMatches = extRef == newRef || extRef.isEmpty || newRef.isEmpty;
+          if (!refMatches) continue;
+
+          duplicateTx = ext;
+          break;
+        }
       }
 
       if (duplicateTx != null) {
@@ -291,18 +301,29 @@ Payment Method: $paymentMethod
           dev.log('[Duplicate Check] Duplicate Status: Incoming SMS matches manual entry ${duplicateTx.id}. Merging manual entry with SMS details.');
         }
 
-        dev.log('[Duplicate Check] Duplicate Status: Duplicate detected by field matches. Merging with existing transaction: ${duplicateTx.id}');
+        dev.log('[Duplicate Check] Duplicate Status: Duplicate detected. Merging with existing transaction: ${duplicateTx.id}');
         
         final mergedDesc = _mergeStrings(duplicateTx.description, txWithAccount.description);
         final mergedMerchant = _mergeStrings(duplicateTx.merchant, txWithAccount.merchant) ?? 'Merged Merchant';
 
         // Merge supporting SMS lists
         List<String> smsList = [];
+        String? mergedRefNumber = duplicateTx.referenceNumber ?? txWithAccount.referenceNumber;
+        String? mergedBillLink = duplicateTx.billLink ?? txWithAccount.billLink;
+
         if (duplicateTx.supportingSms != null && duplicateTx.supportingSms!.isNotEmpty) {
           try {
-            smsList = List<String>.from(jsonDecode(duplicateTx.supportingSms!));
+            final parsed = jsonDecode(duplicateTx.supportingSms!);
+            if (parsed is Map) {
+              smsList = List<String>.from(parsed['smsList'] ?? []);
+              if (mergedRefNumber == null) mergedRefNumber = parsed['refNumber'] as String?;
+              if (mergedBillLink == null) mergedBillLink = parsed['toAccountId'] as String?;
+            } else if (parsed is List) {
+              smsList = List<String>.from(parsed);
+            }
           } catch (_) {}
         }
+
         if (duplicateTx.description != null && !smsList.contains(duplicateTx.description)) {
           smsList.add(duplicateTx.description!);
         }
@@ -311,31 +332,94 @@ Payment Method: $paymentMethod
           smsList.add(newSmsText);
         }
 
-        final mergedRef = (duplicateTx.referenceNumber == null || duplicateTx.referenceNumber!.isEmpty)
-            ? txWithAccount.referenceNumber
-            : duplicateTx.referenceNumber;
+        if (txWithAccount.supportingSms != null && txWithAccount.supportingSms!.isNotEmpty) {
+          try {
+            final parsed = jsonDecode(txWithAccount.supportingSms!);
+            if (parsed is Map) {
+              final list = parsed['smsList'] as List?;
+              if (list != null) {
+                for (final s in list) {
+                  final str = s.toString();
+                  if (!smsList.contains(str)) smsList.add(str);
+                }
+              }
+              if (mergedRefNumber == null) mergedRefNumber = parsed['refNumber'] as String?;
+              if (mergedBillLink == null) mergedBillLink = parsed['toAccountId'] as String?;
+            }
+          } catch (_) {}
+        }
+
+        String finalType = duplicateTx.type;
+        String? finalTxType = duplicateTx.transactionType;
+        String? finalAccountId = duplicateTx.accountId ?? txWithAccount.accountId;
+        String? finalBillLink = mergedBillLink;
+
+        // Self-transfer detection! (Requirement 9)
+        final accounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(txWithAccount.userId))).get();
+        final accountIds = accounts.map((a) => a.id).toSet();
+
+        final dupIsCredit = FinancialCalculationService.isCredit(duplicateTx, duplicateTx.accountId ?? '');
+        final dupIsDebit = FinancialCalculationService.isDebit(duplicateTx, duplicateTx.accountId ?? '');
+        final newIsCredit = FinancialCalculationService.isCredit(txWithAccount, txWithAccount.accountId ?? '');
+        final newIsDebit = FinancialCalculationService.isDebit(txWithAccount, txWithAccount.accountId ?? '');
+
+        if (duplicateTx.accountId != txWithAccount.accountId && 
+            duplicateTx.accountId != null && 
+            txWithAccount.accountId != null &&
+            accountIds.contains(duplicateTx.accountId) && 
+            accountIds.contains(txWithAccount.accountId)) {
+          
+          finalType = 'transfer';
+          finalTxType = 'SELF_TRANSFER';
+
+          String? sourceAccId;
+          String? destAccId;
+          if (dupIsDebit || newIsCredit) {
+            sourceAccId = duplicateTx.accountId;
+            destAccId = txWithAccount.accountId;
+          } else if (newIsDebit || dupIsCredit) {
+            sourceAccId = txWithAccount.accountId;
+            destAccId = duplicateTx.accountId;
+          } else {
+            sourceAccId = duplicateTx.accountId;
+            destAccId = txWithAccount.accountId;
+          }
+          finalAccountId = sourceAccId;
+          finalBillLink = destAccId;
+        }
+
+        final supportingMetadata = {
+          'smsList': smsList,
+          'refNumber': mergedRefNumber,
+          'toAccountId': finalBillLink,
+        };
 
         final newFingerprint = generateFingerprint(
-          accountId: duplicateTx.accountId,
+          accountId: finalAccountId,
           amount: duplicateTx.amount,
           merchant: mergedMerchant,
           date: duplicateTx.date,
-          referenceNumber: mergedRef,
+          referenceNumber: mergedRefNumber,
         );
 
         final mergedTx = duplicateTx.copyWith(
+          accountId: Value(finalAccountId),
+          type: finalType,
+          transactionType: Value(finalTxType),
           description: Value(mergedDesc),
           merchant: Value(mergedMerchant),
           categoryId: Value(duplicateTx.categoryId ?? txWithAccount.categoryId),
           paymentMethodId: Value(duplicateTx.paymentMethodId ?? txWithAccount.paymentMethodId),
-          referenceNumber: Value(mergedRef),
+          referenceNumber: Value(mergedRefNumber),
+          billLink: Value(finalBillLink),
           fingerprint: Value(newFingerprint),
-          supportingSms: Value(jsonEncode(smsList)),
+          supportingSms: Value(jsonEncode(supportingMetadata)),
           syncStatus: 'pending',
           updatedAt: DateTime.now(),
         );
 
         await _db.transactionDao.updateTransaction(mergedTx);
+        await BalanceEngine(_db).reconcileOnEdit(duplicateTx, mergedTx);
 
         await _db.agentLogDao.insertLog(
           AgentLog(
@@ -360,7 +444,49 @@ Payment Method: $paymentMethod
         );
       }
 
-      dev.log('[Duplicate Check] Duplicate Status: Not a duplicate (No matching transaction found within time window)');
+      // 4b. Check if matching draft exists in transaction_drafts table
+      try {
+        final drafts = await (_db.select(_db.transactionDrafts)
+          ..where((d) => d.userId.equals(txWithAccount.userId))
+        ).get();
+
+        for (var draft in drafts) {
+          final sameAmount = (draft.amount == txWithAccount.amount.toInt());
+          final closeTime = draft.date.difference(txWithAccount.date).inMinutes.abs() <= 35;
+          final draftMerchant = (draft.merchant ?? '').toLowerCase().trim();
+          final newMerchant = (txWithAccount.merchant ?? '').toLowerCase().trim();
+          final merchantMatches = draftMerchant == newMerchant ||
+                                  draftMerchant.contains(newMerchant) ||
+                                  newMerchant.contains(draftMerchant) ||
+                                  (draftMerchant.isEmpty && newMerchant.isEmpty);
+
+          String? draftRef;
+          if (draft.supportingSms != null && draft.supportingSms!.startsWith('{')) {
+            try {
+              final Map<String, dynamic> metadata = jsonDecode(draft.supportingSms!);
+              draftRef = metadata['refNumber'] as String?;
+            } catch (_) {}
+          }
+          if ((draftRef == null || draftRef.isEmpty) && draft.smsBody != null) {
+            draftRef = ReferenceIdExtractor.extract(draft.smsBody!, sender: draft.smsSender);
+          }
+
+          final refMatches = (txWithAccount.referenceNumber != null && draftRef != null && txWithAccount.referenceNumber == draftRef) ||
+                             (sameAmount && closeTime && merchantMatches);
+
+          if (refMatches) {
+            final mergedRef = txWithAccount.referenceNumber ?? draftRef;
+            txWithAccount = txWithAccount.copyWith(
+              referenceNumber: Value(mergedRef),
+            );
+            await _db.transactionDraftDao.deleteDraft(draft.id);
+            dev.log('LedgerAgent DEBUG: Merged and cleared matching transaction draft ${draft.id} for new transaction ${txWithAccount.id}');
+            break;
+          }
+        }
+      } catch (e) {
+        dev.log('LedgerAgent DEBUG: Error checking draft correlation: $e');
+      }
 
       // 5. Insert new Transaction (Requirement 1)
       try {
@@ -715,17 +841,27 @@ Payment Method: $paymentMethod
           }
           if (sourceAccount == null) {
             final detected = _detectAccountDetails(tx);
-            sourceAccount = await _getOrCreateAccount(
-              tx.userId,
-              detected['name']!,
-              detected['type']!,
+            final last4Match = RegExp(r'\b\d{4}\b').firstMatch(detected['name']!);
+            final last4 = last4Match?.group(0);
+            sourceAccount = await _findExistingAccount(
+              userId: tx.userId,
+              type: detected['type']!,
               bankName: detected['bank']!,
-              colorTheme: detected['color']!,
-              icon: detected['icon']!,
-              isEstimated: tx.source == 'sms',
-              openingBalance: 0,
-              initialBalance: tx.amount.toInt(),
+              last4: last4 ?? 'XXXX',
             );
+            if (sourceAccount == null) {
+              sourceAccount = await _getOrCreateAccount(
+                tx.userId,
+                detected['name']!,
+                detected['type']!,
+                bankName: detected['bank']!,
+                colorTheme: detected['color']!,
+                icon: detected['icon']!,
+                isEstimated: tx.source == 'sms',
+                openingBalance: 0,
+                initialBalance: tx.amount.toInt(),
+              );
+            }
           }
 
           // Destination is Cash.
@@ -750,9 +886,9 @@ Payment Method: $paymentMethod
         } else if (tx.type == 'credit_card_payment') {
           // Bank Account -> Credit Card.
           // Destination is Credit Card Account.
-          if (tx.referenceNumber != null && tx.referenceNumber!.isNotEmpty) {
+          if (tx.billLink != null && tx.billLink!.isNotEmpty) {
             destAccount = await (_db.select(_db.accounts)
-              ..where((a) => a.id.equals(tx.referenceNumber!) & a.userId.equals(tx.userId))
+              ..where((a) => a.id.equals(tx.billLink!) & a.userId.equals(tx.userId))
               ..limit(1)
             ).getSingleOrNull();
           }
@@ -764,15 +900,25 @@ Payment Method: $paymentMethod
           }
           if (destAccount == null) {
             final detected = _detectAccountDetails(tx);
-            destAccount = await _getOrCreateAccount(
-              tx.userId,
-              detected['name']!,
-              'credit_card',
+            final last4Match = RegExp(r'\b\d{4}\b').firstMatch(detected['name']!);
+            final last4 = last4Match?.group(0);
+            destAccount = await _findExistingAccount(
+              userId: tx.userId,
+              type: 'credit_card',
               bankName: detected['bank']!,
-              colorTheme: detected['color']!,
-              icon: detected['icon']!,
-              isEstimated: tx.source == 'sms',
+              last4: last4 ?? 'XXXX',
             );
+            if (destAccount == null) {
+              destAccount = await _getOrCreateAccount(
+                tx.userId,
+                detected['name']!,
+                'credit_card',
+                bankName: detected['bank']!,
+                colorTheme: detected['color']!,
+                icon: detected['icon']!,
+                isEstimated: tx.source == 'sms',
+              );
+            }
           }
 
           // Source is Bank Account.
@@ -814,23 +960,33 @@ Payment Method: $paymentMethod
           }
           if (sourceAccount == null) {
             final detected = _detectAccountDetails(tx);
-            sourceAccount = await _getOrCreateAccount(
-              tx.userId,
-              detected['name']!,
-              detected['type']!,
+            final last4Match = RegExp(r'\b\d{4}\b').firstMatch(detected['name']!);
+            final last4 = last4Match?.group(0);
+            sourceAccount = await _findExistingAccount(
+              userId: tx.userId,
+              type: detected['type']!,
               bankName: detected['bank']!,
-              colorTheme: detected['color']!,
-              icon: detected['icon']!,
-              isEstimated: tx.source == 'sms',
-              openingBalance: tx.source == 'sms' ? null : tx.amount.toInt(),
-              initialBalance: 0,
+              last4: last4 ?? 'XXXX',
             );
+            if (sourceAccount == null) {
+              sourceAccount = await _getOrCreateAccount(
+                tx.userId,
+                detected['name']!,
+                detected['type']!,
+                bankName: detected['bank']!,
+                colorTheme: detected['color']!,
+                icon: detected['icon']!,
+                isEstimated: tx.source == 'sms',
+                openingBalance: tx.source == 'sms' ? null : tx.amount.toInt(),
+                initialBalance: 0,
+              );
+            }
           }
 
           // Destination account.
-          if (tx.referenceNumber != null && tx.referenceNumber!.isNotEmpty) {
+          if (tx.billLink != null && tx.billLink!.isNotEmpty) {
             destAccount = await (_db.select(_db.accounts)
-              ..where((a) => a.id.equals(tx.referenceNumber!) & a.userId.equals(tx.userId))
+              ..where((a) => a.id.equals(tx.billLink!) & a.userId.equals(tx.userId))
               ..limit(1)
             ).getSingleOrNull();
           }
@@ -913,7 +1069,7 @@ Payment Method: $paymentMethod
         return {
           'accountId': sourceAccount.id,
           'type': tx.type,
-          'referenceNumber': destAccount.id,
+          'billLink': destAccount.id,
         };
       }
 
@@ -1315,6 +1471,114 @@ Payment Method: $paymentMethod
     await _db.accountDao.updateAccount(updated);
 
     await BalanceEngine(_db).reconcileOnAdd(adjustmentTx);
+  }
+
+  /// Repairs existing duplicate SMS transactions in database by grouping by reference number,
+  /// keeping the best primary transaction, soft deleting duplicates, and updating balances.
+  Future<int> repairDuplicateTransactions(String userId) async {
+    return await _db.transaction(() async {
+      int repairedCount = 0;
+      
+      final allTxs = await (_db.select(_db.transactions)
+        ..where((t) => t.userId.equals(userId) & t.deletedAt.isNull())
+        ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
+      ).get();
+
+      final Map<String, List<Transaction>> byRef = {};
+      for (final tx in allTxs) {
+        final ref = tx.referenceNumber?.trim();
+        if (ref != null && ref.isNotEmpty) {
+          byRef.putIfAbsent(ref, () => []).add(tx);
+        }
+      }
+
+      for (final entry in byRef.entries) {
+        final group = entry.value;
+        if (group.length > 1) {
+          final primary = group.firstWhere(
+            (t) => t.transactionType == 'SELF_TRANSFER' || t.type == 'transfer',
+            orElse: () => group.first,
+          );
+
+          for (final dup in group) {
+            if (dup.id == primary.id) continue;
+
+            final mergedMerchant = (primary.merchant != null && primary.merchant != 'General Merchant')
+                ? primary.merchant!
+                : (dup.merchant ?? 'Merged Transaction');
+            final mergedDesc = _mergeStrings(primary.description, dup.description);
+            
+            String finalType = primary.type;
+            String? finalTxType = primary.transactionType;
+            String? finalAccountId = primary.accountId ?? dup.accountId;
+            String? finalBillLink = primary.billLink ?? dup.billLink;
+
+            final accounts = await (_db.select(_db.accounts)..where((a) => a.userId.equals(userId))).get();
+            final accountIds = accounts.map((a) => a.id).toSet();
+
+            if (primary.accountId != dup.accountId && 
+                primary.accountId != null && 
+                dup.accountId != null &&
+                accountIds.contains(primary.accountId) && 
+                accountIds.contains(dup.accountId)) {
+              finalType = 'transfer';
+              finalTxType = 'SELF_TRANSFER';
+              finalAccountId = dup.type == 'expense' ? dup.accountId : primary.accountId;
+              finalBillLink = dup.type == 'expense' ? primary.accountId : dup.accountId;
+            }
+
+            final updatedPrimary = primary.copyWith(
+              type: finalType,
+              transactionType: Value(finalTxType),
+              merchant: Value(mergedMerchant),
+              description: Value(mergedDesc),
+              accountId: Value(finalAccountId),
+              billLink: Value(finalBillLink),
+              updatedAt: DateTime.now(),
+            );
+
+            await _db.transactionDao.updateTransaction(updatedPrimary);
+            
+            final deletedDup = dup.copyWith(
+              deletedAt: Value(DateTime.now()),
+              updatedAt: DateTime.now(),
+            );
+            await _db.transactionDao.updateTransaction(deletedDup);
+            await BalanceEngine(_db).reconcileOnDelete(dup);
+
+            repairedCount++;
+          }
+        }
+      }
+
+      final pendingDrafts = await (_db.select(_db.transactionDrafts)
+        ..where((d) => d.userId.equals(userId))
+      ).get();
+
+      for (final draft in pendingDrafts) {
+        String? draftRef;
+        if (draft.supportingSms != null && draft.supportingSms!.startsWith('{')) {
+          try {
+            final meta = jsonDecode(draft.supportingSms!);
+            draftRef = meta['refNumber'] as String?;
+          } catch (_) {}
+        }
+
+        if (draftRef != null && draftRef.isNotEmpty) {
+          final existingTx = await (_db.select(_db.transactions)
+            ..where((t) => t.userId.equals(userId) & t.referenceNumber.equals(draftRef!) & t.deletedAt.isNull())
+            ..limit(1)
+          ).getSingleOrNull();
+
+          if (existingTx != null) {
+            await _db.transactionDraftDao.deleteDraft(draft.id);
+            repairedCount++;
+          }
+        }
+      }
+
+      return repairedCount;
+    });
   }
 }
 

@@ -29,6 +29,8 @@ class SmsAgentResult {
   final String? billStatus; // pending, paid
   final DateTime? dueDate;
   final String? categoryOverrideId; // categoryId override from manual edit learning
+  final bool isDuplicate;
+  final String? duplicateTxId;
   final double bankConfidence;
   final double amountConfidence;
   final double accountConfidence;
@@ -53,6 +55,8 @@ class SmsAgentResult {
     this.billStatus,
     this.dueDate,
     this.categoryOverrideId,
+    this.isDuplicate = false,
+    this.duplicateTxId,
     this.bankConfidence = 1.0,
     this.amountConfidence = 1.0,
     this.accountConfidence = 1.0,
@@ -693,6 +697,18 @@ class SmsAgent {
     final String keyForHash = "${ext.referenceId ?? ''}_${cleanBankForHash}_${cleanAccForHash}_${cleanAmtForHash}_${cleanMerchantForHash}_${ext.isDebit}_${ext.date.millisecondsSinceEpoch}_$transactionType";
     final String duplicateHash = md5.convert(utf8.encode(keyForHash)).toString();
 
+    debugPrint("=== SMS INGESTION DEBUG ===");
+    debugPrint("sender = ${sender ?? 'Unknown'}");
+    debugPrint("body = $cleanBody");
+    debugPrint("amount = ${ext.amount}");
+    debugPrint("direction = ${ext.isDebit ? 'DEBIT' : 'CREDIT'}");
+    debugPrint("account = ${ext.bankName ?? 'Unknown'} ${ext.accountNumber ?? ''}");
+    debugPrint("counterparty = ${ext.merchant}");
+    debugPrint("referenceId = ${ext.referenceId ?? 'None'}");
+    debugPrint("transactionType = $transactionType");
+    debugPrint("deduplicationResult = isDuplicate:${engineResult.isDuplicate}, dupId:${engineResult.duplicateTxId}");
+    debugPrint("===========================");
+
     debugPrint("SMS_RECEIVED");
     debugPrint("sender=${sender ?? 'Unknown'}");
     debugPrint("SMS_CLASSIFICATION");
@@ -780,6 +796,8 @@ class SmsAgent {
       accountType: accountType,
       billStatus: billStatus,
       dueDate: dueDate,
+      isDuplicate: engineResult.isDuplicate,
+      duplicateTxId: engineResult.duplicateTxId,
     );
 
     // Log the Decision

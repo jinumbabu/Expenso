@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -13,11 +14,34 @@ import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../../core/services/sms_account_matcher.dart';
 import '../../../../shared/widgets/glass_card.dart';
 
-class SmsTransactionsScreen extends ConsumerWidget {
+class SmsTransactionsScreen extends ConsumerStatefulWidget {
   const SmsTransactionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SmsTransactionsScreen> createState() => _SmsTransactionsScreenState();
+}
+
+class _SmsTransactionsScreenState extends ConsumerState<SmsTransactionsScreen> {
+  Timer? _relativeTimeTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _relativeTimeTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final draftsAsync = ref.watch(transactionDraftsStreamProvider);
     final scannerState = ref.watch(smsScannerProvider);
     final accounts = ref.watch(accountsProvider).value ?? [];
@@ -167,8 +191,9 @@ class SmsTransactionsScreen extends ConsumerWidget {
 
   Widget _buildScannerControlCard(BuildContext context, WidgetRef ref, SmsScannerState scannerState) {
     final permissionGranted = scannerState.smsPermissionStatus.isGranted;
-    final lastScanFormatted = scannerState.lastSyncTime != null
-        ? DateFormat('MMM dd, hh:mm a').format(scannerState.lastSyncTime!)
+    final lastSync = scannerState.lastSyncTime;
+    final lastScanFormatted = lastSync != null
+        ? "${getRelativeTimeString(lastSync)} (${DateFormat('MMM dd, hh:mm a').format(lastSync)})"
         : 'Never';
 
     // Resolve States
@@ -1073,3 +1098,27 @@ class SmsTransactionsScreen extends ConsumerWidget {
     );
   }
 }
+
+String getRelativeTimeString(DateTime? dateTime) {
+  if (dateTime == null) return 'Never';
+  final now = DateTime.now();
+  final localDateTime = dateTime.toLocal();
+  final difference = now.difference(localDateTime);
+
+  if (difference.inSeconds < 0) {
+    return 'Just now';
+  }
+  if (difference.inSeconds < 60) {
+    return 'Just now';
+  } else if (difference.inMinutes < 60) {
+    final minutes = difference.inMinutes;
+    return '$minutes ${minutes == 1 ? "min" : "mins"} ago';
+  } else if (difference.inHours < 24) {
+    final hours = difference.inHours;
+    return '$hours ${hours == 1 ? "hour" : "hours"} ago';
+  } else {
+    final days = difference.inDays;
+    return '$days ${days == 1 ? "day" : "days"} ago';
+  }
+}
+

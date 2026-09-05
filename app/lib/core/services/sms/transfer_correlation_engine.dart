@@ -43,16 +43,18 @@ class TransferCorrelationEngine {
 
     for (var tx in recentTransactions) {
       final isTxDebit = tx.type == 'expense' || tx.type == 'transfer_debit' || tx.type == 'cash_withdrawal';
-      if (isCandidateDebit == isTxDebit) continue; // Must be opposite directions
+      
+      // Top Priority: Exact Reference ID match
+      if (candidate.referenceId != null && 
+          candidate.referenceId!.isNotEmpty && 
+          tx.referenceNumber != null && 
+          tx.referenceNumber == candidate.referenceId) {
+        return CorrelationResult(matchedTx: tx, score: 100);
+      }
+
+      if (isCandidateDebit == isTxDebit) continue; // Must be opposite directions if no ref match
 
       int score = 0;
-
-      // Rule 1: Reference Number Match (+50)
-      if (candidate.referenceId != null && tx.referenceNumber != null &&
-          candidate.referenceId!.isNotEmpty && tx.referenceNumber!.isNotEmpty &&
-          candidate.referenceId == tx.referenceNumber) {
-        score += 50;
-      }
 
       // Rule 2: Amount Match (+20)
       final candidateCents = (candidate.amount * 100).round();
@@ -107,27 +109,29 @@ class TransferCorrelationEngine {
     int bestDraftScore = 0;
 
     for (var draft in pendingDrafts) {
+      // Top Priority: Exact Reference ID match
+      if (candidate.referenceId != null && candidate.referenceId!.isNotEmpty) {
+        String? draftRef;
+        if (draft.supportingSms != null && draft.supportingSms!.startsWith('{')) {
+          try {
+            final meta = jsonDecode(draft.supportingSms!);
+            draftRef = meta['refNumber'] as String?;
+          } catch (_) {}
+        }
+        if (draftRef == candidate.referenceId || (draft.smsBody != null && draft.smsBody!.contains(candidate.referenceId!))) {
+          return CorrelationResult(matchedDraft: draft, score: 100);
+        }
+      }
+
       final isDraftDebit = draft.type == 'expense' || 
                            draft.category == 'Internal Transfer' || 
                            (draft.smsBody != null && 
                             (draft.smsBody!.toLowerCase().contains('sent') || 
                              draft.smsBody!.toLowerCase().contains('debited')));
 
-      if (isCandidateDebit == isDraftDebit) continue; // Must be opposite directions
+      if (isCandidateDebit == isDraftDebit) continue; // Must be opposite directions if no ref match
 
       int score = 0;
-
-      // Rule 1: Reference Number Match (+50)
-      bool refMatched = false;
-      if (candidate.referenceId != null && candidate.referenceId!.isNotEmpty) {
-        if (draft.smsBody != null && draft.smsBody!.contains(candidate.referenceId!)) {
-          score += 50;
-          refMatched = true;
-        } else if (draft.supportingSms != null && draft.supportingSms!.contains(candidate.referenceId!)) {
-          score += 50;
-          refMatched = true;
-        }
-      }
 
       // Rule 2: Amount Match (+20)
       final candidateCents = (candidate.amount * 100).round();

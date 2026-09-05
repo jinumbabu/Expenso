@@ -6,6 +6,7 @@ class ParsedSmsResult {
   final String? merchant;
   final DateTime date;
   final String? cardOrAccount;
+  final String? referenceId;
 
   ParsedSmsResult({
     required this.amount,
@@ -13,11 +14,12 @@ class ParsedSmsResult {
     this.merchant,
     required this.date,
     this.cardOrAccount,
+    this.referenceId,
   });
 
   @override
   String toString() {
-    return 'ParsedSmsResult(amount: $amount, type: $type, merchant: $merchant, date: $date, cardOrAccount: $cardOrAccount)';
+    return 'ParsedSmsResult(amount: $amount, type: $type, merchant: $merchant, date: $date, cardOrAccount: $cardOrAccount, ref: $referenceId)';
   }
 }
 
@@ -61,8 +63,52 @@ class SmsParserService {
     return _transactionKeywords.any((kw) => lowerBody.contains(kw));
   }
 
+
+
+  static bool _isValidMerchant(String name, {String? sender}) {
+    final clean = name.trim().replaceAll(' ', '');
+    if (clean.isEmpty) return false;
+    
+    final digitsOnly = clean.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length >= 8) {
+      return false; // Looks like a phone number or customer care number
+    }
+    
+    if (sender != null && sender.isNotEmpty) {
+      final cleanSender = sender.toLowerCase().trim();
+      final lowerName = name.toLowerCase().trim();
+      if (lowerName == cleanSender || cleanSender.contains(lowerName) || lowerName.contains(cleanSender)) {
+        return false;
+      }
+    }
+
+    // Reject dates
+    if (RegExp(r'\b\d{1,2}[-\/\.\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[a-zA-Z0-9]+)[-\/\.\s]\d{2,4}\b', caseSensitive: false).hasMatch(name) ||
+        RegExp(r'\b\d{1,2}[-\/\.]\d{1,2}[-\/\.]\d{2,4}\b').hasMatch(name)) {
+      return false;
+    }
+
+    final lower = name.toLowerCase();
+    if (lower.contains('customer care') || 
+        lower.contains('helpline') || 
+        lower.contains('call') || 
+        lower.contains('contact') ||
+        lower.contains('support') ||
+        lower.contains('card ending') ||
+        lower.contains('a/c') ||
+        lower.contains('account')) {
+      return false;
+    }
+    
+    if (RegExp(r'^\d+$').hasMatch(clean)) {
+      return false;
+    }
+
+    return true;
+  }
+
   /// Parses an SMS body and returns a [ParsedSmsResult], or null if not a transaction
-  static ParsedSmsResult? parseSms(String body, DateTime smsDateTime) {
+  static ParsedSmsResult? parseSms(String body, DateTime smsDateTime, {String? sender}) {
     if (!isTransactionSms(body)) {
       return null;
     }
@@ -106,6 +152,8 @@ class SmsParserService {
       type = 'expense';
     }
 
+    final isDebit = type == 'expense';
+
     // 3. Extract Card / Account Number
     String? cardOrAccount;
     final accountMatch = _accountRegExp.firstMatch(cleanBody);
@@ -115,13 +163,34 @@ class SmsParserService {
 
     // 4. Extract Merchant
     String? merchant;
-    for (final regex in _merchantRegExps) {
-      final match = regex.firstMatch(cleanBody);
+    final patterns = isDebit 
+        ? [
+            RegExp(r'\b(?:info|info:|towards)\s*[:\s]\s*([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bTo\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bon\s+\d{1,2}[-\/\.\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[a-zA-Z0-9]+)[-\/\.\s]\d{2,4}\s+on\s+([^,.]+?)(?:[\.,\s]+(?:avl\s+limit|available\s+limit|if\s+not|call|not\s+you|ref|vpa|using|rs\.?|inr|₹|usd|upi|on)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bspent\s+.*?\s+on\s+([^,.]+?)(?:[\.,\s]+(?:avl\s+limit|available\s+limit|if\s+not|call|not\s+you|ref|vpa|using|rs\.?|inr|₹|usd|upi|on)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bspent\s+at\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpaid\s+to\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bsent\s+to\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpurchase\s+at\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bat\s+([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+          ]
+        : [
+            RegExp(r'\b(?:info|info:|towards)\s*[:\s]\s*([^,.]+?)(?:[\.,\s]+(?:on|ref|vpa|at|from|using|not\s+you|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\btransfer\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\breceived\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bcredited\s+.*?\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bpayment\s+from\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+            RegExp(r'\bfrom\s+([^,.]+?)(?:[\.,\s]+(?:ref|no|on|to|using|if\s+not|call|avl|limit|rs\.?|inr|₹|usd|upi)\b|[\.,\s]*$)', caseSensitive: false),
+          ];
+
+    for (final reg in patterns) {
+      final match = reg.firstMatch(cleanBody);
       if (match != null) {
-        final rawMerchant = match.group(1)!.trim();
-        // Clean up merchant if it has trailing codes or garbage (like transaction IDs)
-        if (rawMerchant.isNotEmpty && rawMerchant.length < 50) {
-          merchant = _cleanMerchantName(rawMerchant);
+        final candidate = match.group(1)!.trim();
+        final cleaned = _cleanMerchantName(candidate);
+        if (_isValidMerchant(cleaned, sender: sender)) {
+          merchant = cleaned;
           break;
         }
       }
@@ -160,6 +229,7 @@ class SmsParserService {
     if (cleaned.isEmpty) return 'General';
     return cleaned.split(' ').map((word) {
       if (word.isEmpty) return '';
+      if (word.toUpperCase() == 'ATM') return 'ATM';
       return word[0].toUpperCase() + (word.length > 1 ? word.substring(1).toLowerCase() : '');
     }).join(' ');
   }

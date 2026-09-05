@@ -138,7 +138,7 @@ class _CreditCardPaymentSheetState extends ConsumerState<CreditCardPaymentSheet>
         source: 'manual',
         isRecurring: false,
         syncStatus: 'pending',
-        referenceNumber: sourceId, // Linked
+        billLink: sourceId, // Linked
         createdAt: now,
         updatedAt: now,
       );

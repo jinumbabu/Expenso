@@ -177,16 +177,18 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
     }
   }
 
+
+
   Future<Transaction?> getOtherSideOfTransfer(Transaction tx) async {
     final repo = _ref.read(expenseRepositoryProvider);
     final db = _ref.read(databaseProvider);
     if (tx.type == 'transfer_debit') {
       final list = await (db.select(db.transactions)
-        ..where((t) => t.referenceNumber.equals(tx.id) & t.type.equals('transfer_credit'))
+        ..where((t) => t.billLink.equals(tx.id) & t.type.equals('transfer_credit'))
       ).get();
       return list.isNotEmpty ? list.first : null;
-    } else if (tx.type == 'transfer_credit' && tx.referenceNumber != null) {
-      return repo.getTransactionById(tx.referenceNumber!);
+    } else if (tx.type == 'transfer_credit' && tx.billLink != null) {
+      return repo.getTransactionById(tx.billLink!);
     }
     return null;
   }

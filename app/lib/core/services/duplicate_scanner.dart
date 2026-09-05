@@ -38,6 +38,7 @@ class DuplicateScanner {
 
     int duplicatesFound = 0;
     final ledgerAgent = LedgerAgent(_db);
+    duplicatesFound += await ledgerAgent.repairDuplicateTransactions(userId);
 
     // 3. Scan each group for transactions within 10-minute window
     for (final group in groups.values) {

@@ -64,6 +64,9 @@ class SmsBackgroundService : JobIntentService() {
                         }
                         "onBackgroundProcessingFinished" -> {
                             Log.d(TAG, "Dart processing finished.")
+                            mainHandler.post {
+                                SmsTransactionReceiver.methodChannel?.invokeMethod("onSmsProcessed", null)
+                            }
                             result.success(null)
                             synchronized(lock) {
                                 completed = true

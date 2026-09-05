@@ -27,7 +27,6 @@ import '../../../../shared/widgets/reusable_net_worth_ring.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../budgets/presentation/screens/budgets_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../shared/widgets/privacy_text.dart';
 import '../providers/privacy_provider.dart';
 import '../../../../core/services/balance_engine.dart';
@@ -214,7 +213,6 @@ class DashboardSummaryScreen extends ConsumerWidget {
     final finalIncome = (snapshot.income * 100).round();
     final finalExpense = (snapshot.expenses * 100).round();
     final finalOpeningBalance = (snapshot.carryForward * 100).round();
-    final finalNetWorth = (snapshot.netWorth * 100).round();
     final accountSummaryAsync = ref.watch(accountSummaryProvider);
     final finalTotalAssets = accountSummaryAsync.maybeWhen(
       data: (summary) => summary.totalAssets,
@@ -327,52 +325,72 @@ class DashboardSummaryScreen extends ConsumerWidget {
 
   Widget _buildMonthSelector(BuildContext context, WidgetRef ref, DateTime selectedMonth) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left, color: Colors.white70, size: 24),
-          onPressed: () {
-            final newMonth = DateTime(selectedMonth.year, selectedMonth.month - 1, 1);
-            ref.read(dashboardMonthProvider.notifier).state = newMonth;
-          },
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => _showDashboardMonthYearPicker(context, ref, selectedMonth),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.06)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.calendar_today, color: Color(0xFF00E5FF), size: 14),
-                const SizedBox(width: 8),
-                Text(
-                  DateFormat('MMMM yyyy').format(selectedMonth).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
-              ],
+        SizedBox(
+          width: 48,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              icon: const Icon(Icons.chevron_left, color: Colors.white70, size: 24),
+              onPressed: () {
+                final newMonth = DateTime(selectedMonth.year, selectedMonth.month - 1, 1);
+                ref.read(dashboardMonthProvider.notifier).state = newMonth;
+              },
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        IconButton(
-          icon: const Icon(Icons.chevron_right, color: Colors.white70, size: 24),
-          onPressed: () {
-            final newMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
-            ref.read(dashboardMonthProvider.notifier).state = newMonth;
-          },
+        Expanded(
+          child: Center(
+            child: GestureDetector(
+              onTap: () => _showDashboardMonthYearPicker(context, ref, selectedMonth),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 220),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.calendar_today, color: Color(0xFF00E5FF), size: 14),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          DateFormat('MMMM yyyy').format(selectedMonth).toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 48,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.white70, size: 24),
+              onPressed: () {
+                final newMonth = DateTime(selectedMonth.year, selectedMonth.month + 1, 1);
+                ref.read(dashboardMonthProvider.notifier).state = newMonth;
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -2746,7 +2764,7 @@ class _AiConfirmSheetState extends ConsumerState<_AiConfirmSheet> {
           source: 'ai_nlp',
           isRecurring: false,
           syncStatus: 'pending',
-          referenceNumber: sourceId,
+          billLink: sourceId,
           confidenceScore: widget.result.confidence,
           createdAt: now,
           updatedAt: now,
@@ -3885,7 +3903,7 @@ class _NotificationBellWithSmsStatusState
 
     // Display formatted actual last scan timestamp
     final lastScanFormatted = lastScanTime != null
-        ? DateFormat('MMM dd, hh:mm a').format(lastScanTime)
+        ? getRelativeTimeString(lastScanTime)
         : 'Never';
 
     return Stack(
@@ -4055,3 +4073,27 @@ class _AnimatedSmsIconState extends State<AnimatedSmsIcon>
     );
   }
 }
+
+String getRelativeTimeString(DateTime? dateTime) {
+  if (dateTime == null) return 'Never';
+  final now = DateTime.now();
+  final localDateTime = dateTime.toLocal();
+  final difference = now.difference(localDateTime);
+
+  if (difference.inSeconds < 0) {
+    return 'Just now';
+  }
+  if (difference.inSeconds < 60) {
+    return 'Just now';
+  } else if (difference.inMinutes < 60) {
+    final minutes = difference.inMinutes;
+    return '$minutes ${minutes == 1 ? "min" : "mins"} ago';
+  } else if (difference.inHours < 24) {
+    final hours = difference.inHours;
+    return '$hours ${hours == 1 ? "hour" : "hours"} ago';
+  } else {
+    final days = difference.inDays;
+    return '$days ${days == 1 ? "day" : "days"} ago';
+  }
+}
+
