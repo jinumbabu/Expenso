@@ -67,6 +67,8 @@ class BalanceEngine {
 
   /// Recalculates all or specific account balances in the database by summing up all transaction deltas.
   Future<void> recalculateAllBalances({String? accountId}) async {
+    await repairMisclassifiedCreditCardPayments();
+
     final query = _db.select(_db.accounts);
     if (accountId != null) {
       query.where((a) => a.id.equals(accountId));
@@ -93,6 +95,39 @@ class BalanceEngine {
       // Include updatedAt timestamp
       final updatedWithTime = updated.copyWith(updatedAt: DateTime.now());
       await _db.accountDao.updateAccount(updatedWithTime);
+    }
+  }
+
+  /// Safely repairs any credit card payment transactions that were previously stored as 'expense'.
+  Future<void> repairMisclassifiedCreditCardPayments() async {
+    try {
+      final txs = await (_db.select(_db.transactions)
+        ..where((t) => t.type.equals('expense') & t.deletedAt.isNull())
+      ).get();
+
+      final accounts = await _db.select(_db.accounts).get();
+      final creditCardIds = accounts.where((a) => a.type == 'credit_card').map((a) => a.id).toSet();
+
+      for (var tx in txs) {
+        final text = '${tx.merchant ?? ''} ${tx.description ?? ''}'.toLowerCase();
+        final isCcPaymentText = text.contains('pay cc') || 
+                                text.contains('credit card payment') || 
+                                text.contains('payment to credit card') || 
+                                text.contains('cc payment') || 
+                                text.contains('payment for credit card');
+
+        final isTargetingCc = tx.billLink != null && creditCardIds.contains(tx.billLink);
+
+        if (isCcPaymentText || isTargetingCc) {
+          final updated = tx.copyWith(
+            type: 'credit_card_payment',
+            updatedAt: DateTime.now(),
+          );
+          await _db.transactionDao.updateTransaction(updated);
+        }
+      }
+    } catch (e) {
+      // Fail-safe silent catch
     }
   }
 

@@ -103,6 +103,8 @@ class FinancialCalculationService {
     final type = tx.type.toLowerCase();
     return type == 'transfer' || 
            type == 'credit_card_payment' || 
+           type == 'pay_card' ||
+           type == 'paycard' ||
            type == 'transfer_in' || 
            type == 'transfer_out' ||
            type == 'transfer_credit' || 
@@ -118,6 +120,8 @@ class FinancialCalculationService {
     final type = tx.type.toLowerCase();
     return type == 'transfer' || 
            type == 'credit_card_payment' || 
+           type == 'pay_card' ||
+           type == 'paycard' ||
            type == 'cash_withdrawal' || 
            type == 'cash_deposit';
   }

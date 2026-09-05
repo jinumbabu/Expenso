@@ -1035,7 +1035,9 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
       if (tx.deletedAt != null) return false;
       return activeCardIds.contains(tx.accountId) || 
              (tx.type == 'transfer' && activeCardIds.contains(tx.billLink)) || 
-             (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.billLink));
+             (tx.type == 'credit_card_payment' && activeCardIds.contains(tx.billLink)) ||
+             (tx.type == 'pay_card' && activeCardIds.contains(tx.billLink)) ||
+             (tx.type == 'credit_card_payment_credit' && activeCardIds.contains(tx.accountId));
     }).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
 
@@ -1068,13 +1070,19 @@ class _CreditCardDetailScreenState extends ConsumerState<CreditCardDetailScreen>
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final tx = recentLimit[index];
-              final isCredit = tx.type == 'credit_card_payment' || tx.type == 'transfer' || tx.type == 'income' || tx.type == 'refund' || tx.type == 'cashback';
+              final isCredit = tx.type == 'credit_card_payment' || 
+                               tx.type == 'pay_card' || 
+                               tx.type == 'credit_card_payment_credit' ||
+                               tx.type == 'transfer' || 
+                               tx.type == 'income' || 
+                               tx.type == 'refund' || 
+                               tx.type == 'cashback';
               final color = isCredit ? const Color(0xFF00FF88) : const Color(0xFFFF3B30);
               final sign = isCredit ? '+' : '-';
               
               final account = cardsMap[tx.accountId];
               final cardName = account != null ? account.name : 'Credit Card';
-              final displayType = tx.type == 'credit_card_payment' 
+              final displayType = (tx.type == 'credit_card_payment' || tx.type == 'pay_card' || tx.type == 'credit_card_payment_credit')
                   ? 'Payment' 
                   : (tx.type == 'transfer' ? 'Transfer' : (isCredit ? 'Credit' : 'Expense'));
 

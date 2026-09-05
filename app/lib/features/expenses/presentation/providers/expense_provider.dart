@@ -169,7 +169,7 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       _ref.invalidate(accountsProvider);
       await loadTransactions();
       if (_userId != null) {
-        final categoryIds = tx.type == 'expense' ? {tx.categoryId} : <String?>{};
+        final categoryIds = FinancialCalculationService.isExpense(tx) ? {tx.categoryId} : <String?>{};
         _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
       }
     } catch (e, stack) {
@@ -177,17 +177,17 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
     }
   }
 
-
-
   Future<Transaction?> getOtherSideOfTransfer(Transaction tx) async {
     final repo = _ref.read(expenseRepositoryProvider);
     final db = _ref.read(databaseProvider);
-    if (tx.type == 'transfer_debit') {
+    final isDebit = tx.type == 'transfer_debit' || tx.type == 'credit_card_payment_debit';
+    final isCredit = tx.type == 'transfer_credit' || tx.type == 'credit_card_payment_credit';
+    if (isDebit) {
       final list = await (db.select(db.transactions)
-        ..where((t) => t.billLink.equals(tx.id) & t.type.equals('transfer_credit'))
+        ..where((t) => t.billLink.equals(tx.id) & (t.type.equals('transfer_credit') | t.type.equals('credit_card_payment_credit')))
       ).get();
       return list.isNotEmpty ? list.first : null;
-    } else if (tx.type == 'transfer_credit' && tx.billLink != null) {
+    } else if (isCredit && tx.billLink != null) {
       return repo.getTransactionById(tx.billLink!);
     }
     return null;
@@ -200,11 +200,17 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       final repo = _ref.read(expenseRepositoryProvider);
       final oldTx = await repo.getTransactionById(tx.id);
 
-      if (tx.type == 'transfer_debit' || tx.type == 'transfer_credit') {
+      final isTransferPair = tx.type == 'transfer_debit' || 
+                             tx.type == 'transfer_credit' || 
+                             tx.type == 'credit_card_payment_debit' || 
+                             tx.type == 'credit_card_payment_credit';
+
+      if (isTransferPair) {
         final otherSide = await getOtherSideOfTransfer(tx);
         if (otherSide != null) {
-          final debitTx = tx.type == 'transfer_debit' ? tx : otherSide;
-          final creditTx = tx.type == 'transfer_credit' ? tx : otherSide;
+          final isDebitType = tx.type == 'transfer_debit' || tx.type == 'credit_card_payment_debit';
+          final debitTx = isDebitType ? tx : otherSide;
+          final creditTx = isDebitType ? otherSide : tx;
 
           final accounts = _ref.read(accountsProvider).value ?? [];
           final fromAcc = accounts.firstWhere((a) => a.id == debitTx.accountId, orElse: () => accounts.first);
@@ -214,7 +220,7 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
             amount: tx.amount,
             date: tx.date,
             description: tx.description != null ? Value(tx.description) : const Value(null),
-            merchant: Value('To ${toAcc.name}'),
+            merchant: Value(tx.type.startsWith('credit_card') ? 'Pay CC: ${toAcc.name}' : 'To ${toAcc.name}'),
             updatedAt: DateTime.now(),
           );
 
@@ -222,7 +228,7 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
             amount: tx.amount,
             date: tx.date,
             description: tx.description != null ? Value(tx.description) : const Value(null),
-            merchant: Value('From ${fromAcc.name}'),
+            merchant: Value(tx.type.startsWith('credit_card') ? 'Payment fr: ${fromAcc.name}' : 'From ${fromAcc.name}'),
             updatedAt: DateTime.now(),
           );
 
@@ -239,10 +245,10 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       await loadTransactions();
       if (_userId != null) {
         final categoryIds = <String?>{};
-        if (oldTx != null && oldTx.type == 'expense') {
+        if (oldTx != null && FinancialCalculationService.isExpense(oldTx)) {
           categoryIds.add(oldTx.categoryId);
         }
-        if (tx.type == 'expense') {
+        if (FinancialCalculationService.isExpense(tx)) {
           categoryIds.add(tx.categoryId);
         }
         _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
@@ -258,7 +264,13 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       
       final repo = _ref.read(expenseRepositoryProvider);
       final tx = await repo.getTransactionById(id);
-      if (tx != null && (tx.type == 'transfer_debit' || tx.type == 'transfer_credit')) {
+      final isTransferPair = tx != null && (
+        tx.type == 'transfer_debit' || 
+        tx.type == 'transfer_credit' || 
+        tx.type == 'credit_card_payment_debit' || 
+        tx.type == 'credit_card_payment_credit'
+      );
+      if (isTransferPair) {
         final otherSide = await getOtherSideOfTransfer(tx);
         await _deleteTransaction.execute(tx.id);
         if (otherSide != null) {
@@ -272,7 +284,7 @@ class ExpenseListNotifier extends StateNotifier<AsyncValue<List<Transaction>>> {
       await loadTransactions();
       if (_userId != null) {
         final categoryIds = <String?>{};
-        if (tx != null && tx.type == 'expense') {
+        if (tx != null && FinancialCalculationService.isExpense(tx)) {
           categoryIds.add(tx.categoryId);
         }
         _checkBudgetAlerts(_userId, affectedCategoryIds: categoryIds);
