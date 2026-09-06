@@ -17,7 +17,14 @@ final _accountSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '
 final _pmSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
 class ExpensesScreen extends ConsumerStatefulWidget {
-  const ExpensesScreen({super.key});
+  final String? initialPreset;
+  final DateTimeRange? initialCustomRange;
+
+  const ExpensesScreen({
+    super.key,
+    this.initialPreset,
+    this.initialCustomRange,
+  });
 
   @override
   ConsumerState<ExpensesScreen> createState() => _ExpensesScreenState();
@@ -32,8 +39,13 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     super.initState();
     _searchController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(activeDatePresetProvider.notifier).state = 'this_month';
-      ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset('this_month');
+      final preset = widget.initialPreset ?? 'this_month';
+      ref.read(activeDatePresetProvider.notifier).state = preset;
+      if (preset == 'custom' && widget.initialCustomRange != null) {
+        ref.read(filterDateRangeProvider.notifier).state = widget.initialCustomRange;
+      } else {
+        ref.read(filterDateRangeProvider.notifier).state = getDateRangeFromPreset(preset);
+      }
       ref.read(searchQueryProvider.notifier).state = '';
       ref.read(filterCategoryProvider.notifier).state = null;
       ref.read(filterTypeProvider.notifier).state = null;

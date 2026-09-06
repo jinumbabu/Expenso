@@ -17,7 +17,14 @@ import 'dashboard_summary_screen.dart';
 import '../../../../shared/utils/analytics_formatter.dart';
 
 class ExpenseBreakdownScreen extends ConsumerStatefulWidget {
-  const ExpenseBreakdownScreen({super.key});
+  final String? initialPeriod;
+  final DateTimeRange? initialCustomRange;
+
+  const ExpenseBreakdownScreen({
+    super.key,
+    this.initialPeriod,
+    this.initialCustomRange,
+  });
 
   @override
   ConsumerState<ExpenseBreakdownScreen> createState() => _ExpenseBreakdownScreenState();
@@ -39,6 +46,12 @@ class _ExpenseBreakdownScreenState extends ConsumerState<ExpenseBreakdownScreen>
   @override
   void initState() {
     super.initState();
+    if (widget.initialPeriod != null && widget.initialPeriod!.isNotEmpty) {
+      _selectedPeriod = widget.initialPeriod == 'Year' ? '1Y' : widget.initialPeriod!;
+    }
+    if (widget.initialCustomRange != null) {
+      _customDateRange = widget.initialCustomRange;
+    }
     _categoryScrollController = ScrollController();
     _subExpenseScrollController = ScrollController();
   }

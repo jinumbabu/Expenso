@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../goals/presentation/providers/goals_provider.dart';
@@ -632,6 +633,29 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     );
   }
 
+  String _mapAnalyticsPeriodToExpensesPreset(String period) {
+    switch (period) {
+      case 'Today':
+        return 'today';
+      case 'Week':
+        return 'this_week';
+      case 'Month':
+        return 'this_month';
+      case 'Last Month':
+        return 'last_month';
+      case '3M':
+        return 'last_3_months';
+      case '6M':
+        return 'last_6_months';
+      case 'Year':
+        return 'this_year';
+      case 'Custom':
+        return 'custom';
+      default:
+        return 'this_month';
+    }
+  }
+
   Widget _buildSummaryGrid(List<Transaction> current, List<Transaction> prev) {
     double currentInc = 0;
     double currentExp = 0;
@@ -650,6 +674,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     final double currentSav = currentInc - currentExp;
     final double prevSav = prevInc - prevExp;
 
+    final periodStr = _selectedPeriod == 'Year' ? '1Y' : _selectedPeriod;
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -658,21 +684,77 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.6,
       children: [
-        _buildStatCard('Income', _formatMoneyDouble(currentInc), currentInc, prevInc, const Color(0xFF0066FF)),
-        _buildStatCard('Expenses', _formatMoneyDouble(currentExp), currentExp, prevExp, const Color(0xFFFF3B30)),
-        _buildStatCard('Savings', _formatMoneyDouble(currentSav), currentSav, prevSav, const Color(0xFF4CAF50)),
+        _buildStatCard(
+          'Income',
+          _formatMoneyDouble(currentInc),
+          currentInc,
+          prevInc,
+          const Color(0xFF0066FF),
+          onTap: () {
+            if (_selectedPeriod == 'Custom' && _customDateRange != null) {
+              final start = _customDateRange!.start.toIso8601String();
+              final end = _customDateRange!.end.toIso8601String();
+              context.push('/monthly-transactions/income?period=Custom&start=$start&end=$end');
+            } else {
+              context.push('/monthly-transactions/income?period=$periodStr');
+            }
+          },
+        ),
+        _buildStatCard(
+          'Expenses',
+          _formatMoneyDouble(currentExp),
+          currentExp,
+          prevExp,
+          const Color(0xFFFF3B30),
+          onTap: () {
+            if (_selectedPeriod == 'Custom' && _customDateRange != null) {
+              final start = _customDateRange!.start.toIso8601String();
+              final end = _customDateRange!.end.toIso8601String();
+              context.push('/expense-breakdown?period=Custom&start=$start&end=$end');
+            } else {
+              context.push('/expense-breakdown?period=$periodStr');
+            }
+          },
+        ),
+        _buildStatCard(
+          'Savings',
+          _formatMoneyDouble(currentSav),
+          currentSav,
+          prevSav,
+          const Color(0xFF4CAF50),
+          onTap: () {
+            context.push('/net-worth-detail');
+          },
+        ),
         _buildStatCard(
           'Transactions',
           current.length.toString(),
           current.length.toDouble(),
           prev.length.toDouble(),
           const Color(0xFF9C27B0),
+          onTap: () {
+            final preset = _mapAnalyticsPeriodToExpensesPreset(_selectedPeriod);
+            if (_selectedPeriod == 'Custom' && _customDateRange != null) {
+              final start = _customDateRange!.start.toIso8601String();
+              final end = _customDateRange!.end.toIso8601String();
+              context.push('/expenses?preset=custom&start=$start&end=$end');
+            } else {
+              context.push('/expenses?preset=$preset');
+            }
+          },
         ),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, double curVal, double preVal, Color accent) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    double curVal,
+    double preVal,
+    Color accent, {
+    VoidCallback? onTap,
+  }) {
     double change = 0.0;
     if (preVal != 0) {
       change = ((curVal - preVal) / preVal) * 100.0;
@@ -683,55 +765,59 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     final isPositive = change >= 0;
     final displayChange = '${isPositive ? "+" : ""}${change.toStringAsFixed(0)}%';
 
-    return GlassCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
-              if (_comparePreviousPeriod)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isPositive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    displayChange,
-                    style: TextStyle(
-                      color: isPositive ? Colors.green : Colors.red,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: GlassCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                if (_comparePreviousPeriod)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isPositive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      displayChange,
+                      style: TextStyle(
+                        color: isPositive ? Colors.green : Colors.red,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Container(
-                height: 2,
-                width: 32,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(1),
+                const SizedBox(height: 2),
+                Container(
+                  height: 2,
+                  width: 32,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

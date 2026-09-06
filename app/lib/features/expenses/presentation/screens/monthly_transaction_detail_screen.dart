@@ -16,10 +16,14 @@ import '../../../analytics/presentation/models/analytics_chart_data.dart';
 
 class MonthlyTransactionDetailScreen extends ConsumerStatefulWidget {
   final String type; // 'income' or 'expense'
+  final String? initialPeriod;
+  final DateTimeRange? initialCustomRange;
 
   const MonthlyTransactionDetailScreen({
     super.key,
     required this.type,
+    this.initialPeriod,
+    this.initialCustomRange,
   });
 
   @override
@@ -55,6 +59,13 @@ class _MonthlyTransactionDetailScreenState extends ConsumerState<MonthlyTransact
   void initState() {
     super.initState();
     final now = DateTime.now();
+
+    if (widget.initialPeriod != null && widget.initialPeriod!.isNotEmpty) {
+      _selectedPeriod = widget.initialPeriod == 'Year' ? '1Y' : widget.initialPeriod!;
+    }
+    if (widget.initialCustomRange != null) {
+      _customDateRange = widget.initialCustomRange;
+    }
 
     // Redesign state initialization
     _anchorToday = DateTime(now.year, now.month, now.day);

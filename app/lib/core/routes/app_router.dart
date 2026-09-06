@@ -181,9 +181,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/monthly-transactions/:type',
-        builder: (context, state) => MonthlyTransactionDetailScreen(
-          type: state.pathParameters['type'] ?? 'expense',
-        ),
+        builder: (context, state) {
+          final period = state.uri.queryParameters['period'];
+          final startStr = state.uri.queryParameters['start'];
+          final endStr = state.uri.queryParameters['end'];
+          DateTimeRange? customRange;
+          if (startStr != null && endStr != null) {
+            final s = DateTime.tryParse(startStr);
+            final e = DateTime.tryParse(endStr);
+            if (s != null && e != null) {
+              customRange = DateTimeRange(start: s, end: e);
+            }
+          }
+          return MonthlyTransactionDetailScreen(
+            type: state.pathParameters['type'] ?? 'expense',
+            initialPeriod: period,
+            initialCustomRange: customRange,
+          );
+        },
       ),
       GoRoute(
         path: '/net-worth-detail',
@@ -191,7 +206,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/expense-breakdown',
-        builder: (context, state) => const ExpenseBreakdownScreen(),
+        builder: (context, state) {
+          final period = state.uri.queryParameters['period'];
+          final startStr = state.uri.queryParameters['start'];
+          final endStr = state.uri.queryParameters['end'];
+          DateTimeRange? customRange;
+          if (startStr != null && endStr != null) {
+            final s = DateTime.tryParse(startStr);
+            final e = DateTime.tryParse(endStr);
+            if (s != null && e != null) {
+              customRange = DateTimeRange(start: s, end: e);
+            }
+          }
+          return ExpenseBreakdownScreen(
+            initialPeriod: period,
+            initialCustomRange: customRange,
+          );
+        },
       ),
       GoRoute(
         path: '/dashboard',
@@ -201,7 +232,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/expenses',
-        builder: (context, state) => const ExpensesScreen(),
+        builder: (context, state) {
+          final preset = state.uri.queryParameters['preset'];
+          final startStr = state.uri.queryParameters['start'];
+          final endStr = state.uri.queryParameters['end'];
+          DateTimeRange? customRange;
+          if (startStr != null && endStr != null) {
+            final s = DateTime.tryParse(startStr);
+            final e = DateTime.tryParse(endStr);
+            if (s != null && e != null) {
+              customRange = DateTimeRange(start: s, end: e);
+            }
+          }
+          return ExpensesScreen(
+            initialPreset: preset,
+            initialCustomRange: customRange,
+          );
+        },
         routes: [
           GoRoute(
             path: 'add',
