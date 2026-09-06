@@ -1414,7 +1414,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                                               onTapOverride: () {
                                                 setState(() {
                                                   _transactionType = 'transfer_debit';
-                                                  _isTypeSelectorExpanded = false;
+                                                  _selectedCategoryId = null;
                                                 });
                                               },
                                             ),
@@ -1428,7 +1428,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                                               activeColor: const Color(0xFFFF3B30),
                                               onTapOverride: () {
                                                 setState(() {
-                                                  _isTypeSelectorExpanded = false;
+                                                  _transactionType = 'pay_card';
                                                 });
                                                 showModalBottomSheet(
                                                   context: context,
@@ -2174,7 +2174,6 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           setState(() {
             _transactionType = type;
             _selectedCategoryId = null;
-            _isTypeSelectorExpanded = false;
           });
         }
       },
