@@ -397,7 +397,11 @@ class NetWorthDetailScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           ...assets.map((acc) => Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
-            child: _buildAccountCard(acc, false),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => context.push('/accounts/${acc.id}'),
+              child: _buildAccountCard(acc, false),
+            ),
           )),
         ],
         if (liabilities.isNotEmpty) ...[
@@ -409,19 +413,13 @@ class NetWorthDetailScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           ...liabilities.map((acc) {
             final card = _buildAccountCard(acc, true);
-            if (acc.type == 'credit_card') {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => context.push('/credit-card-detail?cardId=${acc.id}'),
-                  child: card,
-                ),
-              );
-            }
             return Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
-              child: card,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => context.push('/accounts/${acc.id}'),
+                child: card,
+              ),
             );
           }),
         ],

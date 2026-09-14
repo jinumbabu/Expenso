@@ -13,6 +13,11 @@ import '../providers/accounts_provider.dart';
 import '../providers/account_formatters.dart';
 import 'account_form_sheet.dart';
 import '../../../../core/services/financial_calculation_service.dart';
+import '../../../../shared/widgets/reusable_donut_chart.dart';
+import '../../../analytics/presentation/models/analytics_chart_data.dart';
+import '../../../../shared/utils/analytics_formatter.dart';
+import '../../../../core/services/category_intelligence.dart';
+import '../../../dashboard/presentation/providers/privacy_provider.dart';
 
 class AccountDetailScreen extends ConsumerStatefulWidget {
   final String accountId;
@@ -29,6 +34,8 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
   String _dateFilter = 'This Month'; // Today, This Week, This Month, Custom, Year
   DateTimeRange? _customDateRange;
   int _activeTab = 0; // 0 = Ledger, 1 = SMS Log, 2 = Settings
+  String _donutMode = 'income'; // 'income' or 'expense'
+  String? _selectedCategorySliceId;
 
   String _formatMoney(int amountInCents) {
     final double amount = amountInCents / 100.0;
@@ -209,6 +216,10 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
 
                             // 2. Big Balance Card
                             _buildBalanceOverviewCard(account, income, expense),
+                            const SizedBox(height: 20),
+
+                            // 2.5 Account Donut Analytics View
+                            _buildAccountDonutAnalyticsSection(account, txs, ref.watch(categoriesProvider).value ?? [], ref.watch(privacyModeProvider)),
                             const SizedBox(height: 20),
 
                             // 3. Tab Selector
@@ -1749,6 +1760,299 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
             },
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountDonutAnalyticsSection(
+    Account account,
+    List<Transaction> allAccountTxs,
+    List<Category> allCategories,
+    bool isPrivate,
+  ) {
+    final categoryMap = {for (var c in allCategories) c.id: c};
+
+    // Filter transactions strictly for this account by mode (Income vs Expense) and date filter
+    final accountModeTxs = allAccountTxs.where((tx) {
+      if (tx.deletedAt != null) return false;
+      if (!_filterByDate(tx.date)) return false;
+
+      if (_donutMode == 'income') {
+        return FinancialCalculationService.isCredit(tx, account.id);
+      } else {
+        return FinancialCalculationService.isDebit(tx, account.id);
+      }
+    }).toList();
+
+    // Group by category
+    final categoryTotalsCents = <String, int>{};
+    final categoryTxCounts = <String, int>{};
+
+    int totalAmountCents = 0;
+    for (var tx in accountModeTxs) {
+      final catId = tx.categoryId ?? 'other';
+      categoryTotalsCents[catId] = (categoryTotalsCents[catId] ?? 0) + tx.amount.abs().toInt();
+      categoryTxCounts[catId] = (categoryTxCounts[catId] ?? 0) + 1;
+      totalAmountCents += tx.amount.abs().toInt();
+    }
+
+    final double totalAmountDouble = totalAmountCents / 100.0;
+
+    final List<ChartDatum> chartData = [];
+    categoryTotalsCents.forEach((catId, cents) {
+      final double val = cents / 100.0;
+      final double pct = totalAmountDouble > 0 ? (val / totalAmountDouble) * 100 : 0.0;
+      final cat = categoryMap[catId];
+      final label = cat?.name ?? 'Other';
+      final color = cat != null
+          ? CategoryIntelligence.getColorForName(cat.name)
+          : const Color(0xFF0066FF);
+
+      chartData.add(ChartDatum(
+        id: catId,
+        label: label,
+        value: val,
+        percentage: pct,
+        color: color,
+        transactionCount: categoryTxCounts[catId] ?? 1,
+      ));
+    });
+
+    chartData.sort((a, b) => b.value.compareTo(a.value));
+
+    final isIncomeMode = _donutMode == 'income';
+
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top Toggle Selector (Income / Expense)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.06)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () {
+                      if (_donutMode != 'income') {
+                        setState(() {
+                          _donutMode = 'income';
+                          _selectedCategorySliceId = null;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: isIncomeMode ? const Color(0xFF0066FF).withOpacity(0.2) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: isIncomeMode ? Border.all(color: const Color(0xFF0066FF).withOpacity(0.4)) : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.circle, color: Color(0xFF00E5FF), size: 8),
+                          SizedBox(width: 6),
+                          Text(
+                            'Income',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () {
+                      if (_donutMode != 'expense') {
+                        setState(() {
+                          _donutMode = 'expense';
+                          _selectedCategorySliceId = null;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: !isIncomeMode ? const Color(0xFFFF3B30).withOpacity(0.2) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: !isIncomeMode ? Border.all(color: const Color(0xFFFF3B30).withOpacity(0.4)) : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.circle, color: Color(0xFFFF3B30), size: 8),
+                          SizedBox(width: 6),
+                          Text(
+                            'Expense',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (chartData.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.pie_chart_outline,
+                    color: isIncomeMode ? const Color(0xFF00E5FF).withOpacity(0.3) : const Color(0xFFFF3B30).withOpacity(0.3),
+                    size: 40,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    isIncomeMode ? 'NO INCOME' : 'NO EXPENSES',
+                    style: TextStyle(
+                      color: isIncomeMode ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isIncomeMode ? 'No income transactions for this account.' : 'No expense transactions for this account.',
+                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Donut Chart
+            ReusableDonutChart(
+              data: chartData,
+              selectedId: _selectedCategorySliceId,
+              onSelected: (id) {
+                setState(() {
+                  _selectedCategorySliceId = _selectedCategorySliceId == id ? null : id;
+                });
+              },
+              centerTitle: isIncomeMode ? 'TOTAL INCOME' : 'TOTAL EXPENSE',
+              centerValue: totalAmountDouble,
+              isPrivate: isPrivate,
+            ),
+            const SizedBox(height: 16),
+
+            // Category Breakdown List
+            ...chartData.map((datum) {
+              final isSelected = _selectedCategorySliceId == datum.id;
+              final cat = categoryMap[datum.id];
+              final catIcon = cat != null ? CategoryIntelligence.getIconForName(cat.name) : Icons.category_outlined;
+
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedCategorySliceId = isSelected ? null : datum.id;
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? datum.color.withOpacity(0.12) : Colors.white.withOpacity(0.015),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? datum.color.withOpacity(0.4) : Colors.white.withOpacity(0.03),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: datum.color.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(catIcon, color: datum.color, size: 14),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  datum.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                Text(
+                                  isPrivate ? '₹••••' : AnalyticsFormatter.formatCurrency(datum.value),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: LinearProgressIndicator(
+                                      value: (datum.percentage / 100.0).clamp(0.0, 1.0),
+                                      backgroundColor: Colors.white.withOpacity(0.03),
+                                      color: datum.color,
+                                      minHeight: 4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  isPrivate ? '**%' : '${datum.percentage.toStringAsFixed(1)}%',
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
         ],
       ),
     );
