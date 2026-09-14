@@ -20,6 +20,7 @@ import '../../../../core/services/category_intelligence.dart';
 import '../widgets/searchable_category_bottom_sheet.dart';
 import '../../../../core/services/balance_engine.dart';
 import '../../../accounts/presentation/screens/credit_card_payment_sheet.dart';
+import '../widgets/amount_calculator_sheet.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   final String? transactionId;
@@ -513,6 +514,25 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       }
     } else {
       _pendingSaveAfterCategorySelection = false;
+    }
+  }
+
+  Future<void> _openCalculatorSheet() async {
+    final result = await showModalBottomSheet<double?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AmountCalculatorSheet(
+        initialAmountText: _amountController.text,
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _amountController.text = (result == result.roundToDouble())
+            ? result.toInt().toString()
+            : result.toStringAsFixed(2);
+      });
     }
   }
 
@@ -1453,9 +1473,32 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       Center(
                         child: Column(
                           children: [
-                            const Text(
-                              'AMOUNT',
-                              style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'AMOUNT',
+                                  style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                ),
+                                InkWell(
+                                  onTap: _openCalculatorSheet,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: const [
+                                        Icon(Icons.calculate_outlined, color: Color(0xFF00E5FF), size: 16),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Calculator',
+                                          style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             Container(
