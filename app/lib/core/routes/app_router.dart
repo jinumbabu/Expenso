@@ -30,6 +30,8 @@ import '../../features/auth/presentation/screens/biometric_lock_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/calendar/presentation/screens/calendar_screen.dart';
 import '../../features/analytics/presentation/screens/analytics_screen.dart';
+import '../../features/analytics/presentation/screens/merchant_leaderboard_screen.dart';
+import '../../features/analytics/presentation/screens/merchant_transactions_detail_screen.dart';
 import '../../features/goals/presentation/screens/goals_screen.dart';
 import '../../features/budgets/presentation/screens/budgets_screen.dart';
 import '../../features/expenses/presentation/screens/monthly_transaction_detail_screen.dart';
@@ -219,6 +221,48 @@ final routerProvider = Provider<GoRouter>((ref) {
             }
           }
           return ExpenseBreakdownScreen(
+            initialPeriod: period,
+            initialCustomRange: customRange,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/merchant-leaderboard',
+        builder: (context, state) {
+          final period = state.uri.queryParameters['period'];
+          final startStr = state.uri.queryParameters['start'];
+          final endStr = state.uri.queryParameters['end'];
+          DateTimeRange? customRange;
+          if (startStr != null && endStr != null) {
+            final s = DateTime.tryParse(startStr);
+            final e = DateTime.tryParse(endStr);
+            if (s != null && e != null) {
+              customRange = DateTimeRange(start: s, end: e);
+            }
+          }
+          return MerchantLeaderboardScreen(
+            initialPeriod: period,
+            initialCustomRange: customRange,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/merchant-transactions',
+        builder: (context, state) {
+          final merchant = state.uri.queryParameters['merchant'] ?? 'General';
+          final period = state.uri.queryParameters['period'];
+          final startStr = state.uri.queryParameters['start'];
+          final endStr = state.uri.queryParameters['end'];
+          DateTimeRange? customRange;
+          if (startStr != null && endStr != null) {
+            final s = DateTime.tryParse(startStr);
+            final e = DateTime.tryParse(endStr);
+            if (s != null && e != null) {
+              customRange = DateTimeRange(start: s, end: e);
+            }
+          }
+          return MerchantTransactionsDetailScreen(
+            merchantName: merchant,
             initialPeriod: period,
             initialCustomRange: customRange,
           );

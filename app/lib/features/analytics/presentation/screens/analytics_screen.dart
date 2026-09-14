@@ -237,6 +237,11 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     final goals = ref.watch(goalsListNotifierProvider);
     final advisorState = ref.watch(advisorProvider);
     final isPrivate = ref.watch(privacyModeProvider);
+    final accountSummaryAsync = ref.watch(accountSummaryProvider);
+    final totalAssets = accountSummaryAsync.maybeWhen(
+      data: (summary) => summary.totalAssets / 100.0,
+      orElse: () => 0.0,
+    );
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -346,7 +351,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                               const SizedBox(height: 10),
 
                               // 1. Summary cards grid
-                              _buildSummaryGrid(filteredTxs, prevFilteredTxs),
+                              _buildSummaryGrid(filteredTxs, prevFilteredTxs, totalAssets),
                               const SizedBox(height: 16),
 
                               // 2. Cash flow trend line graph
@@ -656,7 +661,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     }
   }
 
-  Widget _buildSummaryGrid(List<Transaction> current, List<Transaction> prev) {
+  Widget _buildSummaryGrid(List<Transaction> current, List<Transaction> prev, double totalAssets) {
     double currentInc = 0;
     double currentExp = 0;
     for (var tx in current) {
@@ -670,9 +675,6 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
       if (FinancialCalculationService.isIncome(tx)) prevInc += tx.amount / 100.0;
       if (FinancialCalculationService.isExpense(tx)) prevExp += tx.amount / 100.0;
     }
-
-    final double currentSav = currentInc - currentExp;
-    final double prevSav = prevInc - prevExp;
 
     final periodStr = _selectedPeriod == 'Year' ? '1Y' : _selectedPeriod;
 
@@ -718,9 +720,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
         ),
         _buildStatCard(
           'Savings',
-          _formatMoneyDouble(currentSav),
-          currentSav,
-          prevSav,
+          _formatMoneyDouble(totalAssets),
+          totalAssets,
+          totalAssets,
           const Color(0xFF4CAF50),
           onTap: () {
             context.push('/net-worth-detail');
@@ -1605,6 +1607,43 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                 ),
               );
             }),
+          if (sorted.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            const Divider(color: Colors.white10, height: 1),
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                final periodStr = _selectedPeriod == 'Year' ? '1Y' : _selectedPeriod;
+                if (_selectedPeriod == 'Custom' && _customDateRange != null) {
+                  final start = _customDateRange!.start.toIso8601String();
+                  final end = _customDateRange!.end.toIso8601String();
+                  context.push('/merchant-leaderboard?period=Custom&start=$start&end=$end');
+                } else {
+                  context.push('/merchant-leaderboard?period=$periodStr');
+                }
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'VIEW ALL',
+                      style: TextStyle(
+                        color: Color(0xFF00E5FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 10),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -292,6 +292,62 @@ class _SearchableCategoryBottomSheetState extends ConsumerState<SearchableCatego
     }
   }
 
+  Future<void> _moveToMainCategories(Category cat) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0D121B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Move "${cat.name}" to Main Categories?',
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          '${cat.name} will become a main category. Existing transactions will not be changed.',
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0066FF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Move'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final db = ref.read(databaseProvider);
+      try {
+        final updated = cat.copyWith(parentId: const Value(null));
+        await db.categoryDao.updateCategory(updated);
+        ref.invalidate(categoriesProvider);
+        if (mounted) {
+          setState(() {
+            _selectedParentCategory = null;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Moved "${cat.name}" to Main Categories.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to move category: $e')),
+          );
+        }
+      }
+    }
+  }
+
   void _showCategoryManagementSheet(BuildContext context, Category cat, List<Category> allCategories) {
     showModalBottomSheet(
       context: context,
@@ -304,55 +360,66 @@ class _SearchableCategoryBottomSheetState extends ConsumerState<SearchableCatego
           ),
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
           child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Manage "${cat.name}"',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined, color: Color(0xFF0066FF)),
-                  title: const Text('Edit Details', style: TextStyle(color: Colors.white70)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _editCategory(cat);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.copy_outlined, color: Colors.green),
-                  title: const Text('Duplicate', style: TextStyle(color: Colors.white70)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _duplicateCategory(cat);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  title: const Text('Delete', style: TextStyle(color: Colors.white70)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _confirmAndDeleteCategory(cat, allCategories);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.drive_file_move_outlined, color: Color(0xFF00E5FF)),
-                  title: const Text('Move to Another Parent', style: TextStyle(color: Colors.white70)),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _moveCategory(cat, allCategories);
-                  },
-                ),
-                const Divider(color: Colors.white10),
-                ListTile(
-                  leading: const Icon(Icons.cancel_outlined, color: Colors.white30),
-                  title: const Text('Cancel', style: TextStyle(color: Colors.white38)),
-                  onTap: () => Navigator.pop(context),
-                ),
-              ],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Manage "${cat.name}"',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined, color: Color(0xFF0066FF)),
+                    title: const Text('Edit Details', style: TextStyle(color: Colors.white70)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _editCategory(cat);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.copy_outlined, color: Colors.green),
+                    title: const Text('Duplicate', style: TextStyle(color: Colors.white70)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _duplicateCategory(cat);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    title: const Text('Delete', style: TextStyle(color: Colors.white70)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _confirmAndDeleteCategory(cat, allCategories);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.drive_file_move_outlined, color: Color(0xFF00E5FF)),
+                    title: const Text('Move to Another Parent', style: TextStyle(color: Colors.white70)),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _moveCategory(cat, allCategories);
+                    },
+                  ),
+                  if (cat.parentId != null)
+                    ListTile(
+                      leading: const Icon(Icons.drive_file_move_outlined, color: Color(0xFF00E5FF)),
+                      title: const Text('Move to Main Categories', style: TextStyle(color: Colors.white70)),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await _moveToMainCategories(cat);
+                      },
+                    ),
+                  const Divider(color: Colors.white10),
+                  ListTile(
+                    leading: const Icon(Icons.cancel_outlined, color: Colors.white30),
+                    title: const Text('Cancel', style: TextStyle(color: Colors.white38)),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
           ),
         );
