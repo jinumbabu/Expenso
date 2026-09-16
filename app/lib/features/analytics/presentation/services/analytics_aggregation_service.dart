@@ -213,6 +213,89 @@ class AnalyticsAggregationService {
     }).toList();
   }
 
+  static List<ChartDatum> getAssetAccountChartData(List<Account> accounts) {
+    final assetAccounts = accounts.where((acc) {
+      if (acc.isActive == false) return false;
+      final t = acc.type.toLowerCase();
+      final isLiabilityType = t == 'credit_card' || t == 'credit' || t == 'loan' || t == 'loan_account' || t == 'debt';
+      return !isLiabilityType;
+    }).toList();
+
+    double totalAssets = 0;
+    for (var acc in assetAccounts) {
+      final val = (acc.balance > 0 ? acc.balance : acc.balance.abs()) / 100.0;
+      totalAssets += val;
+    }
+
+    final List<ChartDatum> list = [];
+    for (var acc in assetAccounts) {
+      final value = (acc.balance > 0 ? acc.balance : acc.balance.abs()) / 100.0;
+      final pct = totalAssets > 0 ? (value / totalAssets * 100) : 0.0;
+
+      Color getAccountColor(String type, String name) {
+        final t = type.toLowerCase();
+        final n = name.toLowerCase();
+        if (t.contains('cash') || n.contains('cash')) return const Color(0xFF4CAF50);
+        if (t.contains('wallet') || n.contains('wallet') || n.contains('pay')) return const Color(0xFF9C27B0);
+        return const Color(0xFF00BCD4);
+      }
+
+      list.add(ChartDatum(
+        id: acc.id,
+        label: acc.name,
+        value: value,
+        percentage: pct,
+        color: getAccountColor(acc.type, acc.name),
+        transactionCount: 0,
+      ));
+    }
+    list.sort((a, b) => b.value.compareTo(a.value));
+    return list;
+  }
+
+  static List<ChartDatum> getLiabilityAccountChartData(List<Account> accounts) {
+    final liabilityAccounts = accounts.where((acc) {
+      if (acc.isActive == false) return false;
+      final t = acc.type.toLowerCase();
+      final isLiabilityType = t == 'credit_card' || t == 'credit' || t == 'loan' || t == 'loan_account' || t == 'debt';
+      return isLiabilityType;
+    }).toList();
+
+    double totalLiabilities = 0;
+    for (var acc in liabilityAccounts) {
+      final amt = (acc.outstandingBalance != null && acc.outstandingBalance! > 0)
+          ? (acc.outstandingBalance! / 100.0)
+          : (acc.balance.abs() / 100.0);
+      totalLiabilities += amt;
+    }
+
+    final List<ChartDatum> list = [];
+    for (var acc in liabilityAccounts) {
+      final value = (acc.outstandingBalance != null && acc.outstandingBalance! > 0)
+          ? (acc.outstandingBalance! / 100.0)
+          : (acc.balance.abs() / 100.0);
+      final pct = totalLiabilities > 0 ? (value / totalLiabilities * 100) : 0.0;
+
+      Color getAccountColor(String type, String name) {
+        final t = type.toLowerCase();
+        final n = name.toLowerCase();
+        if (t.contains('loan') || n.contains('loan')) return const Color(0xFFF44336);
+        return const Color(0xFFFF3B30); // Liability Red visual language
+      }
+
+      list.add(ChartDatum(
+        id: acc.id,
+        label: acc.name,
+        value: value,
+        percentage: pct,
+        color: getAccountColor(acc.type, acc.name),
+        transactionCount: 0,
+      ));
+    }
+    list.sort((a, b) => b.value.compareTo(a.value));
+    return list;
+  }
+
   static List<ChartDatum> getAccountChartData(List<Account> accounts) {
     double totalAbsoluteValue = 0;
     for (var acc in accounts) {

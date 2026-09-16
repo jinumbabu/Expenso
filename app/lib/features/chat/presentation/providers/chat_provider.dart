@@ -34,10 +34,12 @@ final chatHistoryProvider =
 class ChatNotifier extends StateNotifier<AsyncValue<void>> {
   final ChatRepository _repository;
   final Ref _ref;
+  int _sessionVersion = 0;
 
   ChatNotifier(this._repository, this._ref) : super(const AsyncValue.data(null));
 
   Future<void> sendMessage(String userId, String messageText) async {
+    final currentSession = ++_sessionVersion;
     try {
       state = const AsyncValue.loading();
 
@@ -54,6 +56,11 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
         aiMode: activeModelId,
       );
       
+      if (_sessionVersion != currentSession) {
+        state = const AsyncValue.data(null);
+        return;
+      }
+
       // Force refreshing the chat list provider so UI shows the user's message immediately
       _ref.invalidate(chatHistoryProvider(userId));
       String? reply;
@@ -230,6 +237,11 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
         activeModelName = 'Offline AI';
       }
 
+      if (_sessionVersion != currentSession) {
+        state = const AsyncValue.data(null);
+        return;
+      }
+
       // 4. Save model's reply locally
       await _repository.saveMessage(
         userId: userId,
@@ -238,16 +250,25 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
         aiMode: activeModelName,
       );
 
+      if (_sessionVersion != currentSession) {
+        await _repository.clearHistory(userId);
+        state = const AsyncValue.data(null);
+        return;
+      }
+
       // 5. Refresh the list so the model reply appears in the UI
       _ref.invalidate(chatHistoryProvider(userId));
       state = const AsyncValue.data(null);
     } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
+      if (_sessionVersion == currentSession) {
+        state = AsyncValue.error(e, stack);
+      }
     }
   }
 
   Future<void> clearChat(String userId) async {
     try {
+      _sessionVersion++;
       state = const AsyncValue.loading();
       await _repository.clearHistory(userId);
       _ref.invalidate(chatHistoryProvider(userId));

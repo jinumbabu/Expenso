@@ -61,7 +61,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   String _paymentChartType = 'Donut';
   String _paymentSplitType = 'expense';
   String _accountChartType = 'Donut';
+  String _accountGroupType = 'assets'; // 'assets' or 'liabilities'
   String _trendChartType = 'Line';
+  bool _categoryShareExpanded = false;
 
   int _touchedMonthlyGroupIndex = -1;
   int _touchedMonthlyRodIndex = -1;
@@ -155,6 +157,14 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
   List<ChartDatum> _getPaymentChartData(List<Transaction> txs, List<PaymentMethod> pms) {
     return AnalyticsAggregationService.getPaymentChartData(txs, pms);
+  }
+
+  List<ChartDatum> _getAssetAccountChartData(List<Account> accounts) {
+    return AnalyticsAggregationService.getAssetAccountChartData(accounts);
+  }
+
+  List<ChartDatum> _getLiabilityAccountChartData(List<Account> accounts) {
+    return AnalyticsAggregationService.getLiabilityAccountChartData(accounts);
   }
 
   List<ChartDatum> _getAccountChartData(List<Account> accounts) {
@@ -1292,6 +1302,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
       totalExpense += d.value;
     }
 
+    final displayList = _categoryShareExpanded ? data : data.take(5).toList();
+
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1360,54 +1372,91 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            if (_categoryChartType != 'Horizontal Bar')
-              ...List.generate(data.length, (i) {
-                final d = data[i];
-                final isSelected = d.id == _selectedCategoryId;
-                final opacity = _selectedCategoryId == null ? 1.0 : (isSelected ? 1.0 : 0.3);
+            if (_categoryChartType != 'Horizontal Bar') ...[
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: Column(
+                  children: List.generate(displayList.length, (i) {
+                    final d = displayList[i];
+                    final isSelected = d.id == _selectedCategoryId;
+                    final opacity = _selectedCategoryId == null ? 1.0 : (isSelected ? 1.0 : 0.3);
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        _selectedCategoryId = null;
-                      } else {
-                        _selectedCategoryId = d.id;
-                      }
-                    });
-                  },
-                  child: Opacity(
-                    opacity: opacity,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF0A1E3D) : Colors.white.withOpacity(0.015),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFF00E5FF) : Colors.transparent,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.lens, color: d.color, size: 10),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              d.label,
-                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedCategoryId = null;
+                          } else {
+                            _selectedCategoryId = d.id;
+                          }
+                        });
+                      },
+                      child: Opacity(
+                        opacity: opacity,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF0A1E3D) : Colors.white.withOpacity(0.015),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF00E5FF) : Colors.transparent,
                             ),
                           ),
-                          Text(
-                            '${_formatMoneyDouble(d.value)} (${d.percentage.toStringAsFixed(0)}%)',
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lens, color: d.color, size: 10),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  d.label,
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Text(
+                                '${_formatMoneyDouble(d.value)} (${d.percentage.toStringAsFixed(0)}%)',
+                                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
+                    );
+                  }),
+                ),
+              ),
+              if (data.length > 5) ...[
+                const SizedBox(height: 4),
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => setState(() => _categoryShareExpanded = !_categoryShareExpanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _categoryShareExpanded ? 'SHOW LESS' : 'VIEW MORE',
+                          style: const TextStyle(
+                            color: Color(0xFF00E5FF),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          _categoryShareExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_right,
+                          color: const Color(0xFF00E5FF),
+                          size: 14,
+                        ),
+                      ],
                     ),
                   ),
-                );
-              }),
+                ),
+              ],
+            ],
           ],
         ],
       ),
@@ -1940,11 +1989,17 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   }
 
   Widget _buildAccountDistributionCard(List<Account> accounts) {
-    final data = _getAccountChartData(accounts);
-    double totalAbsoluteValue = 0;
+    final bool isAssets = _accountGroupType == 'assets';
+    final data = isAssets
+        ? _getAssetAccountChartData(accounts)
+        : _getLiabilityAccountChartData(accounts);
+
+    double totalGroupValue = 0;
     for (var d in data) {
-      totalAbsoluteValue += d.value.abs();
+      totalGroupValue += d.value.abs();
     }
+
+    final String centerTitle = isAssets ? 'TOTAL ASSETS' : 'TOTAL LIABILITIES';
 
     return GlassCard(
       child: Column(
@@ -1961,11 +2016,40 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildPaymentSplitToggle(
+                'Assets',
+                const Color(0xFF0066FF),
+                _accountGroupType == 'assets',
+                () => setState(() {
+                  _accountGroupType = 'assets';
+                  _selectedAccountId = null;
+                }),
+              ),
+              const SizedBox(width: 24),
+              _buildPaymentSplitToggle(
+                'Liabilities',
+                const Color(0xFFFF3B30),
+                _accountGroupType == 'liabilities',
+                () => setState(() {
+                  _accountGroupType = 'liabilities';
+                  _selectedAccountId = null;
+                }),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           if (data.isEmpty)
-            const SizedBox(
+            SizedBox(
               height: 140,
-              child: Center(child: Text('No Account Data', style: TextStyle(color: Colors.white38, fontSize: 11))),
+              child: Center(
+                child: Text(
+                  isAssets ? 'No Asset Accounts Found' : 'No Liability Accounts Found',
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ),
             )
           else ...[
             if (_accountChartType != 'Horizontal Bar') ...[
@@ -1988,8 +2072,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                           }
                         });
                       },
-                      centerTitle: 'TOTAL PROPORTION',
-                      centerValue: totalAbsoluteValue,
+                      centerTitle: centerTitle,
+                      centerValue: totalGroupValue,
                     ),
                   ),
                 ],
@@ -2009,8 +2093,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                     }
                   });
                 },
-                centerTitle: 'TOTAL PROPORTION',
-                centerValue: totalAbsoluteValue,
+                centerTitle: centerTitle,
+                centerValue: totalGroupValue,
               ),
               const SizedBox(height: 16),
             ],
@@ -2019,9 +2103,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                 final d = data[i];
                 final isSelected = d.id == _selectedAccountId;
                 final opacity = _selectedAccountId == null ? 1.0 : (isSelected ? 1.0 : 0.3);
-
-                final isNegative = d.value < 0;
-                final displayAmt = (isNegative ? '-' : '') + _formatMoneyDouble(d.value.abs());
+                final displayAmt = _formatMoneyDouble(d.value);
 
                 return GestureDetector(
                   onTap: () {
@@ -2058,7 +2140,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                           Text(
                             '$displayAmt (${d.percentage.toStringAsFixed(0)}%)',
                             style: TextStyle(
-                              color: isNegative ? const Color(0xFFFF3B30) : Colors.white70,
+                              color: !isAssets ? const Color(0xFFFF3B30) : Colors.white70,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2919,6 +3001,36 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   Widget _buildMonthlyComparisonCard(List<Transaction> txs, DateTimeRange range) {
     final points = _generateMonthlyCompPoints(txs, range);
 
+    String graphTitle;
+    switch (_selectedPeriod) {
+      case 'Today':
+        graphTitle = 'DAILY COMPARISON';
+        break;
+      case 'Week':
+        graphTitle = 'WEEKLY COMPARISON';
+        break;
+      case 'Month':
+        graphTitle = 'MONTHLY COMPARISON';
+        break;
+      case 'Last Month':
+        graphTitle = 'LAST MONTH COMPARISON';
+        break;
+      case '3M':
+        graphTitle = '3-MONTH COMPARISON';
+        break;
+      case '6M':
+        graphTitle = '6-MONTH COMPARISON';
+        break;
+      case 'Year':
+        graphTitle = 'YEARLY COMPARISON';
+        break;
+      case 'Custom':
+        graphTitle = 'CUSTOM COMPARISON';
+        break;
+      default:
+        graphTitle = 'MONTHLY COMPARISON';
+    }
+
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2926,13 +3038,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('MONTHLY', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  Text('COMPARISON', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  Text('(2026)', style: TextStyle(color: Color(0xFF00E5FF), fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
+              Text(
+                graphTitle,
+                style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
               _buildChartTypeSelector(
                 currentType: _monthlyChartType,
@@ -2979,12 +3087,12 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx >= 0 && idx < 12) {
-                  final label = (idx + 1).toString().padLeft(2, '0');
+                if (idx >= 0 && idx < points.length) {
+                  final label = points[idx].label;
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
                     space: 6,
-                    child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
                   );
                 }
                 return const SizedBox.shrink();
@@ -3090,12 +3198,12 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx >= 0 && idx < 12) {
-                  final label = (idx + 1).toString().padLeft(2, '0');
+                if (idx >= 0 && idx < points.length) {
+                  final label = points[idx].label;
                   return SideTitleWidget(
                     axisSide: meta.axisSide,
                     space: 6,
-                    child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
                   );
                 }
                 return const SizedBox.shrink();
@@ -3120,9 +3228,8 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             getTooltipColor: (group) => const Color(0xFF0F1A1C),
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final point = points[groupIndex];
-              final monthNum = (groupIndex + 1).toString().padLeft(2, '0');
               return BarTooltipItem(
-                'Month: $monthNum\nIncome: ${AnalyticsFormatter.formatCurrency(point.income)}\nExpense: ${AnalyticsFormatter.formatCurrency(point.expense)}',
+                '${point.label}\nIncome: ${AnalyticsFormatter.formatCurrency(point.income)}\nExpense: ${AnalyticsFormatter.formatCurrency(point.expense)}',
                 const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
               );
             },
@@ -3158,7 +3265,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
             return BarChartGroupData(
               x: i,
-              barsSpace: 4,
+              barsSpace: 2,
               barRods: [
                 BarChartRodData(
                   toY: p.income,
@@ -3277,30 +3384,87 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   List<MonthlyCompPoint> _generateMonthlyCompPoints(List<Transaction> txs, DateTimeRange range) {
     final year = range.start.year;
     final List<MonthlyCompPoint> points = [];
-    final labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    for (int month = 1; month <= 12; month++) {
-      final startOfMonth = DateTime(year, month, 1);
-      final endOfMonth = DateTime(year, month + 1, 1).subtract(const Duration(milliseconds: 1));
+    final days = range.end.difference(range.start).inDays;
 
-      double inc = 0;
-      double exp = 0;
-      for (var tx in txs) {
-        if (tx.date.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) &&
-            tx.date.isBefore(endOfMonth.add(const Duration(seconds: 1)))) {
-          if (FinancialCalculationService.isIncome(tx)) {
-            inc += tx.amount / 100.0;
-          } else if (FinancialCalculationService.isExpense(tx)) {
-            exp += tx.amount / 100.0;
+    if (days <= 1) {
+      // Hourly segments for Today
+      for (int hour = 0; hour < 24; hour += 4) {
+        final label = '${hour.toString().padLeft(2, '0')}:00';
+        double inc = 0;
+        double exp = 0;
+        for (var tx in txs) {
+          if (tx.date.hour >= hour && tx.date.hour < hour + 4) {
+            if (FinancialCalculationService.isIncome(tx)) {
+              inc += tx.amount / 100.0;
+            } else if (FinancialCalculationService.isExpense(tx)) {
+              exp += tx.amount / 100.0;
+            }
           }
         }
+        points.add(MonthlyCompPoint(
+          label: label,
+          income: inc,
+          expense: exp,
+          savings: inc - exp,
+          netCashFlow: inc - exp,
+        ));
       }
-      points.add(MonthlyCompPoint(
-        label: labels[month - 1],
-        income: inc,
-        expense: exp,
-        savings: inc - exp,
-        netCashFlow: inc - exp,
-      ));
+    } else if (days <= 7) {
+      // Daily segments for Week
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      var current = DateTime(range.start.year, range.start.month, range.start.day);
+      final targetEnd = DateTime(range.end.year, range.end.month, range.end.day);
+      int idx = 0;
+      while (!current.isAfter(targetEnd) && idx < 7) {
+        final label = weekdays[current.weekday - 1];
+        double inc = 0;
+        double exp = 0;
+        for (var tx in txs) {
+          if (tx.date.year == current.year && tx.date.month == current.month && tx.date.day == current.day) {
+            if (FinancialCalculationService.isIncome(tx)) {
+              inc += tx.amount / 100.0;
+            } else if (FinancialCalculationService.isExpense(tx)) {
+              exp += tx.amount / 100.0;
+            }
+          }
+        }
+        points.add(MonthlyCompPoint(
+          label: label,
+          income: inc,
+          expense: exp,
+          savings: inc - exp,
+          netCashFlow: inc - exp,
+        ));
+        current = current.add(const Duration(days: 1));
+        idx++;
+      }
+    } else {
+      // Monthly segments
+      final labels = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+      for (int month = 1; month <= 12; month++) {
+        final startOfMonth = DateTime(year, month, 1);
+        final endOfMonth = DateTime(year, month + 1, 1).subtract(const Duration(milliseconds: 1));
+
+        double inc = 0;
+        double exp = 0;
+        for (var tx in txs) {
+          if (tx.date.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) &&
+              tx.date.isBefore(endOfMonth.add(const Duration(seconds: 1)))) {
+            if (FinancialCalculationService.isIncome(tx)) {
+              inc += tx.amount / 100.0;
+            } else if (FinancialCalculationService.isExpense(tx)) {
+              exp += tx.amount / 100.0;
+            }
+          }
+        }
+        points.add(MonthlyCompPoint(
+          label: labels[month - 1],
+          income: inc,
+          expense: exp,
+          savings: inc - exp,
+          netCashFlow: inc - exp,
+        ));
+      }
     }
     return points;
   }

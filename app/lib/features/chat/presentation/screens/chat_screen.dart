@@ -1244,6 +1244,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void clearCurrentChatSession(String? userId) {
+    _streamingTimer?.cancel();
+    _streamingMessageId = null;
+    _lastProcessedMessageId = null;
+    if (userId != null && userId.isNotEmpty) {
+      ref.read(chatNotifierProvider.notifier).clearChat(userId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -1424,12 +1433,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        if (didPop) return;
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go('/dashboard');
-        }
+        clearCurrentChatSession(userId);
       },
       child: Scaffold(
         body: Container(
@@ -1453,6 +1457,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                         onPressed: () {
+                          clearCurrentChatSession(userId);
                           if (context.canPop()) {
                             context.pop();
                           } else {
