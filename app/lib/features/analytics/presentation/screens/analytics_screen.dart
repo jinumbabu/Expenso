@@ -985,19 +985,34 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                       ),
                       lineTouchData: LineTouchData(
                         touchTooltipData: LineTouchTooltipData(
-                          getTooltipColor: (touchedSpot) => const Color(0xFF0F172A).withOpacity(0.9),
+                          getTooltipColor: (touchedSpot) => const Color(0xFF0F172A).withOpacity(0.95),
                           tooltipBorder: const BorderSide(color: Color(0xFF00E5FF), width: 0.5),
+                          fitInsideHorizontally: true,
+                          fitInsideVertically: true,
+                          tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          tooltipMargin: 8,
                           getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((spot) {
-                              final bar = spot.bar;
-                              final isIncome = bar.color == const Color(0xFF0066FF);
-                              final label = isIncome ? 'Income' : 'Expense';
-                              final val = spot.y;
+                            if (touchedSpots.isEmpty) return [];
+                            return List.generate(touchedSpots.length, (i) {
+                              if (i != 0) return null;
+                              final spot = touchedSpots.first;
+                              final idx = spot.x.toInt();
+                              if (idx < 0 || idx >= points.length) return null;
+                              final point = points[idx];
+
+                              final incStr = AnalyticsFormatter.formatCurrency(point.income);
+                              final expStr = AnalyticsFormatter.formatCurrency(point.expense);
+
                               return LineTooltipItem(
-                                '$label\n${AnalyticsFormatter.formatCurrency(val)}',
-                                const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                'Income\n$incStr\n\nExpense\n$expStr',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.3,
+                                ),
                               );
-                            }).toList();
+                            });
                           },
                         ),
                       ),
@@ -2299,6 +2314,41 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 40,
+                getTitlesWidget: (value, meta) {
+                  if (value == meta.max) {
+                    return SideTitleWidget(
+                      axisSide: meta.axisSide,
+                      child: Text(
+                        AnalyticsFormatter.formatAxisValue(value),
+                        style: const TextStyle(color: Colors.white38, fontSize: 8),
+                      ),
+                    );
+                  }
+                  final diff = meta.max - value;
+                  final relativeDiff = meta.max > 0 ? (diff / meta.max) : 1.0;
+                  if (relativeDiff < 0.15 && value != meta.min) {
+                    return const SizedBox.shrink();
+                  }
+                  if (value == meta.min) {
+                    return const SideTitleWidget(
+                      axisSide: AxisSide.left,
+                      child: Text('0', style: TextStyle(color: Colors.white38, fontSize: 8)),
+                    );
+                  }
+                  return SideTitleWidget(
+                    axisSide: meta.axisSide,
+                    child: Text(
+                      AnalyticsFormatter.formatAxisValue(value),
+                      style: const TextStyle(color: Colors.white38, fontSize: 8),
+                    ),
+                  );
+                },
+              ),
+            ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
