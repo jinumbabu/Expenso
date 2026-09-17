@@ -5,8 +5,53 @@ import 'package:app/core/database/app_database.dart';
 import 'package:app/shared/widgets/transaction_card.dart';
 
 void main() {
-  testWidgets('TransactionCard renders exact 3-line layout for expense', (WidgetTester tester) async {
-    final now = DateTime(2026, 9, 17, 16, 41); // 04:41 PM
+  final now = DateTime(2026, 9, 17, 16, 41); // 04:41 PM
+
+  final category = Category(
+    id: 'cat1',
+    userId: 'u1',
+    name: 'Shopping',
+    type: 'expense',
+    icon: 'shopping_bag',
+    isSystemDefault: false,
+    usageCount: 0,
+    createdAt: now,
+  );
+
+  final subcategory = Category(
+    id: 'sub1',
+    userId: 'u1',
+    name: 'Groceries',
+    type: 'expense',
+    icon: 'shopping_cart',
+    isSystemDefault: false,
+    usageCount: 0,
+    createdAt: now,
+  );
+
+  final account = Account(
+    id: 'acc1',
+    userId: 'u1',
+    name: 'HDFC Bank',
+    type: 'savings',
+    last4Digits: '3726',
+    balance: 100000,
+    isDefault: false,
+    isEstimated: false,
+    createdAt: now,
+    updatedAt: now,
+  );
+
+  final paymentMethod = PaymentMethod(
+    id: 'pm1',
+    userId: 'u1',
+    name: 'UPI',
+    type: 'upi',
+    usageCount: 0,
+    createdAt: now,
+  );
+
+  testWidgets('SMS Transaction with Details displays SMS label and Payee', (WidgetTester tester) async {
     final tx = Transaction(
       id: 'tx1',
       userId: 'u1',
@@ -14,56 +59,12 @@ void main() {
       type: 'expense',
       currency: 'INR',
       date: now,
-      source: 'manual',
+      source: 'sms',
       createdAt: now,
       updatedAt: now,
-      description: 'Saranya Sasikumar',
+      merchant: 'Saranya Sasikumar',
       isRecurring: false,
       syncStatus: 'pending',
-    );
-
-    final category = Category(
-      id: 'cat1',
-      userId: 'u1',
-      name: 'Shopping',
-      type: 'expense',
-      icon: 'shopping_bag',
-      isSystemDefault: false,
-      usageCount: 0,
-      createdAt: now,
-    );
-
-    final subcategory = Category(
-      id: 'sub1',
-      userId: 'u1',
-      name: 'Groceries',
-      type: 'expense',
-      icon: 'shopping_cart',
-      isSystemDefault: false,
-      usageCount: 0,
-      createdAt: now,
-    );
-
-    final account = Account(
-      id: 'acc1',
-      userId: 'u1',
-      name: 'HDFC Bank',
-      type: 'savings',
-      last4Digits: '3726',
-      balance: 100000,
-      isDefault: false,
-      isEstimated: false,
-      createdAt: now,
-      updatedAt: now,
-    );
-
-    final paymentMethod = PaymentMethod(
-      id: 'pm1',
-      userId: 'u1',
-      name: 'UPI',
-      type: 'upi',
-      usageCount: 0,
-      createdAt: now,
     );
 
     await tester.pumpWidget(
@@ -87,56 +88,32 @@ void main() {
       ),
     );
 
-    // Line 1: Title and Amount
-    expect(find.text('Saranya Sasikumar'), findsOneWidget);
+    // Line 1: SMS • Title and Amount
+    expect(find.textContaining('SMS'), findsOneWidget);
+    expect(find.textContaining('Saranya Sasikumar'), findsOneWidget);
     expect(find.text('-₹50.00'), findsOneWidget);
 
-    // Line 2: Main Category > Sub Category
+    // Line 2: Category > Subcategory
     expect(find.text('Shopping > Groceries'), findsOneWidget);
 
     // Line 3: Time • Account • Payment Method
     expect(find.text('04:41 PM • HDFC 3726 • via UPI'), findsOneWidget);
   });
 
-  testWidgets('TransactionCard renders income with cyan color and single category', (WidgetTester tester) async {
-    final now = DateTime(2026, 9, 17, 10, 30);
+  testWidgets('SMS Transaction without Details uses SMS Alert description', (WidgetTester tester) async {
     final tx = Transaction(
       id: 'tx2',
       userId: 'u1',
-      amount: 150000, // ₹1,500.00
-      type: 'income',
+      amount: 5000,
+      type: 'expense',
       currency: 'INR',
       date: now,
-      source: 'manual',
+      source: 'sms',
       createdAt: now,
       updatedAt: now,
-      description: 'Freelance Payout',
+      description: 'SMS Alert: HDFC Savings Account debited',
       isRecurring: false,
       syncStatus: 'pending',
-    );
-
-    final category = Category(
-      id: 'cat2',
-      userId: 'u1',
-      name: 'Income',
-      type: 'income',
-      icon: 'work',
-      isSystemDefault: false,
-      usageCount: 0,
-      createdAt: now,
-    );
-
-    final account = Account(
-      id: 'acc2',
-      userId: 'u1',
-      name: 'SBI Bank',
-      type: 'savings',
-      last4Digits: '8589',
-      balance: 500000,
-      isDefault: false,
-      isEstimated: false,
-      createdAt: now,
-      updatedAt: now,
     );
 
     await tester.pumpWidget(
@@ -149,7 +126,9 @@ void main() {
                 child: TransactionCard(
                   transaction: tx,
                   category: category,
+                  subcategory: subcategory,
                   account: account,
+                  paymentMethod: paymentMethod,
                 ),
               ),
             ),
@@ -158,9 +137,90 @@ void main() {
       ),
     );
 
-    expect(find.text('Freelance Payout'), findsOneWidget);
-    expect(find.text('+₹1,500.00'), findsOneWidget);
-    expect(find.text('Income'), findsOneWidget);
-    expect(find.text('10:30 AM • SBI 8589'), findsOneWidget);
+    expect(find.textContaining('SMS'), findsOneWidget);
+    expect(find.textContaining('SMS Alert: HDFC Savings Account debited'), findsOneWidget);
+    expect(find.text('-₹50.00'), findsOneWidget);
+  });
+
+  testWidgets('SMS Transaction with subcategory fallback when details missing', (WidgetTester tester) async {
+    final tx = Transaction(
+      id: 'tx3',
+      userId: 'u1',
+      amount: 5000,
+      type: 'expense',
+      currency: 'INR',
+      date: now,
+      source: 'sms',
+      createdAt: now,
+      updatedAt: now,
+      isRecurring: false,
+      syncStatus: 'pending',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 380,
+                child: TransactionCard(
+                  transaction: tx,
+                  category: category,
+                  subcategory: subcategory,
+                  account: account,
+                  paymentMethod: paymentMethod,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('SMS'), findsOneWidget);
+    expect(find.textContaining('Groceries'), findsWidgets);
+  });
+
+  testWidgets('Manual Transaction does NOT display SMS label', (WidgetTester tester) async {
+    final tx = Transaction(
+      id: 'tx4',
+      userId: 'u1',
+      amount: 5000,
+      type: 'expense',
+      currency: 'INR',
+      date: now,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+      merchant: 'Saranya Sasikumar',
+      isRecurring: false,
+      syncStatus: 'pending',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 380,
+                child: TransactionCard(
+                  transaction: tx,
+                  category: category,
+                  subcategory: subcategory,
+                  account: account,
+                  paymentMethod: paymentMethod,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('SMS •'), findsNothing);
+    expect(find.text('Saranya Sasikumar'), findsOneWidget);
+    expect(find.text('-₹50.00'), findsOneWidget);
   });
 }

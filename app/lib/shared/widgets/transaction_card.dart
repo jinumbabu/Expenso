@@ -7,9 +7,9 @@ import '../../features/accounts/presentation/providers/account_formatters.dart';
 import 'privacy_text.dart';
 
 /// Reusable transaction card widget with exact 3-line layout:
-/// Line 1: [LOGO] Title / Description                      AMOUNT
-/// Line 2: Main Category > Sub Category
-/// Line 3: 04:41 PM • HDFC 3726 • via UPI
+/// LINE 1: [LOGO]  (SMS • ) TITLE / DESCRIPTION               AMOUNT
+/// LINE 2:         MAIN CATEGORY > SUB CATEGORY
+/// LINE 3:         TIME • FINANCIAL ACCOUNT • PAYMENT METHOD
 class TransactionCard extends StatelessWidget {
   final Transaction transaction;
   final Category? category;
@@ -33,12 +33,24 @@ class TransactionCard extends StatelessWidget {
     return NumberFormat.simpleCurrency(name: 'INR').format(amount);
   }
 
+  String? _getMeaningful(String? val) {
+    if (val == null) return null;
+    final trimmed = val.trim();
+    if (trimmed.isEmpty ||
+        trimmed.toLowerCase() == 'null' ||
+        trimmed.toLowerCase() == 'none' ||
+        trimmed.toLowerCase() == 'uncategorized') {
+      return null;
+    }
+    return trimmed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isIncome = transaction.type == 'income';
     final isTransfer = transaction.type == 'transfer_debit' || transaction.type == 'transfer_credit';
 
-    // Logo color logic
+    // 1. Logo color & icon logic
     Color catColor = const Color(0xFF0066FF);
     if (isTransfer) {
       catColor = const Color(0xFFFFB703);
@@ -52,7 +64,6 @@ class TransactionCard extends StatelessWidget {
       }
     }
 
-    // Logo icon logic
     IconData catIcon = Icons.category_outlined;
     if (isTransfer) {
       catIcon = Icons.swap_horiz;
@@ -60,13 +71,23 @@ class TransactionCard extends StatelessWidget {
       catIcon = CategoryIntelligence.getIconForName(category!.name);
     }
 
-    // Line 1: Title / Description
-    String title = transaction.description ?? transaction.merchant ?? subcategory?.name ?? category?.name ?? 'Uncategorized';
-    if (title.trim().isEmpty) {
-      title = subcategory?.name ?? category?.name ?? 'Uncategorized';
-    }
+    // 2. SMS Source Detection
+    final isSms = transaction.source.toLowerCase().contains('sms') ||
+        (transaction.supportingSms != null && transaction.supportingSms!.trim().isNotEmpty);
 
-    // Line 1: Amount sign and color
+    // 3. Title Selection Hierarchy: Details -> SMS Alert -> Subcategory -> Main Category -> "Transaction"
+    final meaningfulMerchant = _getMeaningful(transaction.merchant);
+    final meaningfulDesc = _getMeaningful(transaction.description);
+    final meaningfulSubCat = _getMeaningful(subcategory?.name);
+    final meaningfulMainCat = _getMeaningful(category?.name);
+
+    final titleCandidate = meaningfulMerchant ??
+        meaningfulDesc ??
+        meaningfulSubCat ??
+        meaningfulMainCat ??
+        'Transaction';
+
+    // 4. Line 1: Amount sign and color
     Color amountColor = const Color(0xFFFF3B30); // Expense -> Red
     String sign = '-';
     if (isIncome || transaction.type == 'transfer_credit') {
@@ -79,44 +100,52 @@ class TransactionCard extends StatelessWidget {
 
     final amountRawValue = sign + _formatMoney(transaction.amount);
 
-    // Line 2: Main Category > Sub Category
+    // 5. Line 2: Main Category > Sub Category
     String categoryText;
-    if (category != null) {
-      if (subcategory != null && subcategory!.name.isNotEmpty) {
-        categoryText = '${category!.name} > ${subcategory!.name}';
+    final mainCatName = _getMeaningful(category?.name);
+    final subCatName = _getMeaningful(subcategory?.name);
+
+    if (mainCatName != null) {
+      if (subCatName != null && subCatName != mainCatName) {
+        categoryText = '$mainCatName > $subCatName';
       } else {
-        categoryText = category!.name;
+        categoryText = mainCatName;
       }
-    } else if (subcategory != null && subcategory!.name.isNotEmpty) {
-      categoryText = subcategory!.name;
+    } else if (subCatName != null) {
+      categoryText = subCatName;
     } else if (isTransfer) {
       categoryText = 'Transfer';
     } else {
       categoryText = 'Uncategorized';
     }
 
-    // Line 3: Time • Account • Payment Method
+    // 6. Line 3: Time • Financial Account • Payment Method
     final timeStr = DateFormat('hh:mm a').format(transaction.date);
 
     String? accStr;
     if (account != null) {
-      accStr = account!.displayTitle;
+      final title = account!.displayTitle.trim();
+      if (title.isNotEmpty && title != 'null') {
+        accStr = title;
+      }
     }
 
     String? pmStr;
-    if (paymentMethod != null && paymentMethod!.name.isNotEmpty) {
-      final name = paymentMethod!.name;
-      if (name.toLowerCase().startsWith('via ')) {
-        pmStr = name;
-      } else {
-        pmStr = 'via $name';
+    if (paymentMethod != null) {
+      final name = paymentMethod!.name.trim();
+      if (name.isNotEmpty && name != 'null') {
+        if (name.toLowerCase().startsWith('via ')) {
+          pmStr = name;
+        } else {
+          pmStr = 'via $name';
+        }
       }
     }
 
     final line3Parts = <String>[
       timeStr,
-      if (accStr != null && accStr.isNotEmpty) accStr,
-      if (pmStr != null && pmStr.isNotEmpty) pmStr,
+      if (accStr != null) accStr,
+      if (pmStr != null) pmStr,
     ];
     final line3Text = line3Parts.join(' • ');
 
@@ -153,16 +182,40 @@ class TransactionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Line 1: Title / Description & Amount
+                      // Line 1: (SMS • ) Title / Description & Amount
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14.5,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  if (isSms) ...[
+                                    const TextSpan(
+                                      text: 'SMS',
+                                      style: TextStyle(
+                                        color: Color(0xFF00E5FF),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                      text: ' • ',
+                                      style: TextStyle(
+                                        color: Colors.white38,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
+                                  ],
+                                  TextSpan(
+                                    text: titleCandidate,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14.5,
+                                    ),
+                                  ),
+                                ],
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
