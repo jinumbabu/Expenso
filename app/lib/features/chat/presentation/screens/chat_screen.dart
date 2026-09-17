@@ -76,50 +76,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     'Spending Insights',
   ];
 
-  static const List<List<String>> _suggestionSets = [
-    [
-      'Show my monthly summary',
-      'Where did I spend the most?',
-      'Upcoming bills',
-      'Analyze my spending',
-    ],
-    [
-      'How much did I save this month?',
-      'What are my biggest expenses?',
-      'Show my recent transactions',
-      'Help me create a budget',
-    ],
-    [
-      'What\'s affecting my net worth?',
-      'Which category costs me the most?',
-      'Do I have upcoming bills?',
-      'Find unusual spending',
-    ],
-    [
-      'Compare this month with last month',
-      'Show my top spending categories',
-      'How can I reduce my expenses?',
-      'Show my financial health',
-    ],
-    [
-      'What did I spend today?',
-      'Where am I overspending?',
-      'Show my income this month',
-      'Give me a financial summary',
-    ],
+  static const List<String> _fullSuggestionPool = [
+    'How much did I save this month?',
+    'What are my biggest expenses?',
+    'Show my recent transactions',
+    'Help me create a budget',
+    'Where did most of my money go this month?',
+    'Which category increased the most?',
+    'How much did I spend this week?',
+    'What is my biggest expense?',
+    'How much income did I receive this month?',
+    'What subscriptions am I paying for?',
+    'Compare my spending with last month',
+    'Which account has the highest balance?',
+    'How much did I spend on food?',
+    'How much did I spend on shopping?',
+    'Am I spending more than I earn?',
+    'What can I reduce from my expenses?',
+    'Show my top spending categories',
+    'What are my unusual expenses?',
+    'How much did I spend using UPI?',
+    'How much did I spend using my credit card?',
   ];
 
+  static List<String>? _lastSuggestionSet;
+
+  List<String> _getRandomSuggestions({int count = 4, math.Random? randomOverride}) {
+    final rand = randomOverride ?? math.Random();
+    List<String> pool = List.from(_fullSuggestionPool);
+    pool.shuffle(rand);
+    List<String> selection = pool.take(count).toList();
+
+    if (_lastSuggestionSet != null && _lastSuggestionSet!.length == selection.length) {
+      bool isIdentical = true;
+      for (int i = 0; i < selection.length; i++) {
+        if (selection[i] != _lastSuggestionSet![i]) {
+          isIdentical = false;
+          break;
+        }
+      }
+      if (isIdentical && pool.length >= count * 2) {
+        selection = pool.skip(count).take(count).toList();
+      }
+    }
+
+    _lastSuggestionSet = List.from(selection);
+    return selection;
+  }
+
   late List<String> _currentWelcomeQueries;
+  bool _hasUserStartedChatInThisView = false;
 
   @override
   void initState() {
     super.initState();
     _focusNode.addListener(_onFocusChange);
     _scrollController.addListener(_scrollListener);
-    
-    // Choose a random welcome queries set
-    final random = math.Random();
-    _currentWelcomeQueries = List.from(_suggestionSets[random.nextInt(_suggestionSets.length)]);
+    _currentWelcomeQueries = _getRandomSuggestions();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = ref.read(authProvider);
+      final userId = auth.user?.id;
+      if (userId != null) {
+        final notifier = ref.read(chatNotifierProvider.notifier);
+        await notifier.checkAndHandleSessionExpiration(userId);
+      }
+    });
   }
 
   void _scrollListener() {
@@ -437,6 +459,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final notifier = ref.read(chatNotifierProvider.notifier);
 
     setState(() {
+      _hasUserStartedChatInThisView = true;
       _showJumpToLatest = false;
     });
 
@@ -714,8 +737,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               Navigator.pop(context);
               ref.read(chatNotifierProvider.notifier).clearChat(userId);
               setState(() {
-                final random = math.Random();
-                _currentWelcomeQueries = List.from(_suggestionSets[random.nextInt(_suggestionSets.length)]);
+                _hasUserStartedChatInThisView = false;
+                _currentWelcomeQueries = _getRandomSuggestions();
               });
             },
             child: const Text('Clear', style: TextStyle(color: Colors.white)),
@@ -1826,7 +1849,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   children: [
                     chatHistoryAsync.when(
                       data: (messages) {
-                        if (messages.isEmpty) {
+                        if (messages.isEmpty || !_hasUserStartedChatInThisView) {
                           return _buildWelcomeState(userId);
                         }
 
@@ -2108,16 +2131,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           const SizedBox(height: 28),
           ..._currentWelcomeQueries.map((query) {
             IconData itemIcon = Icons.help_outline_rounded;
-            if (query.contains('summary') || query.contains('Report')) {
-              itemIcon = Icons.summarize_outlined;
-            } else if (query.contains('spend') || query.contains('most')) {
+            final lower = query.toLowerCase();
+            if (lower.contains('save') || lower.contains('savings')) {
+              itemIcon = Icons.savings_outlined;
+            } else if (lower.contains('expense') || lower.contains('spend') || lower.contains('spent')) {
               itemIcon = Icons.pie_chart_outline_rounded;
-            } else if (query.contains('bills') || query.contains('Bills')) {
-              itemIcon = Icons.calendar_today_outlined;
-            } else if (query.contains('budget')) {
+            } else if (lower.contains('transaction')) {
+              itemIcon = Icons.receipt_long_outlined;
+            } else if (lower.contains('budget')) {
               itemIcon = Icons.wallet_outlined;
-            } else if (query.contains('spending')) {
-              itemIcon = Icons.analytics_outlined;
+            } else if (lower.contains('category') || lower.contains('categories')) {
+              itemIcon = Icons.category_outlined;
+            } else if (lower.contains('income') || lower.contains('earn')) {
+              itemIcon = Icons.account_balance_wallet_outlined;
+            } else if (lower.contains('subscription')) {
+              itemIcon = Icons.subscriptions_outlined;
+            } else if (lower.contains('compare')) {
+              itemIcon = Icons.compare_arrows_rounded;
+            } else if (lower.contains('account') || lower.contains('balance')) {
+              itemIcon = Icons.account_balance_outlined;
+            } else if (lower.contains('upi') || lower.contains('card')) {
+              itemIcon = Icons.credit_card_outlined;
+            } else if (lower.contains('bill') || lower.contains('bills')) {
+              itemIcon = Icons.calendar_today_outlined;
+            } else if (lower.contains('summary') || lower.contains('report')) {
+              itemIcon = Icons.summarize_outlined;
             }
 
             return Padding(

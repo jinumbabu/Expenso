@@ -12,6 +12,7 @@ import 'package:drift/drift.dart';
 import '../../../accounts/presentation/providers/accounts_provider.dart';
 import '../../../accounts/presentation/providers/account_formatters.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../../../core/security/secure_storage_service.dart';
 
 final Provider<ChatRepository> chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final db = ref.watch(databaseProvider);
@@ -38,10 +39,33 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
 
   ChatNotifier(this._repository, this._ref) : super(const AsyncValue.data(null));
 
+  Future<bool> checkAndHandleSessionExpiration(String userId, {DateTime? customNow}) async {
+    final storage = _ref.read(secureStorageProvider);
+    final startTime = await storage.getChatSessionStartTime();
+    final now = customNow ?? DateTime.now();
+
+    if (startTime == null) {
+      await storage.saveChatSessionStartTime(now);
+      return false;
+    }
+
+    if (now.difference(startTime) >= const Duration(hours: 1)) {
+      _sessionVersion++;
+      await _repository.clearHistory(userId);
+      await storage.saveChatSessionStartTime(now);
+      _ref.invalidate(chatHistoryProvider(userId));
+      return true;
+    }
+
+    return false;
+  }
+
   Future<void> sendMessage(String userId, String messageText) async {
     final currentSession = ++_sessionVersion;
     try {
       state = const AsyncValue.loading();
+
+      await checkAndHandleSessionExpiration(userId);
 
       final currentConfig = _ref.read(aiProviderOrchestratorProvider);
       final activeModelId = currentConfig.aiProvider == 'offline'
@@ -271,6 +295,8 @@ class ChatNotifier extends StateNotifier<AsyncValue<void>> {
       _sessionVersion++;
       state = const AsyncValue.loading();
       await _repository.clearHistory(userId);
+      final storage = _ref.read(secureStorageProvider);
+      await storage.deleteChatSessionStartTime();
       _ref.invalidate(chatHistoryProvider(userId));
       state = const AsyncValue.data(null);
     } catch (e, stack) {

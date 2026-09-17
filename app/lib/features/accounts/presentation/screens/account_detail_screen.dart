@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/transaction_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../providers/accounts_provider.dart';
@@ -271,7 +272,15 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
                                   physics: const NeverScrollableScrollPhysics(),
                                   itemCount: filteredTxs.length,
                                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                  itemBuilder: (context, idx) => _buildTransactionItem(filteredTxs[idx], account),
+                                  itemBuilder: (context, idx) {
+                                    final tx = filteredTxs[idx];
+                                    final cats = ref.watch(categoriesProvider).value ?? [];
+                                    final pms = ref.watch(paymentMethodsProvider).value ?? [];
+                                    final cat = tx.categoryId != null ? cats.where((c) => c.id == tx.categoryId).firstOrNull : null;
+                                    final subCat = tx.subcategoryId != null ? cats.where((c) => c.id == tx.subcategoryId).firstOrNull : null;
+                                    final pm = tx.paymentMethodId != null ? pms.where((p) => p.id == tx.paymentMethodId).firstOrNull : null;
+                                    return _buildTransactionItem(tx, account, cat, subCat, pm);
+                                  },
                                 ),
                             ] else if (_activeTab == 1) ...[
                               // SMS Parse Logs list
@@ -947,64 +956,14 @@ class _AccountDetailScreenState extends ConsumerState<AccountDetailScreen> {
     );
   }
 
-  Widget _buildTransactionItem(Transaction tx, Account account) {
-    final isCredit = FinancialCalculationService.isCredit(tx, account.id);
-    final amountColor = isCredit ? const Color(0xFF00E5FF) : const Color(0xFFFF3B30);
-
-    return InkWell(
+  Widget _buildTransactionItem(Transaction tx, Account account, Category? cat, Category? subCat, PaymentMethod? pm) {
+    return TransactionCard(
+      transaction: tx,
+      category: cat,
+      subcategory: subCat,
+      account: account,
+      paymentMethod: pm,
       onTap: () => _showTransactionActionsSheet(context, ref, tx),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.015),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white12.withOpacity(0.05)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: amountColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                color: amountColor,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tx.merchant ?? tx.description ?? 'General Transaction',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${DateFormat('MMM dd, yyyy').format(tx.date)} • ${tx.type.toUpperCase().replaceAll('_', ' ')}',
-                    style: const TextStyle(color: Colors.white30, fontSize: 10.5),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              (isCredit ? '+ ' : '- ') + _formatMoney(tx.amount),
-              style: TextStyle(
-                color: amountColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

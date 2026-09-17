@@ -196,6 +196,23 @@ class SecureStorageService {
     return DateTime.tryParse(val);
   }
 
+  // --- AI Chat Session Keys ---
+  static const String _chatSessionStartTimeKey = 'chat_session_start_time';
+
+  Future<void> saveChatSessionStartTime(DateTime time) async {
+    await _storage.write(key: _chatSessionStartTimeKey, value: time.toIso8601String());
+  }
+
+  Future<DateTime?> getChatSessionStartTime() async {
+    final val = await _storage.read(key: _chatSessionStartTimeKey);
+    if (val == null) return null;
+    return DateTime.tryParse(val);
+  }
+
+  Future<void> deleteChatSessionStartTime() async {
+    await _storage.delete(key: _chatSessionStartTimeKey);
+  }
+
   // --- AI Provider Settings & Keys Keys ---
   static const String _aiModeKey = 'ai_mode';
   static const String _aiProviderKey = 'ai_provider';

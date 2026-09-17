@@ -6,6 +6,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/financial_calculation_service.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/privacy_text.dart';
+import '../../../../shared/widgets/transaction_card.dart';
 import '../../../../shared/utils/analytics_formatter.dart';
 import '../../../../shared/utils/icon_mapper.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
@@ -127,8 +128,8 @@ class MerchantTransactionsDetailScreen extends ConsumerWidget {
     final accs = accountsAsync.maybeWhen(data: (a) => a, orElse: () => <Account>[]);
 
     final categoriesMap = {for (var c in cats) c.id: c};
-    final pmsMap = {for (var p in pms) p.id: p.name};
-    final accsMap = {for (var a in accs) a.id: a.name};
+    final pmsMap = {for (var p in pms) p.id: p};
+    final accsMap = {for (var a in accs) a.id: a};
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -303,72 +304,18 @@ class MerchantTransactionsDetailScreen extends ConsumerWidget {
                             ),
                           ),
                           ...grouped[date]!.map((tx) {
-                            final cat = categoriesMap[tx.categoryId];
-                            final pmName = pmsMap[tx.paymentMethodId];
-                            final accName = accsMap[tx.accountId];
+                            final cat = tx.categoryId != null ? categoriesMap[tx.categoryId] : null;
+                            final subCat = tx.subcategoryId != null ? categoriesMap[tx.subcategoryId] : null;
+                            final pm = tx.paymentMethodId != null ? pmsMap[tx.paymentMethodId] : null;
+                            final acc = tx.accountId != null ? accsMap[tx.accountId] : null;
 
-                            final iconData = IconMapper.getIcon(cat?.icon ?? 'shopping_bag');
-                            final timeStr = DateFormat('hh:mm a').format(tx.date);
-
-                            final List<String> details = [timeStr];
-                            if (pmName != null && pmName.isNotEmpty) details.add('via $pmName');
-                            if (accName != null && accName.isNotEmpty) details.add(accName);
-                            final subtitleStr = details.join(' • ');
-
-                            final String titleStr = tx.merchant ?? tx.description ?? cat?.name ?? 'Expense';
-
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: GlassCard(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF3B30).withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(iconData, color: const Color(0xFFFF3B30), size: 18),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            titleStr,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            subtitleStr,
-                                            style: const TextStyle(color: Colors.white38, fontSize: 10),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    PrivacyText(
-                                      rawValue: '-${AnalyticsFormatter.formatCurrency(tx.amount / 100.0)}',
-                                      style: const TextStyle(
-                                        color: Color(0xFFFF3B30),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            return TransactionCard(
+                              transaction: tx,
+                              category: cat,
+                              subcategory: subCat,
+                              account: acc,
+                              paymentMethod: pm,
+                              onTap: () => context.push('/expenses/edit/${tx.id}'),
                             );
                           }),
                           const SizedBox(height: 12),

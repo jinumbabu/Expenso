@@ -10,6 +10,7 @@ import '../../../../shared/utils/icon_mapper.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/privacy_text.dart';
+import '../../../../shared/widgets/transaction_card.dart';
 import '../../../../core/services/category_intelligence.dart';
 
 final _categorySearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
@@ -656,84 +657,20 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                 final subCat = tx.subcategoryId != null ? categoriesMap[tx.subcategoryId] : null;
                                 final pm = tx.paymentMethodId != null ? pmsMap[tx.paymentMethodId] : null;
                                 final acc = tx.accountId != null ? accountsMap[tx.accountId] : null;
-                                final isIncome = tx.type == 'income';
-                                final isTransfer = tx.type == 'transfer_debit' || tx.type == 'transfer_credit';
 
-                                Color catColor = const Color(0xFF0066FF);
-                                if (isTransfer) {
-                                  catColor = const Color(0xFFFFB703);
-                                } else if (cat != null) {
-                                  if (cat.color != null && cat.color!.isNotEmpty) {
-                                    try {
-                                      catColor = Color(int.parse(cat.color!));
-                                    } catch (_) {}
-                                  } else {
-                                    catColor = CategoryIntelligence.getColorForName(cat.name);
-                                  }
-                                }
-
-                                IconData catIcon = Icons.category_outlined;
-                                if (isTransfer) {
-                                  catIcon = Icons.swap_horiz;
-                                } else if (cat != null) {
-                                  catIcon = CategoryIntelligence.getIconForName(cat.name);
-                                }
-
-                                // Build trailing text color
-                                Color amountColor = const Color(0xFFFF3B30);
-                                String sign = '-';
-                                if (isIncome || tx.type == 'transfer_credit') {
-                                  amountColor = const Color(0xFF00E5FF);
-                                  sign = '+';
-                                } else if (tx.type == 'transfer_debit') {
-                                  amountColor = const Color(0xFFFFB703);
-                                  sign = '-';
-                                }
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 8.0),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.02),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withOpacity(0.04)),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: catColor.withOpacity(0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(catIcon, color: catColor, size: 20),
-                                    ),
-                                    title: Text(
-                                      tx.description ?? tx.merchant ?? subCat?.name ?? cat?.name ?? 'Uncategorized',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: Text(
-                                      '${DateFormat('hh:mm a').format(tx.date)}${pm != null ? " • via ${pm.name}" : ""}${acc != null ? " • ${acc.displayTitle}" : ""}',
-                                      style: const TextStyle(color: Colors.white30, fontSize: 12),
-                                    ),
-                                    trailing: PrivacyText(
-                                      rawValue: sign + _formatMoney(tx.amount),
-                                      isTransactionAmount: true,
-                                      style: TextStyle(
-                                        color: amountColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    onTap: () {
-                                      if (tx.type == 'transfer_debit' || tx.type == 'transfer_credit') {
-                                        _showTransferDetailsSheet(context, ref, tx, accountsMap);
-                                      } else {
-                                        _showTransactionActions(context, ref, tx);
-                                      }
-                                    },
-                                  ),
+                                return TransactionCard(
+                                  transaction: tx,
+                                  category: cat,
+                                  subcategory: subCat,
+                                  account: acc,
+                                  paymentMethod: pm,
+                                  onTap: () {
+                                    if (tx.type == 'transfer_debit' || tx.type == 'transfer_credit') {
+                                      _showTransferDetailsSheet(context, ref, tx, accountsMap);
+                                    } else {
+                                      _showTransactionActions(context, ref, tx);
+                                    }
+                                  },
                                 );
                               }),
                             ],
